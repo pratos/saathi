@@ -123,24 +123,24 @@ The long-term onboarding flow is:
 2. Verify a six-digit SMS OTP.
 3. Choose a display name and preferred language.
 4. Join an invited family space or create one.
-5. Optionally connect Google or email for recovery.
+5. Optionally add a recovery method when supported.
 
 Phone numbers are stored in E.164 form and are not displayed to other members without consent. SMS OTP requires expiry, resend cooldowns, attempt limits, abuse controls, and a production messaging provider.
 
-For the hackathon MVP, use Google OAuth with email OTP fallback. Convex Auth also supports SMS OTP through a custom phone provider, with an official Twilio/Twilio Verify example, but it does not include an SMS delivery service. The mobile flow remains a committed production design while the SMS provider is deferred to avoid adding an unrelated and potentially unreliable demo dependency.
+For the hackathon MVP, use email OTP only. It requests no social profile and avoids requiring a Google account. Convex Auth also supports SMS OTP through a custom phone provider, with an official Twilio/Twilio Verify example, but it does not include an SMS delivery service. Google OAuth and the mobile flow are deferred to avoid unrelated providers and unreliable demo dependencies.
 
 # Authentication and Authorization
 
-Authentication answers **who is calling**. Authorization answers **what that identity may do to this resource**. OAuth, mobile verification, AgentMail sender checks, and application roles are separate trust boundaries.
+Authentication answers **who is calling**. Authorization answers **what that identity may do to this resource**. Email OTP, future OAuth or mobile verification, AgentMail sender checks, and application roles are separate trust boundaries.
 
 ## App authentication
 
-Use Convex Auth v2 (`@convex-dev/auth`) with Google OAuth and email OTP for the MVP. The product deliberately accepts its beta/pre-release maturity to keep identity and sessions within the Convex application boundary. Pin the package version and cover sign-in, callback, refresh, sign-out, and account-linking behavior with integration tests.
+Use Convex Auth v2 (`@convex-dev/auth`) with email OTP as the only MVP sign-in method. AgentMail delivers the code. The product deliberately accepts Convex Auth’s beta/pre-release maturity to keep identity and sessions within the Convex application boundary. Pin the package version and cover OTP issuance, expiry, attempt limits, session refresh, and sign-out with integration tests.
 
-- OAuth credentials and OTP secrets live only in Convex environment variables.
-- Development and production use separate OAuth applications and callback URLs.
+- OTP and session-signing secrets live only in Convex environment variables.
+- Development and production use separate signing keys, callback URLs, and AgentMail inboxes.
 - The stable provider identity, not a client-supplied email address, identifies an account.
-- Account linking requires verified provider claims and must not be implemented by manually matching email strings.
+- Future account linking requires verified provider claims and must not be implemented by manually matching email strings.
 - The client uses the Convex Auth session; it never stores provider or application secrets.
 - A user record is provisioned server-side after the first authenticated request.
 
@@ -221,7 +221,7 @@ Convex owns users, spaces, memberships, room grants, inbox items, messages, tran
 Selected components:
 
 - `@convex-dev/static-hosting` for the required `convex.site` deployment;
-- Convex Auth v2 (`@convex-dev/auth`) for OAuth, sessions, and email OTP;
+- Convex Auth v2 (`@convex-dev/auth`) for email OTP and sessions;
 - `@agentmail/convex` for persisted inbound email, threading, queued sends, and delivery status;
 - `@convex-dev/rate-limiter` for OTP, AI, crawl, and outbound-send abuse controls;
 - `@convex-dev/workflow` for the durable email → classify → extract → publish pipeline;
@@ -280,9 +280,7 @@ All secrets live in Convex deployment environment variables or the deployment pl
 | `VITE_CONVEX_URL` | Yes, public | Browser endpoint; configuration, not a secret |
 | `CONVEX_DEPLOY_KEY` | CI only | Automated deployment; not needed in the browser or normal local runtime |
 | `JWT_PRIVATE_KEY` and `JWKS` | Yes | Convex Auth session token signing and verification |
-| `SITE_URL` | Yes, configuration | Safe OAuth and OTP redirect destination |
-| `AUTH_GOOGLE_ID` | Yes | Google sign-in client identifier; not itself secret |
-| `AUTH_GOOGLE_SECRET` | Yes | Server-side Google OAuth exchange |
+| `SITE_URL` | Yes, configuration | Safe OTP return destination |
 | AgentMail API key | Yes | Create/use family inboxes and send confirmed replies |
 | AgentMail webhook signing secret | Yes | Verify inbound AgentMail events |
 | Firecrawl API key | Yes | Current public web search and retrieval |
@@ -290,7 +288,7 @@ All secrets live in Convex deployment environment variables or the deployment pl
 | OpenAI API key | Yes for hackathon | Direct extraction/reply role and optional Luna/Terra/Sol/Astra profiles |
 | Photon/Spectrum project ID and secret | Later only | SMS, RCS, or iMessage transport, including a possible Auth OTP adapter |
 
-AgentMail can also deliver login OTP emails, avoiding a separate transactional-email provider. No Gemini key is needed when Nano Banana is accessed through OpenRouter. SMS login later adds the selected transport’s server-side credentials: Photon/Spectrum project credentials if its delivery model is selected, or Twilio credentials and a Verify Service SID if Twilio Verify is selected. Development and production use separate OAuth clients, webhook endpoints, signing keys, and provider secrets.
+AgentMail delivers login OTP emails, avoiding a separate transactional-email provider. No Gemini key is needed when Nano Banana is accessed through OpenRouter. SMS login later adds the selected transport’s server-side credentials: Photon/Spectrum project credentials if its delivery model is selected, or Twilio credentials and a Verify Service SID if Twilio Verify is selected. Development and production use separate webhook endpoints, signing keys, inboxes, and provider secrets.
 
 # Data Model
 
@@ -389,7 +387,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 
 ## Included
 
-- Google OAuth and email OTP through Convex Auth v2.
+- Email OTP through Convex Auth v2, delivered by AgentMail.
 - One demo family space and one AgentMail inbox.
 - Realtime shared and case rooms with server-enforced room membership.
 - English, Hindi, and Marathi preferences with original reveal and translation caching.
@@ -416,7 +414,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 
 | Capability | Pass condition |
 | --- | --- |
-| Authentication | A user signs in with Google or email OTP and receives no access before authentication |
+| Authentication | A user signs in with a valid, unexpired email OTP and receives no access before verification |
 | Authorization | Direct calls by a non-member or wrong room role are rejected server-side |
 | Multi-family isolation | One account can switch between two spaces without cross-space reads, subscriptions, search, or AI context |
 | Realtime | Two authorized sessions see a new message, inbox item, and run status without refresh |
@@ -470,7 +468,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 | Product name | Saath; assistant is Saathi | Before domain purchase |
 | Product center | Family operations inbox plus multilingual conversation | User testing contradicts it |
 | Launch languages | English, Hindi, Marathi | First household research |
-| Authentication | Convex Auth v2 with Google OAuth + email OTP; custom-provider mobile OTP later | SMS provider and abuse controls are ready |
+| Authentication | Convex Auth v2 with AgentMail-delivered email OTP only; OAuth and mobile OTP later | Recovery or user research requires another method |
 | Authorization | Capability policies over space and room assignments | A new collaboration model requires it |
 | Multi-family tenancy | Users may hold independent memberships in multiple isolated spaces | Evidence requires a more complex organization hierarchy |
 | Email topology | One AgentMail inbox per space, one thread per case | Tenant isolation or deliverability requires more |

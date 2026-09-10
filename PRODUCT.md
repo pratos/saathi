@@ -10,7 +10,7 @@
 
 Build Saath as a multilingual family operations inbox and shared messenger. A household gets one place for conversations, forwarded email, subscriptions, bills, school notices, bookings, attachments, decisions, and follow-ups. People participate through the web app or a scoped email thread. Saathi translates, summarizes, extracts important dates and amounts, researches current public information, and drafts actions without taking externally visible action without confirmation.
 
-The hackathon application is a standalone React and TypeScript web app backed by Convex. Convex is the system of record and authorization boundary. OpenAI performs structured language and reasoning work, Firecrawl retrieves current public evidence, and AgentMail provides the household inbox and threaded email delivery.
+The hackathon application is a standalone React and TypeScript web app backed by Convex. Convex is the system of record and authorization boundary. DeepSeek V4.1 Flash through OpenRouter handles routine multilingual chat and translation. OpenAI retains a narrow, real product role for structured email extraction and suggested replies so the submission clearly satisfies sponsor-stack requirements. Firecrawl retrieves current public evidence, and AgentMail provides the household inbox and threaded email delivery.
 
 Pi, box.ascii.dev, bring-your-own API keys, SMS authentication, and billing are not required for the core product loop and are deferred until the measured product need justifies them.
 
@@ -27,6 +27,7 @@ A family can forward or receive an important email, discuss it in their preferre
 5. **Email is a first-class input.** AgentMail is not a demo add-on; it is the bridge between household operations and the shared workspace.
 6. **Deny by default.** A valid identifier is not permission. Every server operation proves identity and authorization.
 7. **Convex owns durable truth.** Provider responses and execution events are normalized into Convex records; provider state is never canonical.
+8. **Families are isolated tenants.** One person may belong to multiple family spaces, but data, permissions, inboxes, usage, and model context never cross a space boundary.
 
 # Core Experience
 
@@ -39,6 +40,12 @@ A family can forward or receive an important email, discuss it in their preferre
 - Ask Saathi for help within the authorized conversation and source material.
 - Research current public information with visible URLs and retrieval times.
 - Catch up on unread items, decisions, unresolved questions, renewals, and responsibilities.
+
+## Multiple family spaces
+
+One account can create or join multiple family spaces—for example, a household, a parent’s household, and a resident group. The user chooses an active space from a switcher; switching changes the complete authorization and data scope rather than applying a client-side filter.
+
+Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, tasks, model context, and email routing are forbidden. Email addresses must resolve to one space before content is processed.
 
 ## Family inbox
 
@@ -128,7 +135,7 @@ Authentication answers **who is calling**. Authorization answers **what that ide
 
 ## App authentication
 
-Use Convex Auth with Google OAuth and email OTP for the MVP.
+Use the `@convex-dev/better-auth` component with Google OAuth and email OTP for the MVP. It has a more stable current integration surface than the hackathon-linked Convex Auth v2 preview.
 
 - OAuth credentials and OTP secrets live only in Convex environment variables.
 - Development and production use separate OAuth applications and callback URLs.
@@ -211,15 +218,35 @@ Drafting and executing are separate operations. Sending email, unsubscribing, de
 
 Convex owns users, spaces, memberships, room grants, inbox items, messages, translations, attachments, tasks, invitations, agent runs, sources, audit events, idempotency, and usage. Queries power realtime authorized views. Mutations validate and write atomically. Actions call external services and write results through internal mutations.
 
+Selected components:
+
+- `@convex-dev/static-hosting` for the required `convex.site` deployment;
+- `@convex-dev/better-auth` for OAuth, sessions, and email OTP;
+- `@agentmail/convex` for persisted inbound email, threading, queued sends, and delivery status;
+- `@convex-dev/rate-limiter` for OTP, AI, crawl, and outbound-send abuse controls;
+- `@convex-dev/workflow` for the durable email → classify → extract → publish pipeline;
+- `@firecrawl/firecrawl-convex` for current public web retrieval;
+- optionally `@convex-dev/action-cache` for space-scoped translation and classification caching.
+
+Keep family RBAC, messages, usage, and audit records in app-owned tables. Do not stack Workflow, Workpool, and Action Retrier for the same job. Early component versions must be pinned and covered by integration tests; appearance in the component directory is not a maintenance guarantee.
+
+## Default model routing
+
+- **Routine text:** OpenRouter `deepseek/deepseek-v4.1-flash` for multilingual chat, translation, and summaries.
+- **Hackathon OpenAI role:** direct OpenAI `gpt-5-mini` for structured email-to-task extraction and suggested replies.
+- **Optional image generation:** OpenRouter `google/gemini-3.1-flash-lite-image` (“Nano Banana 2 Lite”) for deliberately requested family cards or visual explainers. It is not in the core MVP path.
+
+One OpenRouter key covers both DeepSeek and Nano Banana. The `convex-nano-banana` component is not selected because its documented interface expects a direct Gemini key rather than OpenRouter.
+
 ## OpenAI
 
-OpenAI is called only from server-side Convex actions. It performs language detection, translation, classification, structured extraction, summaries, and bounded answer generation. Outputs are validated with Zod, with at most one repair attempt. Record model, latency, token usage when available, validation outcome, and trace ID.
+OpenAI is called only from server-side Convex actions. For the MVP, `gpt-5-mini` performs structured email extraction and suggested replies. Outputs are validated with Zod, with at most one repair attempt. Record model, latency, token usage when available, validation outcome, and trace ID.
 
 The web client never receives the OpenAI API credential. Managed API usage is capped per family space. Bring-your-own API keys are deferred until secure storage, validation, rotation, revocation, and support behavior are complete.
 
 ## Firecrawl
 
-Firecrawl is used only when a request requires current public information. The action sends a public search question—not private household content—stores URLs and retrieval timestamps, and gives bounded evidence to OpenAI for synthesis. The resulting answer visibly cites its sources.
+Firecrawl is used only when a request requires current public information. The action sends a public search question—not private household content—stores URLs and retrieval timestamps, and gives bounded evidence to the selected text model for synthesis. The resulting answer visibly cites its sources.
 
 ## AgentMail
 
@@ -234,6 +261,26 @@ AgentMail provides:
 - standard email threading for app-to-email conversations.
 
 Inbound processing verifies webhook authenticity, inbox mapping, thread mapping, sender policy, and idempotency before attachments or body content are processed. Unknown senders are quarantined. An app reply uses the latest AgentMail thread context and requires confirmation.
+
+# Configuration and API Keys
+
+All secrets live in Convex deployment environment variables or the deployment platform’s encrypted CI secret store. They never use a `VITE_` prefix and never enter browser bundles, messages, logs, or Box environments.
+
+| Credential/configuration | Required | Purpose |
+| --- | :---: | --- |
+| Convex project/deployment | Yes | Database, functions, realtime, storage, and hosting |
+| `VITE_CONVEX_URL` | Yes, public | Browser endpoint; configuration, not a secret |
+| `CONVEX_DEPLOY_KEY` | CI only | Automated deployment; not needed in the browser or normal local runtime |
+| `BETTER_AUTH_SECRET` | Yes | Signs and protects application auth sessions |
+| Google OAuth client ID | Yes | Google sign-in; the ID itself is not secret |
+| Google OAuth client secret | Yes | Server-side OAuth exchange |
+| AgentMail API key | Yes | Create/use family inboxes and send confirmed replies |
+| AgentMail webhook signing secret | Yes | Verify inbound AgentMail events |
+| Firecrawl API key | Yes | Current public web search and retrieval |
+| OpenRouter API key | Yes | DeepSeek V4.1 Flash and optional Nano Banana requests |
+| OpenAI API key | Yes for hackathon | Direct `gpt-5-mini` extraction and reply-draft role |
+
+AgentMail can also deliver login OTP emails, avoiding a separate transactional-email provider. No Gemini key is needed when Nano Banana is accessed through OpenRouter. No SMS key is needed until mobile OTP enters implementation. Development and production use separate OAuth clients, webhook endpoints, and provider secrets.
 
 # Data Model
 
@@ -314,6 +361,8 @@ Every inbound item records an origin, actor, space or room, original content, vi
 ## Required adversarial tests
 
 - A non-member cannot list, read, infer, search, translate, or invoke AI against a room.
+- A member of one family cannot infer IDs, membership, inbox items, search results, usage, or model context from another family.
+- A multi-family user can switch spaces without stale data from the previous space remaining subscribed or visible.
 - A space owner cannot read a private room without a room grant.
 - Removing membership terminates subsequent reads and writes.
 - A viewer cannot post by calling a mutation directly.
@@ -330,7 +379,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 
 ## Included
 
-- Google OAuth and email OTP through Convex Auth.
+- Google OAuth and email OTP through the Better Auth Convex component.
 - One demo family space and one AgentMail inbox.
 - Realtime shared and case rooms with server-enforced room membership.
 - English, Hindi, and Marathi preferences with original reveal and translation caching.
@@ -359,6 +408,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 | --- | --- |
 | Authentication | A user signs in with Google or email OTP and receives no access before authentication |
 | Authorization | Direct calls by a non-member or wrong room role are rejected server-side |
+| Multi-family isolation | One account can switch between two spaces without cross-space reads, subscriptions, search, or AI context |
 | Realtime | Two authorized sessions see a new message, inbox item, and run status without refresh |
 | Multilingual | Sessions render the same source in different preferred languages and reveal the original |
 | Family inbox | One forwarded email appears once, is categorized, and exposes its original provenance |
@@ -410,10 +460,12 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 | Product name | Saath; assistant is Saathi | Before domain purchase |
 | Product center | Family operations inbox plus multilingual conversation | User testing contradicts it |
 | Launch languages | English, Hindi, Marathi | First household research |
-| Authentication | Google OAuth + email OTP for MVP; mobile OTP later | SMS provider and abuse controls are ready |
+| Authentication | Better Auth component with Google OAuth + email OTP; mobile OTP later | SMS provider and abuse controls are ready |
 | Authorization | Capability policies over space and room assignments | A new collaboration model requires it |
+| Multi-family tenancy | Users may hold independent memberships in multiple isolated spaces | Evidence requires a more complex organization hierarchy |
 | Email topology | One AgentMail inbox per space, one thread per case | Tenant isolation or deliverability requires more |
-| AI boundary | Direct server-side OpenAI calls with Zod validation | Traces justify an agent runtime |
+| AI boundary | OpenRouter DeepSeek V4.1 Flash by default; direct OpenAI `gpt-5-mini` for extraction and drafts | Benchmarks or sponsor guidance changes |
+| Image model | Optional Nano Banana 2 Lite through OpenRouter | A validated core workflow needs generated images |
 | Assistant trigger | Mention in shared rooms; automatic in private AI rooms | Missed-request data suggests otherwise |
 | Firecrawl boundary | Current public information only | A reviewed private-source connector is added |
 | External actions | Draft then explicit authorized confirmation | Never for payments or destructive actions |
@@ -427,11 +479,12 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 Product availability and hackathon rules can change; recheck before submission.
 
 1. [Convex All Gas Hackathon](https://www.convex.dev/hackathons/all-gas) — requirements, sponsor stack, judging, deployment, and submission.
-2. [Convex Authentication](https://docs.convex.dev/auth) — supported authentication boundaries and providers.
-3. [Convex Auth OAuth](https://labs.convex.dev/auth/config/oauth) — OAuth provider and callback configuration.
+2. [Convex Components](https://www.convex.dev/components) — component catalog and maintenance ownership.
+3. [Convex Authentication](https://docs.convex.dev/auth) — supported authentication boundaries and providers.
 4. [Convex Auth in Functions](https://docs.convex.dev/auth/functions-auth) — server-side identity access.
 5. [OpenAI API](https://developers.openai.com/api/reference/overview) — server-side model API and credential handling.
 6. [AgentMail Webhooks](https://www.agentmail.to/docs/webhooks-overview) — inbound events and message metadata.
 7. [AgentMail Threaded Conversations](https://www.agentmail.to/docs/knowledge-base/threaded-conversations) — standard email threading and replies.
 8. [Convex Realtime](https://docs.convex.dev/realtime) — reactive queries and updates.
 9. [Firecrawl Convex Component](https://www.firecrawl.dev/blog/firecrawl-convex-component) — public web retrieval from Convex.
+10. [OpenRouter Models](https://openrouter.ai/models) — model identifiers, capabilities, and current pricing.

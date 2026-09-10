@@ -127,7 +127,7 @@ The long-term onboarding flow is:
 
 Phone numbers are stored in E.164 form and are not displayed to other members without consent. SMS OTP requires expiry, resend cooldowns, attempt limits, abuse controls, and a production messaging provider.
 
-For the hackathon MVP, use Google OAuth with email OTP fallback. The mobile flow remains a committed production design but SMS delivery is deferred to avoid adding an unrelated provider and unreliable demo dependency.
+For the hackathon MVP, use Google OAuth with email OTP fallback. Convex Auth also supports SMS OTP through a custom phone provider, with an official Twilio/Twilio Verify example, but it does not include an SMS delivery service. The mobile flow remains a committed production design while the SMS provider is deferred to avoid adding an unrelated and potentially unreliable demo dependency.
 
 # Authentication and Authorization
 
@@ -135,7 +135,7 @@ Authentication answers **who is calling**. Authorization answers **what that ide
 
 ## App authentication
 
-Use the `@convex-dev/better-auth` component with Google OAuth and email OTP for the MVP. It has a more stable current integration surface than the hackathon-linked Convex Auth v2 preview.
+Use Convex Auth v2 (`@convex-dev/auth`) with Google OAuth and email OTP for the MVP. The product deliberately accepts its beta/pre-release maturity to keep identity and sessions within the Convex application boundary. Pin the package version and cover sign-in, callback, refresh, sign-out, and account-linking behavior with integration tests.
 
 - OAuth credentials and OTP secrets live only in Convex environment variables.
 - Development and production use separate OAuth applications and callback URLs.
@@ -221,7 +221,7 @@ Convex owns users, spaces, memberships, room grants, inbox items, messages, tran
 Selected components:
 
 - `@convex-dev/static-hosting` for the required `convex.site` deployment;
-- `@convex-dev/better-auth` for OAuth, sessions, and email OTP;
+- Convex Auth v2 (`@convex-dev/auth`) for OAuth, sessions, and email OTP;
 - `@agentmail/convex` for persisted inbound email, threading, queued sends, and delivery status;
 - `@convex-dev/rate-limiter` for OTP, AI, crawl, and outbound-send abuse controls;
 - `@convex-dev/workflow` for the durable email → classify → extract → publish pipeline;
@@ -230,11 +230,19 @@ Selected components:
 
 Keep family RBAC, messages, usage, and audit records in app-owned tables. Do not stack Workflow, Workpool, and Action Retrier for the same job. Early component versions must be pinned and covered by integration tests; appearance in the component directory is not a maintenance guarantee.
 
+The Photon iMessage component is a candidate for later SMS, RCS, and iMessage delivery. It is a durable messaging transport, not an auth provider. Phone login would still use a custom Convex Auth phone provider to generate/verify the OTP while Photon sends it. Do not add Photon to the hackathon dependency graph until delivery to the target countries, sender provisioning, pricing, abuse controls, and fallback behavior are verified.
+
 ## Default model routing
 
-- **Routine text:** OpenRouter `deepseek/deepseek-v4.1-flash` for multilingual chat, translation, and summaries.
-- **Hackathon OpenAI role:** direct OpenAI `gpt-5-mini` for structured email-to-task extraction and suggested replies.
+- **Default Family:** OpenRouter `deepseek/deepseek-v4.1-flash` for routine multilingual chat, translation, and summaries.
+- **Low — Luna:** latest approved economical OpenAI model.
+- **Mid — Terra:** latest approved balanced OpenAI model.
+- **High — Sol:** latest approved high-capability OpenAI model.
+- **Ultra — Astra:** latest approved maximum-capability OpenAI model.
+- **Hackathon OpenAI role:** direct OpenAI for structured email-to-task extraction and suggested replies, regardless of whether a member changes their conversational profile.
 - **Optional image generation:** OpenRouter `google/gemini-3.1-flash-lite-image` (“Nano Banana 2 Lite”) for deliberately requested family cards or visual explainers. It is not in the core MVP path.
+
+Luna, Terra, Sol, and Astra are stable Saath product profiles, not claimed OpenAI API model IDs. A server-side routing table maps them to currently approved provider model IDs. Every run persists both the requested profile and resolved provider/model for reproducibility and usage accounting. A space owner can cap the highest available profile; members may switch within that policy, and expensive High or Ultra work can require a visible estimate and confirmation. No physical dial UI is part of the present implementation.
 
 One OpenRouter key covers both DeepSeek and Nano Banana. The `convex-nano-banana` component is not selected because its documented interface expects a direct Gemini key rather than OpenRouter.
 
@@ -271,16 +279,18 @@ All secrets live in Convex deployment environment variables or the deployment pl
 | Convex project/deployment | Yes | Database, functions, realtime, storage, and hosting |
 | `VITE_CONVEX_URL` | Yes, public | Browser endpoint; configuration, not a secret |
 | `CONVEX_DEPLOY_KEY` | CI only | Automated deployment; not needed in the browser or normal local runtime |
-| `BETTER_AUTH_SECRET` | Yes | Signs and protects application auth sessions |
-| Google OAuth client ID | Yes | Google sign-in; the ID itself is not secret |
-| Google OAuth client secret | Yes | Server-side OAuth exchange |
+| `JWT_PRIVATE_KEY` and `JWKS` | Yes | Convex Auth session token signing and verification |
+| `SITE_URL` | Yes, configuration | Safe OAuth and OTP redirect destination |
+| `AUTH_GOOGLE_ID` | Yes | Google sign-in client identifier; not itself secret |
+| `AUTH_GOOGLE_SECRET` | Yes | Server-side Google OAuth exchange |
 | AgentMail API key | Yes | Create/use family inboxes and send confirmed replies |
 | AgentMail webhook signing secret | Yes | Verify inbound AgentMail events |
 | Firecrawl API key | Yes | Current public web search and retrieval |
 | OpenRouter API key | Yes | DeepSeek V4.1 Flash and optional Nano Banana requests |
-| OpenAI API key | Yes for hackathon | Direct `gpt-5-mini` extraction and reply-draft role |
+| OpenAI API key | Yes for hackathon | Direct extraction/reply role and optional Luna/Terra/Sol/Astra profiles |
+| Photon/Spectrum project ID and secret | Later only | SMS, RCS, or iMessage transport, including a possible Auth OTP adapter |
 
-AgentMail can also deliver login OTP emails, avoiding a separate transactional-email provider. No Gemini key is needed when Nano Banana is accessed through OpenRouter. No SMS key is needed until mobile OTP enters implementation. Development and production use separate OAuth clients, webhook endpoints, and provider secrets.
+AgentMail can also deliver login OTP emails, avoiding a separate transactional-email provider. No Gemini key is needed when Nano Banana is accessed through OpenRouter. SMS login later adds the selected transport’s server-side credentials: Photon/Spectrum project credentials if its delivery model is selected, or Twilio credentials and a Verify Service SID if Twilio Verify is selected. Development and production use separate OAuth clients, webhook endpoints, signing keys, and provider secrets.
 
 # Data Model
 
@@ -379,7 +389,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 
 ## Included
 
-- Google OAuth and email OTP through the Better Auth Convex component.
+- Google OAuth and email OTP through Convex Auth v2.
 - One demo family space and one AgentMail inbox.
 - Realtime shared and case rooms with server-enforced room membership.
 - English, Hindi, and Marathi preferences with original reveal and translation caching.
@@ -460,11 +470,11 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 | Product name | Saath; assistant is Saathi | Before domain purchase |
 | Product center | Family operations inbox plus multilingual conversation | User testing contradicts it |
 | Launch languages | English, Hindi, Marathi | First household research |
-| Authentication | Better Auth component with Google OAuth + email OTP; mobile OTP later | SMS provider and abuse controls are ready |
+| Authentication | Convex Auth v2 with Google OAuth + email OTP; custom-provider mobile OTP later | SMS provider and abuse controls are ready |
 | Authorization | Capability policies over space and room assignments | A new collaboration model requires it |
 | Multi-family tenancy | Users may hold independent memberships in multiple isolated spaces | Evidence requires a more complex organization hierarchy |
 | Email topology | One AgentMail inbox per space, one thread per case | Tenant isolation or deliverability requires more |
-| AI boundary | OpenRouter DeepSeek V4.1 Flash by default; direct OpenAI `gpt-5-mini` for extraction and drafts | Benchmarks or sponsor guidance changes |
+| AI boundary | DeepSeek V4.1 Flash by default; OpenAI profiles Luna/Terra/Sol/Astra plus mandatory extraction/draft role | Benchmarks or sponsor guidance changes |
 | Image model | Optional Nano Banana 2 Lite through OpenRouter | A validated core workflow needs generated images |
 | Assistant trigger | Mention in shared rooms; automatic in private AI rooms | Missed-request data suggests otherwise |
 | Firecrawl boundary | Current public information only | A reviewed private-source connector is added |
@@ -488,3 +498,6 @@ Product availability and hackathon rules can change; recheck before submission.
 8. [Convex Realtime](https://docs.convex.dev/realtime) — reactive queries and updates.
 9. [Firecrawl Convex Component](https://www.firecrawl.dev/blog/firecrawl-convex-component) — public web retrieval from Convex.
 10. [OpenRouter Models](https://openrouter.ai/models) — model identifiers, capabilities, and current pricing.
+11. [Convex Auth setup](https://labs.convex.dev/auth/setup) — React/Vite package and provider setup.
+12. [Convex Auth OTPs](https://labs.convex.dev/auth/config/otps) — email OTP and custom Twilio phone-provider pattern.
+13. [Photon iMessage Convex component](https://www.convex.dev/components/spectrum-ts/convex) — durable iMessage, RCS, and SMS transport.

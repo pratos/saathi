@@ -1,0 +1,26 @@
+# Saath Convex backend
+
+This directory contains the app schema, Convex Auth email OTP, tenant/room authorization policies, first realtime queries and message mutation, and component mounts.
+
+## Setup
+
+1. Link a Convex deployment and run `npx convex dev` to generate `convex/_generated` and deploy the schema/components.
+2. Generate Auth keys with `npx @convex-dev/auth` (sets `JWT_PRIVATE_KEY` and `JWKS`) and set `SITE_URL` to the trusted frontend origin.
+3. Set server-side deployment environment variables:
+   - `AGENTMAIL_API_KEY`
+   - `AGENTMAIL_WEBHOOK_SECRET`
+   - `AGENTMAIL_AUTH_INBOX_ID`
+   - `FIRECRAWL_API_KEY`
+   - `FIRECRAWL_WEBHOOK_SECRET` (recommended for durable crawls)
+   - `OPENROUTER_API_KEY` (durable Saathi agents using DeepSeek V4.1 Flash)
+   - `SARVAM_API_KEY` (Saaras voice-note transcription)
+4. Register `https://<deployment>.convex.site/agentmail/webhook` in AgentMail. Firecrawl's component webhook is mounted at `/firecrawl/webhook`.
+5. Upload the Vite build with `npx @convex-dev/static-hosting upload --build` (add `--prod` for production).
+
+**Email OTP cannot send until `AGENTMAIL_AUTH_INBOX_ID` names an existing, configured AgentMail inbox.** Secrets are read only in Convex functions/components; never expose them with a `VITE_` prefix.
+
+Call `users.ensureCurrent` once after authentication, then scope every family request with a selected `spaceId`. Static routes are registered last so auth discovery and webhook routes cannot be swallowed by SPA fallback.
+
+Voice notes use `voiceNotes.generateUploadUrl` followed by a direct browser upload and `voiceNotes.submit`. Submission accepts recordings up to 30 seconds and 5 MB, validates the stored MIME type, re-checks room posting permission, and schedules a server-side Sarvam transcription. Clients read the audio URL and live transcript status through `voiceNotes.getByMessage`.
+
+Durable Saathi sessions use `agents.create`, `agents.send`, and `agents.get`. Every agent belongs to one family room, inherits that room's RBAC, serializes prompts through a FIFO mailbox, and uses bounded transcript context plus explicit memory. Exact attempt leases reject late results after worker recovery. Client operation IDs make create/send retries idempotent, and prompts are rate limited per family and user. The Node action runtime is pinned to Node 22 in `convex.json`.

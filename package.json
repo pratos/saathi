@@ -5,22 +5,41 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:portal": "vite build --mode portal --outDir .vite-portal && vite preview --outDir .vite-portal",
+    "dev:backend": "convex dev",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "test": "vitest run",
+    "preview": "vite preview",
+    "deploy": "npx @convex-dev/static-hosting deploy"
   },
   "dependencies": {
+    "@agentmail/convex": "^0.1.0",
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/rate-limiter": "^0.3.2",
+    "@convex-dev/static-hosting": "^0.2.1",
+    "@convex-dev/workflow": "^0.4.6",
+    "@earendil-works/pi-agent-core": "^0.85.1",
+    "@earendil-works/pi-ai": "^0.85.1",
+    "@firecrawl/firecrawl-convex": "^0.1.1",
+    "convex": "^1.45.0",
     "lucide-react": "^1.44.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "typebox": "^1.3.7",
+    "zod": "^4.6.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
+    "convex-test": "^0.0.57",
     "oxlint": "^1.79.0",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.0"
   }
 }

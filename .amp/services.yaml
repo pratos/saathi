@@ -1,0 +1,9 @@
+services:
+  saath-web:
+    command: npm run dev:portal -- --host 0.0.0.0 --port "$PORT" --strictPort
+    port: 31214
+    health: /
+    review: false
+    portal:
+      title: Saath
+      description: Bundled low-latency family inbox preview.

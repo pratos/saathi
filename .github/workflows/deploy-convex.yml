@@ -66,3 +66,24 @@ jobs:
         run: npm run deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      - name: Classify recent OTP failures without exposing log data
+        shell: bash
+        run: |
+          set +o pipefail
+          timeout 8s npx convex logs --prod --history 200 --jsonl 2>/dev/null | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk });
+            process.stdin.on("end", () => {
+              const statuses = [...input.matchAll(/AgentMail rejected OTP delivery with status (\d+)/g)].map((match) => Number(match[1]));
+              const result = {
+                rejectedStatuses: [...new Set(statuses)],
+                rejectedCount: statuses.length,
+                rateLimitedCount: (input.match(/Too many sign-in code requests/g) ?? []).length,
+                missingConfigurationCount: (input.match(/AgentMail OTP delivery is not configured/g) ?? []).length,
+              };
+              process.stdout.write(JSON.stringify(result));
+            });
+          '
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

@@ -66,52 +66,9 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           SITE_URL: https://giant-caiman-748.convex.site
 
-      - name: Initialize production Auth signing keys once
-        run: printf 'y\n' | npx @convex-dev/auth --prod --web-server-url "$SITE_URL"
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-          SITE_URL: https://giant-caiman-748.convex.site
-
       # Static Hosting builds with the production VITE_CONVEX_URL, deploys the
       # Convex backend, then atomically publishes dist/ to convex.site.
       - name: Build and deploy backend and frontend
         run: npm run deploy
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-
-      - name: Classify recent Auth verification failures
-        shell: bash
-        run: |
-          set +o pipefail
-          timeout 8s npx convex logs --prod --history 500 --jsonl 2>/dev/null | node -e '
-            const patterns = [
-              ["invalid_code", /Invalid verification code/i],
-              ["invalid_verifier", /Invalid verifier/i],
-              ["expired_code", /Expired verification code/i],
-              ["verification_rate_limit", /Too many failed attempts to verify code/i],
-              ["authorize_mismatch", /failed the provider.*authorize/i],
-              ["provider_mismatch", /Invalid provider|not configured|not available here/i],
-              ["missing_environment", /Missing environment variable/i],
-              ["invalid_private_key", /PKCS8|private key|Invalid key/i],
-              ["deleted_account", /account.*deleted/i],
-            ];
-            const result = { markers: {}, signInFailures: 0, storeFailures: 0 };
-            let input = "";
-            process.stdin.on("data", (chunk) => { input += chunk });
-            process.stdin.on("end", () => {
-              for (const line of input.split("\n")) {
-                if (!line.trim()) continue;
-                let entry;
-                try { entry = JSON.parse(line); } catch { continue; }
-                const text = `${entry.error ?? ""} ${(entry.logLines ?? []).flatMap((log) => log.messages ?? []).join(" ")}`;
-                for (const [name, pattern] of patterns) {
-                  if (pattern.test(text)) result.markers[name] = (result.markers[name] ?? 0) + 1;
-                }
-                if (entry.kind === "Completion" && entry.error && entry.identifier === "auth:signIn") result.signInFailures += 1;
-                if (entry.kind === "Completion" && entry.error && entry.identifier === "auth:store") result.storeFailures += 1;
-              }
-              process.stdout.write(JSON.stringify(result));
-            });
-          '
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

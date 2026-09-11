@@ -66,6 +66,12 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           SITE_URL: https://giant-caiman-748.convex.site
 
+      - name: Initialize production Auth signing keys once
+        run: printf 'y\n' | npx @convex-dev/auth --prod --web-server-url "$SITE_URL"
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          SITE_URL: https://giant-caiman-748.convex.site
+
       # Static Hosting builds with the production VITE_CONVEX_URL, deploys the
       # Convex backend, then atomically publishes dist/ to convex.site.
       - name: Build and deploy backend and frontend

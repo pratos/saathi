@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** deepseek/deepseek-v4.1-flash, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-11T07:13:49Z
+- **Last updated:** 2026-09-11T07:38:17Z
 
 ## Log
 
@@ -83,7 +83,7 @@ Deployed the Convex backend and registered components, then published the Vite
 frontend through Convex Static Hosting. The public site and Convex Auth
 discovery endpoint both returned HTTP 200.
 
-### 2026-09-11 - working tree
+### 2026-09-11 - 7bd6403
 Separated the product into an account-free guided preview with fictional data
 and a live workspace backed only by authenticated Convex family data. Added the
 real email OTP entry flow, first-family onboarding, responsive family switching,
@@ -98,3 +98,9 @@ OTP, family creation, translated conversation, message sending, sample inbox
 connection, isolated family switching, and sourced decision support. Added
 play/pause, step, replay, and exit controls while keeping every action local to
 the browser (`src/PreviewWorkspace.tsx`, `src/App.css`).
+
+### 2026-09-11 - 08b676d
+Changed authentication email from a background retry queue to a synchronous
+AgentMail request, so Convex Auth advances only after the provider accepts the
+OTP message. Declared the required OTP environment variables and retained a
+per-address hourly rate limit (`convex/auth.ts`, `convex/convex.config.ts`).

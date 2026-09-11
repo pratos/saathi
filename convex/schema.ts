@@ -68,6 +68,11 @@ export default defineSchema({
     transcript: v.optional(v.string()), detectedLanguage: v.optional(v.string()),
     failureCode: v.optional(v.string()), createdAt: v.number(), completedAt: v.optional(v.number()),
   }).index("by_message", ["messageId"]).index("by_room_created", ["roomId", "createdAt"]),
+  attachments: defineTable({
+    spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
+    authorUserId: v.id("users"), storageId: v.id("_storage"), fileName: v.string(),
+    mediaType: v.string(), sizeBytes: v.number(), createdAt: v.number(),
+  }).index("by_message", ["messageId"]).index("by_room_created", ["roomId", "createdAt"]),
   generatedImages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), requestedBy: v.id("users"),
     prompt: v.string(), model: v.string(), storageId: v.id("_storage"), mediaType: v.string(), createdAt: v.number(),

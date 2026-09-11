@@ -1,27 +1,38 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   ArrowLeft,
   AtSign,
   Bell,
   Bot,
   Check,
+  FileText,
   Folder,
   LockKeyhole,
   LogOut,
   Mail,
   MessageSquareText,
+  Paperclip,
   Plus,
   Send,
   Settings2,
   ShieldCheck,
   Sparkles,
+  Upload,
+  X,
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
 import type { Doc, Id } from '../convex/_generated/dataModel'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
+type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
+
+const ACCEPTED_ATTACHMENTS = 'image/jpeg,image/png,image/webp,image/gif,image/heic,application/pdf,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
+const SUPPORTED_ATTACHMENT_TYPES = new Set(ACCEPTED_ATTACHMENTS.split(','))
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
@@ -122,7 +133,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       </aside>
 
       {sharedRoom ? (
-        <LiveRoom room={sharedRoom} family={family} families={families} onSelectFamily={onSelectFamily} onExit={onExit} />
+        <LiveRoom key={sharedRoom._id} room={sharedRoom} family={family} families={families} onSelectFamily={onSelectFamily} onExit={onExit} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
       )}
@@ -150,25 +161,34 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
   const generatedImages = useQuery(api.images.forRoom, { roomId: room._id, limit: 20 })
+  const attachments = useQuery(api.attachments.forRoom, { roomId: room._id, limit: 40 })
   const saathi = useQuery(api.agents.forRoom, { roomId: room._id })
   const postMessage = useMutation(api.messages.post)
   const retrySaathi = useMutation(api.agents.send)
+  const generateAttachmentUploadUrl = useMutation(api.attachments.generateUploadUrl)
+  const submitAttachment = useMutation(api.attachments.submit)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [error, setError] = useState('')
+  const [uploads, setUploads] = useState<PendingUpload[]>([])
+  const [dragActive, setDragActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragDepthRef = useRef(0)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const activeJob = saathi?.jobs.find((job) => job.status === 'running') ?? saathi?.jobs.find((job) => job.status === 'queued')
   const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
+  const attachmentMessageIds = useMemo(() => new Set((attachments ?? []).map((item) => item.messageId)), [attachments])
   const timeline = useMemo(() => [
-    ...(messages ?? []).map((item) => ({ kind: 'message' as const, createdAt: item.createdAt, item })),
+    ...(messages ?? []).filter((item) => !attachmentMessageIds.has(item._id)).map((item) => ({ kind: 'message' as const, createdAt: item.createdAt, item })),
     ...(generatedImages ?? []).map((item) => ({ kind: 'image' as const, createdAt: item.createdAt, item })),
-  ].sort((left, right) => left.createdAt - right.createdAt), [messages, generatedImages])
+    ...(attachments ?? []).map((item) => ({ kind: 'attachment' as const, createdAt: item.createdAt, item })),
+  ].sort((left, right) => left.createdAt - right.createdAt), [messages, generatedImages, attachments, attachmentMessageIds])
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages?.length, generatedImages?.length, activeJob?.responseText, activeJob?.status])
+  }, [messages?.length, generatedImages?.length, attachments?.length, activeJob?.responseText, activeJob?.status])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -214,8 +234,76 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
     }
   }
 
+  const uploadFiles = async (files: File[]) => {
+    for (const file of files) {
+      const id = crypto.randomUUID()
+      const mediaType = attachmentMediaType(file)
+      if (file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) {
+        setUploads((current) => [...current, { id, name: file.name, status: 'error', message: 'Files must be smaller than 20 MB.' }])
+        continue
+      }
+      if (!SUPPORTED_ATTACHMENT_TYPES.has(mediaType)) {
+        setUploads((current) => [...current, { id, name: file.name, status: 'error', message: 'Choose an image, PDF, text file, or Office document.' }])
+        continue
+      }
+      setUploads((current) => [...current, { id, name: file.name, status: 'uploading' }])
+      try {
+        const uploadUrl = await generateAttachmentUploadUrl({ roomId: room._id })
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': mediaType },
+          body: file,
+        })
+        if (!response.ok) throw new Error('upload failed')
+        const payload: unknown = await response.json()
+        if (!payload || typeof payload !== 'object' || typeof (payload as { storageId?: unknown }).storageId !== 'string') throw new Error('invalid upload')
+        await submitAttachment({
+          roomId: room._id,
+          storageId: (payload as { storageId: Id<'_storage'> }).storageId,
+          fileName: file.name,
+          mediaType,
+          clientOperationId: id.replaceAll('-', ''),
+        })
+        setUploads((current) => current.filter((upload) => upload.id !== id))
+      } catch {
+        setUploads((current) => current.map((upload) => upload.id === id
+          ? { ...upload, status: 'error', message: 'Could not upload this file. Check its type and try again.' }
+          : upload))
+      }
+    }
+  }
+
+  const chooseFiles = (files: FileList | null) => {
+    if (!files?.length) return
+    void uploadFiles(Array.from(files))
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setDragActive(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) setDragActive(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.files.length) return
+    event.preventDefault()
+    dragDepthRef.current = 0
+    setDragActive(false)
+    chooseFiles(event.dataTransfer.files)
+  }
+
   return (
-    <section className="conversation-pane">
+    <section className={`conversation-pane ${dragActive ? 'is-dragging-files' : ''}`} onDragEnter={handleDragEnter} onDragOver={(event) => event.dataTransfer.types.includes('Files') && event.preventDefault()} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      {dragActive && <div className="file-drop-overlay" role="status"><Upload /><strong>Drop files to share</strong><span>Photos and documents up to 20 MB</span></div>}
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onExit} aria-label="Back"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · private family conversation</p></div>
@@ -224,17 +312,24 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
-        {messages && generatedImages && timeline.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write to your family, or mention <strong>@saathi</strong> when you want help.</p></div>}
+        {messages && generatedImages && attachments && timeline.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write to your family, share a file, or mention <strong>@saathi</strong> when you want help.</p></div>}
         {timeline.map((entry) => entry.kind === 'image'
           ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
               <span className="message-avatar assistant"><Bot /></span>
               <div><h3>Saathi <small>· generated image</small></h3><figure className="generated-image-card"><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><figcaption>{entry.item.prompt}</figcaption></figure></div>
             </article>
+          : entry.kind === 'attachment'
+            ? <article className="outgoing-message attachment-message" key={`attachment-${entry.item._id}`}>
+                <span>You · {formatRelativeTime(entry.item.createdAt)}</span>
+                {entry.item.mediaType.startsWith('image/') && entry.item.url
+                  ? <a className="shared-image" href={entry.item.url} target="_blank" rel="noreferrer"><img src={entry.item.url} alt={entry.item.fileName} /><small>{entry.item.fileName} · {formatFileSize(entry.item.sizeBytes)}</small></a>
+                  : <a className="shared-document" href={entry.item.url ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!entry.item.url}><FileText /><span><strong>{entry.item.fileName}</strong><small>{formatFileSize(entry.item.sizeBytes)}</small></span></a>}
+              </article>
           : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>You · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
-                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}><p>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : entry.item.originalText}</p></div></div>
+                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}</div></div>
               </article>)}
         {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
           <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
@@ -246,7 +341,7 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
               <h3>Saathi <small>· {activeJob.status === 'queued' ? 'getting ready' : activeJob.activity === 'searching_web' ? 'searching the web' : activeJob.activity === 'generating_image' ? 'creating an image' : activeJob.responseText ? 'typing' : 'thinking'}</small></h3>
               <div className="assistant-card streaming-card">
                 {activeJob.responseText
-                  ? <p><AssistantText text={activeJob.responseText} /><i className="streaming-caret" aria-hidden="true" /></p>
+                  ? <div className="streaming-markdown"><AssistantText text={activeJob.responseText} /></div>
                   : <div className="typing-indicator" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : 'Saathi is thinking'}><i /><i /><i /></div>}
               </div>
             </div>
@@ -261,9 +356,12 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
         <div ref={feedEndRef} />
       </div>
       <footer className="conversation-composer">
-        <div className="composer-guidance"><button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button><span>Enter to send · Shift + Enter for a new line</span></div>
+        {uploads.length > 0 && <div className="upload-queue" aria-live="polite">{uploads.map((upload) => <div className={upload.status} key={upload.id}>{upload.status === 'uploading' ? <span className="upload-spinner" /> : <FileText />}<span><strong>{upload.name}</strong><small>{upload.status === 'uploading' ? 'Uploading…' : upload.message}</small></span>{upload.status === 'error' && <button type="button" onClick={() => setUploads((current) => current.filter((item) => item.id !== upload.id))} aria-label={`Dismiss ${upload.name}`}><X /></button>}</div>)}</div>}
+        <div className="composer-guidance"><button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button><span>Enter to send · Drop photos or documents here</span></div>
         <form onSubmit={submit}>
+          <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files)} />
           <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your family or type @saathi…" aria-label="Message for your family" rows={1} />
+          <button className="composer-attachment" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></button>
           <button className="composer-mention" type="button" onClick={addSaathiMention} aria-label="Mention Saathi"><AtSign /></button>
           <button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></button>
         </form>
@@ -274,22 +372,15 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
 }
 
 function AssistantText({ text }: { text: string }) {
-  const parts: React.ReactNode[] = []
-  const linkPattern = /\[([^\]]+)]\((https:\/\/[^\s)]+)\)/g
-  let cursor = 0
-  for (const match of text.matchAll(linkPattern)) {
-    const index = match.index ?? 0
-    if (index > cursor) parts.push(text.slice(cursor, index))
-    parts.push(<a href={match[2]} target="_blank" rel="noreferrer" key={`${index}-${match[2]}`}>{match[1]}</a>)
-    cursor = index + match[0].length
-  }
-  if (cursor < text.length) parts.push(text.slice(cursor))
-  return <>{parts}</>
+  return <div className="assistant-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+    a: ({ href, children }) => href?.startsWith('https://')
+      ? <a href={href} target="_blank" rel="noreferrer">{children}</a>
+      : <span>{children}</span>,
+  }}>{text}</ReactMarkdown></div>
 }
 
 function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
-  const configureInbox = useMutation(api.spaces.configureInbox)
-  const [inboxId, setInboxId] = useState('')
+  const createInbox = useAction(api.agentmailInboxes.createForFamily)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -298,14 +389,14 @@ function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
     setBusy(true)
     setError('')
     try {
-      await configureInbox({ spaceId, inboxId })
+      await createInbox({ spaceId })
     } catch {
-      setError('Check the Inbox ID and try again.')
+      setError('We could not create the inbox. Check AgentMail setup and try again.')
       setBusy(false)
     }
   }
 
-  return <form className="dark-connect-card" onSubmit={submit}><label htmlFor={`inbox-${spaceId}`}><Settings2 /> Connect AgentMail</label><input id={`inbox-${spaceId}`} value={inboxId} onChange={(event) => setInboxId(event.target.value)} placeholder="Inbox ID" minLength={3} maxLength={200} required /><button type="submit" disabled={busy}>{busy ? 'Connecting…' : 'Connect inbox'}</button>{error && <small role="alert">{error}</small>}</form>
+  return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Create a private email address for this family.</p><button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</button>{error && <small role="alert">{error}</small>}</form>
 }
 
 function LiveStatus({ message }: { message: string }) {
@@ -331,4 +422,21 @@ function formatRelativeTime(timestamp: number) {
   if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)} min`
   if (elapsed < 86_400_000) return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(timestamp)
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(timestamp)
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function attachmentMediaType(file: File) {
+  if (file.type) return file.type.split(';', 1)[0].toLowerCase()
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  return ({
+    csv: 'text/csv', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    gif: 'image/gif', heic: 'image/heic', jpeg: 'image/jpeg', jpg: 'image/jpeg', pdf: 'application/pdf',
+    png: 'image/png', ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain', webp: 'image/webp', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  } as Record<string, string>)[extension ?? ''] ?? ''
 }

@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireSpacePermission, requireUser } from "./lib/authz";
 
 export const create = mutation({
@@ -73,6 +73,45 @@ export const configureInbox = mutation({
       spaceId,
       actorUserId: userId,
       action: "space.inbox_configured",
+      resourceType: "space",
+      resourceId: String(spaceId),
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const prepareInboxCreation = internalQuery({
+  args: { spaceId: v.id("spaces") },
+  returns: v.object({ name: v.string(), existingInboxId: v.union(v.string(), v.null()) }),
+  handler: async (ctx, { spaceId }) => {
+    await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const space = await ctx.db.get(spaceId);
+    if (!space) throw new ConvexError({ code: "NOT_FOUND", message: "Family space not found" });
+    return { name: space.name, existingInboxId: space.agentmailInboxId ?? null };
+  },
+});
+
+export const attachCreatedInbox = internalMutation({
+  args: { spaceId: v.id("spaces"), inboxId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { spaceId, inboxId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const space = await ctx.db.get(spaceId);
+    if (!space) throw new ConvexError({ code: "NOT_FOUND", message: "Family space not found" });
+    if (space.agentmailInboxId) {
+      if (space.agentmailInboxId === inboxId) return null;
+      throw new ConvexError({ code: "INBOX_ALREADY_CONNECTED", message: "This family already has an inbox" });
+    }
+    const existing = await ctx.db.query("spaces")
+      .withIndex("by_agentmail_inbox", q => q.eq("agentmailInboxId", inboxId))
+      .unique();
+    if (existing) throw new ConvexError({ code: "INBOX_ALREADY_CONNECTED", message: "This inbox belongs to another family space" });
+    await ctx.db.patch(spaceId, { agentmailInboxId: inboxId });
+    await ctx.db.insert("auditEvents", {
+      spaceId,
+      actorUserId: userId,
+      action: "space.inbox_created",
       resourceType: "space",
       resourceId: String(spaceId),
       createdAt: Date.now(),

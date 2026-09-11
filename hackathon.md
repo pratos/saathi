@@ -8,11 +8,11 @@
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://giant-caiman-748.convex.cloud
 - **Components:** @agentmail/convex, @convex-dev/rate-limiter, @convex-dev/static-hosting, @convex-dev/workflow, @firecrawl/firecrawl-convex
-- **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, durable workflows, scheduled lease recovery
+- **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, file storage, realtime subscriptions, durable workflows, scheduled lease recovery
 - **Auth:** Convex Auth
-- **AI models:** deepseek/deepseek-v4.1-flash, gpt-5-mini, saaras:v3
+- **AI models:** deepseek/deepseek-v4.1-flash, meta/muse-image, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-11T07:38:17Z
+- **Last updated:** 2026-09-11T10:44:28Z
 
 ## Log
 
@@ -104,3 +104,19 @@ Changed authentication email from a background retry queue to a synchronous
 AgentMail request, so Convex Auth advances only after the provider accepts the
 OTP message. Declared the required OTP environment variables and retained a
 per-address hourly rate limit (`convex/auth.ts`, `convex/convex.config.ts`).
+
+### 2026-09-11 - 19dd839
+Added room-scoped streamed Saathi replies with explicit mention activation and
+ambient checks for ordinary family messages. Grounded web answers combine
+OpenRouter web search with the Firecrawl component, and generated images use
+`meta/muse-image` with authorized Convex file storage (`convex/agents.ts`,
+`convex/agentWorker.ts`, `src/LiveWorkspace.tsx`).
+
+### 2026-09-11 - be6f61c
+Made family inbox onboarding self-service for owners by creating and attaching
+an AgentMail inbox server-side. Added room-authorized photo and document uploads
+with MIME and size limits, idempotent message records, realtime attachment
+queries, inline previews, drag-and-drop, and upload states. Saathi responses now
+render streamed Markdown with readable headings, lists, emphasis, code, and safe
+links (`convex/agentmailInboxes.ts`, `convex/attachments.ts`,
+`convex/attachments.test.ts`, `src/LiveWorkspace.tsx`, `src/App.css`).

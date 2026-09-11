@@ -101,6 +101,7 @@ export default defineSchema({
     status: v.union(v.literal("queued"), v.literal("running"), v.literal("complete"), v.literal("failed")),
     attempt: v.number(), leaseId: v.optional(v.string()), createdAt: v.number(),
     startedAt: v.optional(v.number()), completedAt: v.optional(v.number()), error: v.optional(v.string()),
+    responseText: v.optional(v.string()), trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"))),
   }).index("by_agent_status_created", ["agentId", "status", "createdAt"])
     .index("by_agent_created", ["agentId", "createdAt"])
     .index("by_agent_client_operation", ["agentId", "clientOperationId"]),

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useMutation, useQuery } from 'convex/react'
 import {
   ArrowLeft,
+  AtSign,
   Bell,
+  Bot,
   Check,
   Folder,
   LockKeyhole,
@@ -147,10 +149,21 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
   onExit: () => void
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
+  const saathi = useQuery(api.agents.forRoom, { roomId: room._id })
   const postMessage = useMutation(api.messages.post)
+  const retrySaathi = useMutation(api.agents.send)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [error, setError] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const feedEndRef = useRef<HTMLDivElement>(null)
+  const activeJob = saathi?.jobs.find((job) => job.status === 'running') ?? saathi?.jobs.find((job) => job.status === 'queued')
+  const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
+
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages?.length, activeJob?.responseText, activeJob?.status])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -168,28 +181,80 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
     }
   }
 
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    event.currentTarget.form?.requestSubmit()
+  }
+
+  const addSaathiMention = () => {
+    setMessage((current) => /@saathi\b/i.test(current) ? current : `${current}${current && !current.endsWith(' ') ? ' ' : ''}@saathi `)
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  const retryFailedResponse = async () => {
+    if (!saathi || !failedJob) return
+    setRetrying(true)
+    setError('')
+    try {
+      await retrySaathi({
+        agentId: saathi.agent._id,
+        prompt: failedJob.prompt,
+        clientOperationId: crypto.randomUUID().replaceAll('-', ''),
+      })
+    } catch {
+      setError('Saathi could not retry that response. Please try again.')
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   return (
     <section className="conversation-pane">
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onExit} aria-label="Back"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · private family conversation</p></div>
-        <div className="participant-stack"><span>YOU</span><span>F</span></div>
+        <div className="participant-stack"><span>YOU</span><span>F</span><span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div>
         <select className="mobile-family-switcher" aria-label="Current family" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>{families.map(({ space }) => <option value={space._id} key={space._id}>{space.name}</option>)}</select>
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
-        {messages && messages.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write in any language. Messages stay inside this family space.</p></div>}
+        {messages && messages.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write to your family, or mention <strong>@saathi</strong> when you want help.</p></div>}
         {messages && [...messages].reverse().map((item) => item.actorType === 'user'
           ? <article className="outgoing-message" key={item._id}><span>You · {formatRelativeTime(item.createdAt)}</span><p>{item.originalText}</p></article>
           : <article className={`person-message ${item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={item._id}>
               <span className={`message-avatar ${item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{item.actorType === 'assistant' ? 'S' : <Mail />}</span>
               <div><h3>{item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(item.createdAt)}</small></h3><div className={item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}><p>{item.originalText}</p></div></div>
             </article>)}
+        {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
+          <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
+        )}
+        {activeJob && (activeJob.trigger !== 'ambient' || activeJob.responseText) && (
+          <article className="person-message assistant-message saathi-stream" aria-live="polite">
+            <span className="message-avatar assistant"><Bot /></span>
+            <div>
+              <h3>Saathi <small>· {activeJob.status === 'queued' ? 'getting ready' : activeJob.responseText ? 'typing' : 'thinking'}</small></h3>
+              <div className="assistant-card streaming-card">
+                {activeJob.responseText
+                  ? <p>{activeJob.responseText}<i className="streaming-caret" aria-hidden="true" /></p>
+                  : <div className="typing-indicator" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : 'Saathi is thinking'}><i /><i /><i /></div>}
+              </div>
+            </div>
+          </article>
+        )}
+        {failedJob && failedJob.trigger !== 'ambient' && !activeJob && (
+          <article className="person-message assistant-message saathi-failed" role="status">
+            <span className="message-avatar assistant"><Bot /></span>
+            <div><h3>Saathi <small>· couldn’t respond</small></h3><div className="assistant-card"><p>Something interrupted that response.</p><button type="button" onClick={() => void retryFailedResponse()} disabled={retrying}>{retrying ? 'Retrying…' : 'Try again'}</button></div></div>
+          </article>
+        )}
+        <div ref={feedEndRef} />
       </div>
       <footer className="conversation-composer">
+        <div className="composer-guidance"><button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button><span>Enter to send · Shift + Enter for a new line</span></div>
         <form onSubmit={submit}>
-          <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Write a message…" aria-label="Message for your family" />
-          <span className="private-composer"><ShieldCheck /></span>
+          <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your family or type @saathi…" aria-label="Message for your family" rows={1} />
+          <button className="composer-mention" type="button" onClick={addSaathiMention} aria-label="Mention Saathi"><AtSign /></button>
           <button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></button>
         </form>
         {error && <p className="dark-form-error" role="alert">{error}</p>}

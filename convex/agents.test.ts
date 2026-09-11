@@ -48,6 +48,53 @@ describe("durable family agent", () => {
     expect(snapshot?.jobs).toEqual(expect.arrayContaining([expect.objectContaining({ _id: jobId, status: "queued" })]));
   });
 
+  test("creates Saathi lazily and distinguishes ambient checks from explicit mentions", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { ownerId, roomId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+
+    await owner.mutation(api.messages.post, {
+      roomId, text: "Hi everyone", language: "en", clientOperationId: "ordinary-message-001",
+    });
+    expect(await t.run(ctx => ctx.db.query("agents").collect())).toHaveLength(1);
+    expect(await t.run(ctx => ctx.db.query("agentJobs").collect())).toEqual([
+      expect.objectContaining({ trigger: "ambient", status: "queued" }),
+    ]);
+
+    const messageId = await owner.mutation(api.messages.post, {
+      roomId, text: "@saathi, help us plan dinner", language: "en", clientOperationId: "mention-message-001",
+    });
+    expect(await owner.mutation(api.messages.post, {
+      roomId, text: "@saathi, help us plan dinner", language: "en", clientOperationId: "mention-message-001",
+    })).toBe(messageId);
+
+    const agents = await t.run(ctx => ctx.db.query("agents").collect());
+    const jobs = await t.run(ctx => ctx.db.query("agentJobs").collect());
+    expect(agents).toHaveLength(1);
+    expect(agents[0]).toMatchObject({ roomId, name: "Saathi", status: "running" });
+    expect(jobs).toHaveLength(2);
+    expect(jobs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prompt: expect.stringContaining("help us plan dinner"), trigger: "mention", status: "queued" }),
+    ]));
+  });
+
+  test("keeps family chat available when ambient assistant checks are rate limited", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { ownerId, roomId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+
+    for (let index = 0; index < 6; index++) {
+      await owner.mutation(api.messages.post, {
+        roomId, text: `Family update ${index}`, language: "en", clientOperationId: `ambient-message-${index}`,
+      });
+    }
+
+    expect(await owner.query(api.rooms.messages, { roomId })).toHaveLength(6);
+    expect(await t.run(ctx => ctx.db.query("agentJobs").collect())).toHaveLength(5);
+  });
+
   test("runs FIFO and rejects a stale worker after exact-lease recovery", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
@@ -77,6 +124,12 @@ describe("durable family agent", () => {
     expect(retryLease).toMatchObject({ job: { _id: firstJobId, attempt: 2 } });
     expect(retryLease?.leaseId).not.toBe(firstLease?.leaseId);
 
+    await t.mutation(internal.agents.updateProgress, {
+      agentId, jobId: firstJobId, leaseId: retryLease!.leaseId, responseText: "Streaming response",
+    });
+    expect((await owner.query(api.agents.forRoom, { roomId }))?.jobs.find(job => job._id === firstJobId)?.responseText)
+      .toBe("Streaming response");
+
     await t.mutation(internal.agents.finish, {
       agentId, jobId: firstJobId, leaseId: firstLease!.leaseId,
       nextSequence: 0, messages: [{ role: "assistant", content: "stale" }],
@@ -93,6 +146,10 @@ describe("durable family agent", () => {
     expect(snapshot?.messages).toEqual([{ role: "assistant", content: "fresh" }]);
     expect(snapshot?.jobs.find(job => job._id === firstJobId)?.status).toBe("complete");
     expect(snapshot?.jobs.find(job => job._id === secondJobId)?.status).toBe("queued");
+    const chatMessages = await owner.query(api.rooms.messages, { roomId });
+    expect(chatMessages).toEqual([
+      expect.objectContaining({ actorType: "assistant", origin: "assistant", originalText: "fresh" }),
+    ]);
 
     const secondLease = await t.mutation(internal.agents.beginNext, { agentId });
     expect(secondLease?.job._id).toBe(secondJobId);
@@ -129,6 +186,29 @@ describe("durable family agent", () => {
       status: "failed", error: "Authorization expired before agent result commit",
     });
   });
+
+  test("keeps an ambient no-reply decision out of the family conversation", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { ownerId, roomId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const agentId = await owner.mutation(api.agents.create, {
+      roomId, name: "Saathi", clientOperationId: "create-owner-004",
+    });
+    const jobId = await owner.mutation(api.agents.send, {
+      agentId, prompt: "Ambient greeting", clientOperationId: "ambient-no-reply",
+    });
+    const lease = await t.mutation(internal.agents.beginNext, { agentId });
+
+    await t.mutation(internal.agents.finish, {
+      agentId, jobId, leaseId: lease!.leaseId, nextSequence: lease!.nextSequence,
+      messages: [{ role: "assistant", content: "[NO_REPLY]." }],
+    });
+
+    expect(await owner.query(api.rooms.messages, { roomId })).toEqual([]);
+    expect((await owner.query(api.agents.get, { agentId }))?.jobs.find(job => job._id === jobId))
+      .toMatchObject({ status: "complete" });
+  });
 });
 
 async function seedFamily(t: TestConvex<typeof schema>) {
@@ -143,7 +223,7 @@ async function seedFamily(t: TestConvex<typeof schema>) {
     await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
     await ctx.db.insert("memberships", { spaceId, userId: participantId, role: "member", status: "active", joinedAt: now });
     const roomId = await ctx.db.insert("rooms", {
-      spaceId, type: "shared", title: "Family", assistantMode: "automatic", createdBy: ownerId, createdAt: now,
+      spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now,
     });
     await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt: now });
     await ctx.db.insert("roomMembers", { roomId, userId: participantId, role: "participant", createdAt: now });

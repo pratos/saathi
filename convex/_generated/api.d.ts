@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
 import type * as inboxWorkflow from "../inboxWorkflow.js";
 import type * as lib_authz from "../lib/authz.js";
+import type * as lib_saathi from "../lib/saathi.js";
 import type * as messages from "../messages.js";
 import type * as modelProfiles from "../modelProfiles.js";
 import type * as rooms from "../rooms.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   inbox: typeof inbox;
   inboxWorkflow: typeof inboxWorkflow;
   "lib/authz": typeof lib_authz;
+  "lib/saathi": typeof lib_saathi;
   messages: typeof messages;
   modelProfiles: typeof modelProfiles;
   rooms: typeof rooms;

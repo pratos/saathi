@@ -9,10 +9,10 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
+import { isNoReplyText, SAATHI_MODEL } from "./lib/saathi";
 
-const MODEL_ID = "deepseek/deepseek-v4.1-flash";
 const deepSeekModel: Model<"openai-completions"> = {
-  id: MODEL_ID,
+  id: SAATHI_MODEL,
   name: "DeepSeek: DeepSeek V4.1 Flash",
   api: "openai-completions",
   provider: "openrouter",
@@ -53,6 +53,18 @@ export const run = internalAction({
         getApiKey: () => env.OPENROUTER_API_KEY,
         sessionId: String(agentId),
         shouldStopAfterTurn: () => ++turns >= 12,
+      });
+
+      let persistedText = "";
+      agent.subscribe(async (event) => {
+        if (event.type !== "message_update" && event.type !== "message_end") return;
+        const responseText = assistantText(event.message);
+        if (!responseText || responseText === persistedText) return;
+        if (event.type === "message_update" && responseText.length - persistedText.length < 24) return;
+        persistedText = responseText;
+        await ctx.runMutation(internal.agents.updateProgress, {
+          agentId, jobId: work.job._id, leaseId: work.leaseId, responseText,
+        });
       });
 
       await agent.prompt(work.job.prompt);
@@ -96,4 +108,10 @@ function createMemoryTools(ctx: ActionCtx, agentId: Id<"agents">): AgentTool[] {
 
 function makeConvexSafe(messages: AgentMessage[]): unknown[] {
   return JSON.parse(JSON.stringify(messages)) as unknown[];
+}
+
+function assistantText(message: AgentMessage) {
+  if (message.role !== "assistant") return "";
+  const text = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("").trim();
+  return isNoReplyText(text) ? "" : text;
 }

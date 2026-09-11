@@ -5,12 +5,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { requireRoomPermission } from "./lib/authz";
+import { isNoReplyText, SAATHI_MODEL, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
 
-const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
-const DEFAULT_SYSTEM_PROMPT = `You are Saathi, a concise multilingual family assistant.
-Use memory only for facts the family explicitly asks you to retain.
-Never claim an external action was taken unless Saath records its confirmed result.
-Say when you do not know something.`;
 const MAX_CONTEXT_MESSAGES = 200;
 
 const limits = new RateLimiter(components.rateLimiter, {
@@ -29,7 +25,8 @@ const jobDoc = v.object({
   _id: v.id("agentJobs"), _creationTime: v.number(), agentId: v.id("agents"), requestedBy: v.id("users"),
   prompt: v.string(), clientOperationId: v.string(), status: jobStatus, attempt: v.number(),
   leaseId: v.optional(v.string()), createdAt: v.number(), startedAt: v.optional(v.number()),
-  completedAt: v.optional(v.number()), error: v.optional(v.string()),
+  completedAt: v.optional(v.number()), error: v.optional(v.string()), responseText: v.optional(v.string()),
+  trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"))),
 });
 const workItem = v.object({
   agent: agentDoc,
@@ -47,7 +44,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { userId, room } = await requireRoomPermission(ctx, args.roomId, "manage_room");
     const name = args.name.trim();
-    const systemPrompt = args.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
+    const systemPrompt = args.systemPrompt?.trim() || SAATHI_SYSTEM_PROMPT;
     validateOperationId(args.clientOperationId);
     if (name.length < 2 || name.length > 80) throw invalid("Agent name must be between 2 and 80 characters");
     if (systemPrompt.length > 10_000) throw invalid("System prompt must be 10,000 characters or shorter");
@@ -63,7 +60,7 @@ export const create = mutation({
     const now = Date.now();
     return ctx.db.insert("agents", {
       spaceId: room.spaceId, roomId: room._id, createdBy: userId, creationKey: args.clientOperationId,
-      name, systemPrompt, provider: "openrouter", model: DEFAULT_MODEL, status: "idle", createdAt: now, updatedAt: now,
+      name, systemPrompt, provider: "openrouter", model: SAATHI_MODEL, status: "idle", createdAt: now, updatedAt: now,
     });
   },
 });
@@ -91,7 +88,7 @@ export const send = mutation({
 
     const jobId = await ctx.db.insert("agentJobs", {
       agentId: agent._id, requestedBy: userId, prompt, clientOperationId: args.clientOperationId,
-      status: "queued", attempt: 0, createdAt: Date.now(),
+      status: "queued", attempt: 0, trigger: "mention", createdAt: Date.now(),
     });
     if (agent.status === "idle") {
       await ctx.db.patch(agent._id, { status: "running", lastError: undefined, updatedAt: Date.now() });
@@ -113,6 +110,20 @@ export const get = query({
       ctx.db.query("agentJobs").withIndex("by_agent_created", q => q.eq("agentId", agentId)).order("desc").take(20),
     ]);
     return { agent, messages: recentMessages.reverse().map(entry => entry.message), jobs };
+  },
+});
+
+export const forRoom = query({
+  args: { roomId: v.id("rooms") },
+  returns: v.union(v.object({ agent: agentDoc, jobs: v.array(jobDoc) }), v.null()),
+  handler: async (ctx, { roomId }) => {
+    await requireRoomPermission(ctx, roomId, "read");
+    const agent = await ctx.db.query("agents").withIndex("by_room", q => q.eq("roomId", roomId)).first();
+    if (!agent) return null;
+    const jobs = await ctx.db.query("agentJobs").withIndex("by_agent_created", q =>
+      q.eq("agentId", agent._id),
+    ).order("desc").take(10);
+    return { agent, jobs };
   },
 });
 
@@ -177,6 +188,7 @@ export const finish = internalMutation({
       if (agent) await scheduleNextOrIdle(ctx, args.agentId, error);
       return null;
     }
+    const responseText = lastAssistantText(args.messages);
     for (let index = 0; index < args.messages.length; index++) {
       await ctx.db.insert("agentMessages", {
         agentId: args.agentId, sequence: args.nextSequence + index, message: args.messages[index], createdAt: Date.now(),
@@ -184,9 +196,28 @@ export const finish = internalMutation({
     }
     await ctx.db.patch(job._id, {
       status: args.error ? "failed" : "complete", completedAt: Date.now(), error: args.error,
-      leaseId: undefined,
+      leaseId: undefined, responseText: responseText || undefined,
     });
+    if (!args.error && responseText) {
+      await ctx.db.insert("messages", {
+        spaceId: agent.spaceId, roomId: agent.roomId, actorType: "assistant", origin: "assistant",
+        originalText: responseText, language: "en", idempotencyKey: `agent-${job._id}`, createdAt: Date.now(),
+      });
+    }
     await scheduleNextOrIdle(ctx, args.agentId, args.error);
+    return null;
+  },
+});
+
+export const updateProgress = internalMutation({
+  args: {
+    agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string(), responseText: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return null;
+    await ctx.db.patch(job._id, { responseText: args.responseText.slice(0, 20_000) });
     return null;
   },
 });
@@ -272,4 +303,25 @@ function validateOperationId(value: string) {
 
 function invalid(message: string) {
   return new ConvexError({ code: "INVALID_ARGUMENT", message });
+}
+
+function lastAssistantText(messages: unknown[]) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message || typeof message !== "object" || !("role" in message) || message.role !== "assistant" || !("content" in message)) continue;
+    if (typeof message.content === "string") return visibleAssistantText(message.content);
+    if (!Array.isArray(message.content)) continue;
+    const text = message.content.flatMap(block =>
+      block && typeof block === "object" && "type" in block && block.type === "text" && "text" in block && typeof block.text === "string"
+        ? [block.text]
+        : [],
+    ).join("").trim();
+    if (text) return visibleAssistantText(text);
+  }
+  return "";
+}
+
+function visibleAssistantText(value: string) {
+  const text = value.trim();
+  return isNoReplyText(text) ? "" : text;
 }

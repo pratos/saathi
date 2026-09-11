@@ -3,6 +3,7 @@ import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
+import { enableOpenRouterWebSearch, formatFirecrawlResults, withWebAccessPrompt } from "./agentWorker.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
@@ -208,6 +209,48 @@ describe("durable family agent", () => {
     expect(await owner.query(api.rooms.messages, { roomId })).toEqual([]);
     expect((await owner.query(api.agents.get, { agentId }))?.jobs.find(job => job._id === jobId))
       .toMatchObject({ status: "complete" });
+  });
+
+  test("grounds existing agents with bounded OpenRouter and Firecrawl web access", () => {
+    expect(withWebAccessPrompt("Existing family prompt")).toContain("search_public_web");
+    expect(withWebAccessPrompt("Already has search_public_web").match(/search_public_web/g)).toHaveLength(1);
+    expect(enableOpenRouterWebSearch({ tools: [{ type: "function", function: { name: "remember" } }] })).toMatchObject({
+      max_tool_calls: 2,
+      tools: [
+        { type: "function" },
+        { type: "openrouter:web_search", parameters: { max_results: 4, max_uses: 2, max_total_results: 6 } },
+      ],
+    });
+    expect(formatFirecrawlResults({
+      news: [{ title: "Current report", url: "https://example.test/report", description: "Verified detail" }],
+    })).toContain("URL: https://example.test/report");
+  });
+
+  test("persists generated images only for an active authorized agent lease", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { ownerId, roomId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const agentId = await owner.mutation(api.agents.create, {
+      roomId, name: "Saathi", clientOperationId: "create-image-agent",
+    });
+    const jobId = await owner.mutation(api.agents.send, {
+      agentId, prompt: "Generate a family card", clientOperationId: "generate-image-job",
+    });
+    const lease = await t.mutation(internal.agents.beginNext, { agentId });
+    const storageId = await t.run(ctx => ctx.storage.store(new Blob(["image"], { type: "image/png" })));
+
+    expect(await t.mutation(internal.agents.saveGeneratedImage, {
+      agentId, jobId, leaseId: "stale-lease", storageId,
+      prompt: "A family card", model: "meta/muse-image", mediaType: "image/png",
+    })).toBeNull();
+    expect(await t.mutation(internal.agents.saveGeneratedImage, {
+      agentId, jobId, leaseId: lease!.leaseId, storageId,
+      prompt: "A family card", model: "meta/muse-image", mediaType: "image/png",
+    })).not.toBeNull();
+    expect(await owner.query(api.images.forRoom, { roomId })).toEqual([
+      expect.objectContaining({ prompt: "A family card", model: "meta/muse-image", mediaType: "image/png" }),
+    ]);
   });
 });
 

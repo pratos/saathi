@@ -13,6 +13,7 @@ import type * as agents from "../agents.js";
 import type * as auth from "../auth.js";
 import type * as email from "../email.js";
 import type * as http from "../http.js";
+import type * as images from "../images.js";
 import type * as inbox from "../inbox.js";
 import type * as inboxWorkflow from "../inboxWorkflow.js";
 import type * as lib_authz from "../lib/authz.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   email: typeof email;
   http: typeof http;
+  images: typeof images;
   inbox: typeof inbox;
   inboxWorkflow: typeof inboxWorkflow;
   "lib/authz": typeof lib_authz;

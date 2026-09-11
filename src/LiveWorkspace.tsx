@@ -149,6 +149,7 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
   onExit: () => void
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
+  const generatedImages = useQuery(api.images.forRoom, { roomId: room._id, limit: 20 })
   const saathi = useQuery(api.agents.forRoom, { roomId: room._id })
   const postMessage = useMutation(api.messages.post)
   const retrySaathi = useMutation(api.agents.send)
@@ -160,10 +161,14 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
   const feedEndRef = useRef<HTMLDivElement>(null)
   const activeJob = saathi?.jobs.find((job) => job.status === 'running') ?? saathi?.jobs.find((job) => job.status === 'queued')
   const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
+  const timeline = useMemo(() => [
+    ...(messages ?? []).map((item) => ({ kind: 'message' as const, createdAt: item.createdAt, item })),
+    ...(generatedImages ?? []).map((item) => ({ kind: 'image' as const, createdAt: item.createdAt, item })),
+  ].sort((left, right) => left.createdAt - right.createdAt), [messages, generatedImages])
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages?.length, activeJob?.responseText, activeJob?.status])
+  }, [messages?.length, generatedImages?.length, activeJob?.responseText, activeJob?.status])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -219,13 +224,18 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
-        {messages && messages.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write to your family, or mention <strong>@saathi</strong> when you want help.</p></div>}
-        {messages && [...messages].reverse().map((item) => item.actorType === 'user'
-          ? <article className="outgoing-message" key={item._id}><span>You · {formatRelativeTime(item.createdAt)}</span><p>{item.originalText}</p></article>
-          : <article className={`person-message ${item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={item._id}>
-              <span className={`message-avatar ${item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{item.actorType === 'assistant' ? 'S' : <Mail />}</span>
-              <div><h3>{item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(item.createdAt)}</small></h3><div className={item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}><p>{item.originalText}</p></div></div>
-            </article>)}
+        {messages && generatedImages && timeline.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write to your family, or mention <strong>@saathi</strong> when you want help.</p></div>}
+        {timeline.map((entry) => entry.kind === 'image'
+          ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
+              <span className="message-avatar assistant"><Bot /></span>
+              <div><h3>Saathi <small>· generated image</small></h3><figure className="generated-image-card"><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><figcaption>{entry.item.prompt}</figcaption></figure></div>
+            </article>
+          : entry.item.actorType === 'user'
+            ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>You · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
+            : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
+                <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
+                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}><p>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : entry.item.originalText}</p></div></div>
+              </article>)}
         {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
           <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
         )}
@@ -233,10 +243,10 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
           <article className="person-message assistant-message saathi-stream" aria-live="polite">
             <span className="message-avatar assistant"><Bot /></span>
             <div>
-              <h3>Saathi <small>· {activeJob.status === 'queued' ? 'getting ready' : activeJob.responseText ? 'typing' : 'thinking'}</small></h3>
+              <h3>Saathi <small>· {activeJob.status === 'queued' ? 'getting ready' : activeJob.activity === 'searching_web' ? 'searching the web' : activeJob.activity === 'generating_image' ? 'creating an image' : activeJob.responseText ? 'typing' : 'thinking'}</small></h3>
               <div className="assistant-card streaming-card">
                 {activeJob.responseText
-                  ? <p>{activeJob.responseText}<i className="streaming-caret" aria-hidden="true" /></p>
+                  ? <p><AssistantText text={activeJob.responseText} /><i className="streaming-caret" aria-hidden="true" /></p>
                   : <div className="typing-indicator" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : 'Saathi is thinking'}><i /><i /><i /></div>}
               </div>
             </div>
@@ -261,6 +271,20 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
       </footer>
     </section>
   )
+}
+
+function AssistantText({ text }: { text: string }) {
+  const parts: React.ReactNode[] = []
+  const linkPattern = /\[([^\]]+)]\((https:\/\/[^\s)]+)\)/g
+  let cursor = 0
+  for (const match of text.matchAll(linkPattern)) {
+    const index = match.index ?? 0
+    if (index > cursor) parts.push(text.slice(cursor, index))
+    parts.push(<a href={match[2]} target="_blank" rel="noreferrer" key={`${index}-${match[2]}`}>{match[1]}</a>)
+    cursor = index + match[0].length
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor))
+  return <>{parts}</>
 }
 
 function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {

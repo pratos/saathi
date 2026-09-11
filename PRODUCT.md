@@ -269,11 +269,11 @@ The Photon iMessage component is a candidate for later SMS, RCS, and iMessage de
 - **High — Sol:** latest approved high-capability OpenAI model.
 - **Ultra — Astra:** latest approved maximum-capability OpenAI model.
 - **Hackathon OpenAI role:** direct OpenAI for structured email-to-task extraction and suggested replies, regardless of whether a member changes their conversational profile.
-- **Optional image generation:** OpenRouter `google/gemini-3.1-flash-lite-image` (“Nano Banana 2 Lite”) for deliberately requested family cards or visual explainers. It is not in the core MVP path.
+- **Optional image generation:** OpenRouter `meta/muse-image` for deliberately requested family cards or visual explainers. As of 11 September 2026, Muse Image is fifth on Artificial Analysis' Text to Image leaderboard and, at $0.01 per image, the cheapest model in its top ten. Recheck this time-sensitive routing decision periodically.
 
 Luna, Terra, Sol, and Astra are stable Saath product profiles, not claimed OpenAI API model IDs. A server-side routing table maps them to currently approved provider model IDs. Every run persists both the requested profile and resolved provider/model for reproducibility and usage accounting. A space owner can cap the highest available profile; members may switch within that policy, and expensive High or Ultra work can require a visible estimate and confirmation. No physical dial UI is part of the present implementation.
 
-One OpenRouter key covers both DeepSeek and Nano Banana. The `convex-nano-banana` component is not selected because its documented interface expects a direct Gemini key rather than OpenRouter.
+One OpenRouter key covers both DeepSeek and Muse Image. Generated images are stored in Convex file storage and remain protected by room authorization.
 
 ## OpenAI
 
@@ -434,6 +434,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 - Room-authorized durable Pi agents with FIFO prompts, persisted memory, exact-lease recovery, and OpenRouter DeepSeek V4.1 Flash.
 - Up to 30-second family voice notes with authorized playback and Sarvam transcripts.
 - One current-information request with Firecrawl citations.
+- Explicitly requested room image generation with OpenRouter Muse Image and Convex file storage.
 - Usage ledger, hard demo limits, audit events, and visible failure states.
 - Public deployment, reproducible demo account, build log, and sub-three-minute demo.
 

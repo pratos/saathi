@@ -68,6 +68,10 @@ export default defineSchema({
     transcript: v.optional(v.string()), detectedLanguage: v.optional(v.string()),
     failureCode: v.optional(v.string()), createdAt: v.number(), completedAt: v.optional(v.number()),
   }).index("by_message", ["messageId"]).index("by_room_created", ["roomId", "createdAt"]),
+  generatedImages: defineTable({
+    spaceId: v.id("spaces"), roomId: v.id("rooms"), requestedBy: v.id("users"),
+    prompt: v.string(), model: v.string(), storageId: v.id("_storage"), mediaType: v.string(), createdAt: v.number(),
+  }).index("by_room_created", ["roomId", "createdAt"]),
   translations: defineTable({
     messageId: v.optional(v.id("messages")), inboxItemId: v.optional(v.id("inboxItems")),
     targetLanguage: language, text: v.string(), model: v.string(), confidence: v.optional(v.number()), createdAt: v.number(),
@@ -102,6 +106,7 @@ export default defineSchema({
     attempt: v.number(), leaseId: v.optional(v.string()), createdAt: v.number(),
     startedAt: v.optional(v.number()), completedAt: v.optional(v.number()), error: v.optional(v.string()),
     responseText: v.optional(v.string()), trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"))),
+    activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"))),
   }).index("by_agent_status_created", ["agentId", "status", "createdAt"])
     .index("by_agent_created", ["agentId", "createdAt"])
     .index("by_agent_client_operation", ["agentId", "clientOperationId"]),

@@ -694,7 +694,11 @@ button { border: 0; background: none; color: inherit; }
 .composer-mention { width: 48px; min-height: 48px !important; display: grid; place-items: center; border-radius: 14px; color: var(--aqua-soft); }
 .message-avatar.assistant svg { width: 22px; }
 .streaming-card { min-height: 58px; }
-.streaming-card > p { white-space: pre-wrap; }
+.assistant-card > p { white-space: pre-wrap; }
+.assistant-card a { color: var(--aqua-soft); text-decoration: underline; text-underline-offset: 3px; }
+.generated-image-card { width: min(560px, 100%); margin: 0; overflow: hidden; border-radius: 20px; background: #27322b; }
+.generated-image-card img { display: block; width: 100%; max-height: 560px; object-fit: contain; background: #101713; }
+.generated-image-card figcaption { padding: 11px 15px 13px; color: #a9b3ac; font-size: 12px; line-height: 1.45; }
 .streaming-caret { width: 2px; height: 1.05em; display: inline-block; margin-left: 3px; vertical-align: -.12em; border-radius: 2px; background: var(--aqua); animation: chat-caret .85s steps(1) infinite; }
 .typing-indicator { min-height: 22px; display: flex; align-items: center; gap: 6px; }
 .typing-indicator i { width: 8px; height: 8px; border-radius: 50%; background: var(--aqua); animation: chat-typing 1.15s ease-in-out infinite; }

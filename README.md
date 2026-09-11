@@ -29,4 +29,4 @@ npm test
 npm run build
 ```
 
-Convex Node actions target Node 22 (see `.nvmrc`). The current implementation includes a responsive conversation-first family workspace, email OTP flow, multi-family switching, original-plus-translation cards, decision context, source-backed Saathi responses, 30-second family voice notes, Convex schema and authorization policies, initial AgentMail ingestion, and a durable room-scoped Pi agent runtime backed by OpenRouter DeepSeek V4.1 Flash.
+Convex Node actions target Node 22 (see `.nvmrc`). The current implementation includes a responsive conversation-first family workspace, email OTP flow, multi-family switching, original-plus-translation cards, decision context, Firecrawl and OpenRouter web-grounded responses, explicitly requested Muse Image generation stored in Convex, 30-second family voice notes, Convex schema and authorization policies, initial AgentMail ingestion, and a durable room-scoped Pi agent runtime backed by OpenRouter DeepSeek V4.1 Flash.

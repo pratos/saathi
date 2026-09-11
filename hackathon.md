@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** deepseek/deepseek-v4.1-flash, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-11T06:46:50Z
+- **Last updated:** 2026-09-11T07:13:49Z
 
 ## Log
 
@@ -92,4 +92,9 @@ with authorization and tenant-isolation tests. Rebuilt desktop and mobile around
 a warm, high-contrast conversation surface with original-plus-translation cards,
 48px actions, source-backed Saathi responses, a decision summary, and voice-note
 capture (`src/App.tsx`, `src/App.css`,
-`src/LiveWorkspace.tsx`, `src/PreviewWorkspace.tsx`, `convex/spaces.ts`).
+`src/LiveWorkspace.tsx`, `src/PreviewWorkspace.tsx`, `convex/spaces.ts`). Turned
+the seeded preview into an eight-step interactive replay covering simulated email
+OTP, family creation, translated conversation, message sending, sample inbox
+connection, isolated family switching, and sourced decision support. Added
+play/pause, step, replay, and exit controls while keeping every action local to
+the browser (`src/PreviewWorkspace.tsx`, `src/App.css`).

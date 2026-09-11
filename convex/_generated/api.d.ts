@@ -11,7 +11,6 @@
 import type * as agentWorker from "../agentWorker.js";
 import type * as agents from "../agents.js";
 import type * as auth from "../auth.js";
-import type * as authDiagnostics from "../authDiagnostics.js";
 import type * as email from "../email.js";
 import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
@@ -34,7 +33,6 @@ declare const fullApi: ApiFromModules<{
   agentWorker: typeof agentWorker;
   agents: typeof agents;
   auth: typeof auth;
-  authDiagnostics: typeof authDiagnostics;
   email: typeof email;
   http: typeof http;
   inbox: typeof inbox;

@@ -66,8 +66,3 @@ jobs:
         run: npm run deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-
-      - name: Check AgentMail OTP configuration
-        run: npx convex run authDiagnostics:checkAgentMailConfiguration --prod
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

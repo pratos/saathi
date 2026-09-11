@@ -7,7 +7,7 @@ import type { ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 
 const otpLimits = new RateLimiter(components.rateLimiter, {
-  emailOtp: { kind: "fixed window", rate: 10, period: HOUR },
+  emailOtpV2: { kind: "fixed window", rate: 10, period: HOUR },
 });
 type EmailVerificationRequest = Parameters<NonNullable<Parameters<typeof Email>[0]["sendVerificationRequest"]>>[0];
 type EmailVerificationSender = NonNullable<Parameters<typeof Email>[0]["sendVerificationRequest"]>;
@@ -50,7 +50,7 @@ export const checkOtpLimit = internalMutation({
   args: { email: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const limit = await otpLimits.limit(ctx, "emailOtp", { key: args.email });
+    const limit = await otpLimits.limit(ctx, "emailOtpV2", { key: args.email });
     if (!limit.ok) throw new Error("Too many sign-in code requests; try again later");
     return null;
   },

@@ -60,6 +60,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Configure production auth origin
+        run: npx convex env set SITE_URL "$SITE_URL" --prod
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          SITE_URL: https://giant-caiman-748.convex.site
+
       # Static Hosting builds with the production VITE_CONVEX_URL, deploys the
       # Convex backend, then atomically publishes dist/ to convex.site.
       - name: Build and deploy backend and frontend

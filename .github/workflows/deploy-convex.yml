@@ -66,3 +66,19 @@ jobs:
         run: npm run deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      - name: Read redacted OTP failure marker
+        shell: bash
+        run: |
+          set +o pipefail
+          timeout 8s npx convex logs --prod --history 300 --jsonl 2>/dev/null | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk });
+            process.stdin.on("end", () => {
+              const statuses = [...input.matchAll(/OTP_DELIVERY_REJECTED[^0-9]*(\d+)/g)].map((match) => Number(match[1]));
+              const authFailures = (input.match(/auth:signIn/g) ?? []).length;
+              process.stdout.write(JSON.stringify({ statuses: [...new Set(statuses)], authFailures }));
+            });
+          '
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

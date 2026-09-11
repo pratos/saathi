@@ -1,15 +1,13 @@
-import { AgentMail } from "@agentmail/convex";
 import { Email } from "@convex-dev/auth/providers/Email";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { convexAuth } from "@convex-dev/auth/server";
 import { components, internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { env, internalMutation } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 
-const agentmail = new AgentMail(components.agentmail);
 const otpLimits = new RateLimiter(components.rateLimiter, {
-  emailOtp: { kind: "fixed window", rate: 5, period: HOUR },
+  emailOtp: { kind: "fixed window", rate: 10, period: HOUR },
 });
 type EmailVerificationRequest = Parameters<NonNullable<Parameters<typeof Email>[0]["sendVerificationRequest"]>>[0];
 type EmailVerificationSender = NonNullable<Parameters<typeof Email>[0]["sendVerificationRequest"]>;
@@ -20,27 +18,41 @@ const sendVerificationRequest = (async (
   { identifier, token, expires }: EmailVerificationRequest,
   ctx: ActionCtx,
 ) => {
-  await ctx.runMutation(internal.auth.queueOtp, {
-    to: identifier,
-    token,
-    expiresAt: expires.getTime(),
-  });
+  const normalizedEmail = identifier.trim().toLowerCase();
+  await ctx.runMutation(internal.auth.checkOtpLimit, { email: normalizedEmail });
+
+  const apiKey = env.AGENTMAIL_API_KEY.trim();
+  const inboxId = env.AGENTMAIL_AUTH_INBOX_ID.trim();
+  if (!apiKey || !inboxId) throw new Error("AgentMail OTP delivery is not configured");
+
+  const response = await fetch(
+    `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: normalizedEmail,
+        subject: "Your Saath sign-in code",
+        text: `Your Saath sign-in code is ${token}. It expires at ${expires.toISOString()}. If you did not request it, ignore this email.`,
+        labels: ["saath-auth-otp"],
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`AgentMail rejected OTP delivery with status ${response.status}`);
+  }
 }) as unknown as EmailVerificationSender;
 
-export const queueOtp = internalMutation({
-  args: { to: v.string(), token: v.string(), expiresAt: v.number() },
+export const checkOtpLimit = internalMutation({
+  args: { email: v.string() },
+  returns: v.null(),
   handler: async (ctx, args) => {
-    const normalizedEmail = args.to.trim().toLowerCase();
-    const limit = await otpLimits.limit(ctx, "emailOtp", { key: normalizedEmail });
+    const limit = await otpLimits.limit(ctx, "emailOtp", { key: args.email });
     if (!limit.ok) throw new Error("Too many sign-in code requests; try again later");
-    const inboxId = process.env.AGENTMAIL_AUTH_INBOX_ID;
-    if (!inboxId) throw new Error("AGENTMAIL_AUTH_INBOX_ID is not configured");
-    await agentmail.sendMessage(ctx, inboxId, {
-      to: normalizedEmail,
-      subject: "Your Saath sign-in code",
-      text: `Your Saath sign-in code is ${args.token}. It expires at ${new Date(args.expiresAt).toISOString()}. If you did not request it, ignore this email.`,
-      labels: ["saath-auth-otp"],
-    });
+    return null;
   },
 });
 

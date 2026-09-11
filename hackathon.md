@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** deepseek/deepseek-v4.1-flash, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-10T16:50:00Z
+- **Last updated:** 2026-09-10T17:14:00Z
 
 ## Log
 
@@ -35,7 +35,7 @@ OpenAI options (`PRODUCT.md`).
 Narrowed MVP authentication to email OTP through Convex Auth, delivered by
 AgentMail, and deferred OAuth and mobile OTP (`PRODUCT.md`).
 
-### 2026-09-10 - working tree
+### 2026-09-10 - 616cd58
 Implemented the responsive family inbox preview, email OTP screens,
 multi-family switching, source-language reveal, extracted facts, and guarded
 reply confirmation, plus browser-recorded family voice notes with explicit
@@ -64,3 +64,10 @@ reject stale worker completion after recovery. The worker uses OpenRouter
 covering manager/participant/outsider policy, retry deduplication, FIFO ordering,
 exact recovery, and stale-lease rejection (`convex/agents.ts`,
 `convex/agentWorker.ts`, `convex/agents.test.ts`, `convex.json`).
+
+### 2026-09-10 - working tree
+Configured the Convex Auth issuer and verified a disposable local Convex
+deployment in the orb. Live checks proved Auth discovery and JWKS, owner access,
+outsider denial, idempotent message writes, and a completed durable DeepSeek
+agent reply. The local deployment remains separate from production
+(`convex/auth.config.ts`).

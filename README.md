@@ -11,7 +11,9 @@ npm install
 npm run dev
 ```
 
-The interface runs in an interactive preview mode when `VITE_CONVEX_URL` is absent. To connect the backend, create or link a Convex development deployment and run:
+The landing screen offers two explicit experiences. **Guided preview** replays seeded sample content without an account or personal data. **Live workspace** uses Convex Auth email OTP and reads and writes only authorized Convex family data. Live mode is disabled when `VITE_CONVEX_URL` is absent; there is no fake OTP or local-data fallback.
+
+To connect the backend, create or link a Convex development deployment and run:
 
 ```sh
 npm run dev:backend
@@ -27,4 +29,4 @@ npm test
 npm run build
 ```
 
-Convex Node actions target Node 22 (see `.nvmrc`). The current implementation includes the responsive family inbox prototype, email OTP flow, multi-family switching, translation/original views, extracted facts, guarded reply interaction, 30-second family voice notes, Convex schema and authorization policies, initial AgentMail ingestion, and a durable room-scoped Pi agent runtime backed by OpenRouter DeepSeek V4.1 Flash.
+Convex Node actions target Node 22 (see `.nvmrc`). The current implementation includes a responsive conversation-first family workspace, email OTP flow, multi-family switching, original-plus-translation cards, decision context, source-backed Saathi responses, 30-second family voice notes, Convex schema and authorization policies, initial AgentMail ingestion, and a durable room-scoped Pi agent runtime backed by OpenRouter DeepSeek V4.1 Flash.

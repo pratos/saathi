@@ -49,3 +49,34 @@ export const switcherData = query({
     return { user, membership, space };
   },
 });
+
+export const configureInbox = mutation({
+  args: { spaceId: v.id("spaces"), inboxId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { spaceId, inboxId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const normalizedInboxId = inboxId.trim();
+    const hasControlCharacter = [...normalizedInboxId].some((character) => character.charCodeAt(0) <= 31);
+    if (normalizedInboxId.length < 3 || normalizedInboxId.length > 200 || hasControlCharacter) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid AgentMail inbox ID" });
+    }
+    const existing = await ctx.db
+      .query("spaces")
+      .withIndex("by_agentmail_inbox", (q) => q.eq("agentmailInboxId", normalizedInboxId))
+      .unique();
+    if (existing && existing._id !== spaceId) {
+      throw new ConvexError({ code: "INBOX_ALREADY_CONNECTED", message: "This inbox belongs to another family space" });
+    }
+
+    await ctx.db.patch(spaceId, { agentmailInboxId: normalizedInboxId });
+    await ctx.db.insert("auditEvents", {
+      spaceId,
+      actorUserId: userId,
+      action: "space.inbox_configured",
+      resourceType: "space",
+      resourceId: String(spaceId),
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});

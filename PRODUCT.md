@@ -2,7 +2,7 @@
 
 > **Product source of truth.** Product direction, scope, and implementation decisions belong in this document. Update it when a decision changes; do not let the application and this specification drift apart.
 
-**Status:** Working specification, updated 10 September 2026  
+**Status:** Working specification, updated 11 September 2026
 **Name:** **Saath** (साथ, “together”); **Saathi** is the AI participant  
 **Audience:** Households and small trusted groups whose members use different languages and have different levels of comfort with technology
 
@@ -30,6 +30,21 @@ A family can forward or receive an important email, discuss it in their preferre
 8. **Families are isolated tenants.** One person may belong to multiple family spaces, but data, permissions, inboxes, usage, and model context never cross a space boundary.
 
 # Core Experience
+
+## Preview and live modes
+
+The entry screen offers two deliberately separate modes:
+
+- **Guided preview** replays seeded fictional family content. It needs no account, never reads production family data, and stays visibly labelled as a preview.
+- **Live workspace** uses real Convex Auth email OTP, memberships, family spaces, inbox items, and conversations. It has no fake-code or seeded-data fallback.
+
+Changing modes is always explicit. A missing backend configuration disables live mode rather than silently substituting demo behavior. An authenticated member may briefly enter the preview and return without ending their session; sign-out remains a separate, clearly labelled action.
+
+## Interface language
+
+The primary product surface is a conversation, not an email administration dashboard. Desktop uses four calm zones: a compact navigation rail, family conversations, the active conversation, and a concise decision/context panel. Mobile removes the side panels and presents one focused conversation with a persistent composer.
+
+The visual system is warm and dignified: deep green-black surfaces, restrained teal for active states, amber for identity, warm off-white text, and borders instead of heavy shadows. Conversation text defaults to at least 15–16px, interactive controls provide a minimum 48px target, and plain status language uses labels such as **Confirmed plan** and **Still to decide**. Translated messages keep the original, translation, and listening control together.
 
 ## Primary jobs
 

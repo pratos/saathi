@@ -23,7 +23,7 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
 
 `.github/workflows/deploy-convex.yml` verifies and deploys the app on every push to `main`, or when manually dispatched. The deploy job targets the GitHub environment named `production`. Create that environment under **Repository Settings → Environments**, enable required reviewers, and add one environment secret:
 
-- `CONVEX_DEPLOY_KEY`: a production deploy key created in the Convex dashboard under **Project Settings → Deploy Keys**.
+- `CONVEX_DEPLOY_KEY`: a production deploy key created in the Convex dashboard under **Project Settings → Deploy Keys**. Grant `deployment:deploy`, `deployment:functions:runInternalQueries`, and `deployment:functions:runInternalMutations`; Static Hosting uses the latter two to discover its component URLs and upload the site.
 
 The workflow runs the Static Hosting deployment command, which builds with the production `VITE_CONVEX_URL`, deploys the Convex backend, and atomically publishes `dist/` to `https://<deployment>.convex.site`.
 

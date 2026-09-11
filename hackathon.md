@@ -3,16 +3,16 @@
 - **Project:** Saath
 - **Event:** Convex All Gas Hackathon
 - **What it does:** A multilingual family operations inbox for shared email, conversations, translations, decisions, and follow-ups.
-- **Live app:** not deployed
+- **Live app:** https://giant-caiman-748.convex.site
 - **Repo:** https://github.com/pratos/saathi
 - **Frontend:** Convex static hosting
-- **Convex deployment:** not deployed
+- **Convex deployment:** https://giant-caiman-748.convex.cloud
 - **Components:** @agentmail/convex, @convex-dev/rate-limiter, @convex-dev/static-hosting, @convex-dev/workflow, @firecrawl/firecrawl-convex
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, durable workflows, scheduled lease recovery
 - **Auth:** Convex Auth
 - **AI models:** deepseek/deepseek-v4.1-flash, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-11T04:52:28Z
+- **Last updated:** 2026-09-11T06:46:50Z
 
 ## Log
 
@@ -72,8 +72,24 @@ outsider denial, idempotent message writes, and a completed durable DeepSeek
 agent reply. The local deployment remains separate from production
 (`convex/auth.config.ts`).
 
-### 2026-09-11 - working tree
+### 2026-09-11 - 87ae4cf
 Added a GitHub Actions release path that lints and tests before the official
 Static Hosting command builds against production, deploys the Convex backend,
 and atomically publishes the frontend (`.github/workflows/deploy-convex.yml`,
 `convex/README.md`).
+
+### 2026-09-11 - production deployment
+Deployed the Convex backend and registered components, then published the Vite
+frontend through Convex Static Hosting. The public site and Convex Auth
+discovery endpoint both returned HTTP 200.
+
+### 2026-09-11 - working tree
+Separated the product into an account-free guided preview with fictional data
+and a live workspace backed only by authenticated Convex family data. Added the
+real email OTP entry flow, first-family onboarding, responsive family switching,
+live inbox and conversation views, and an owner-only AgentMail inbox connection
+with authorization and tenant-isolation tests. Rebuilt desktop and mobile around
+a warm, high-contrast conversation surface with original-plus-translation cards,
+48px actions, source-backed Saathi responses, a decision summary, and voice-note
+capture (`src/App.tsx`, `src/App.css`,
+`src/LiveWorkspace.tsx`, `src/PreviewWorkspace.tsx`, `convex/spaces.ts`).

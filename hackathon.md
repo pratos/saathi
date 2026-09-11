@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** deepseek/deepseek-v4.1-flash, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-10T17:14:00Z
+- **Last updated:** 2026-09-11T04:52:28Z
 
 ## Log
 
@@ -65,9 +65,15 @@ covering manager/participant/outsider policy, retry deduplication, FIFO ordering
 exact recovery, and stale-lease rejection (`convex/agents.ts`,
 `convex/agentWorker.ts`, `convex/agents.test.ts`, `convex.json`).
 
-### 2026-09-10 - working tree
+### 2026-09-11 - 194926f
 Configured the Convex Auth issuer and verified a disposable local Convex
 deployment in the orb. Live checks proved Auth discovery and JWKS, owner access,
 outsider denial, idempotent message writes, and a completed durable DeepSeek
 agent reply. The local deployment remains separate from production
 (`convex/auth.config.ts`).
+
+### 2026-09-11 - working tree
+Added a GitHub Actions release path that lints and tests before the official
+Static Hosting command builds against production, deploys the Convex backend,
+and atomically publishes the frontend (`.github/workflows/deploy-convex.yml`,
+`convex/README.md`).

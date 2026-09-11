@@ -4,7 +4,7 @@ import { convexAuth } from "@convex-dev/auth/server";
 import { components, internal } from "./_generated/api";
 import { env, internalMutation } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 const otpLimits = new RateLimiter(components.rateLimiter, {
   emailOtpV2: { kind: "fixed window", rate: 10, period: HOUR },
@@ -23,7 +23,9 @@ const sendVerificationRequest = (async (
 
   const apiKey = env.AGENTMAIL_API_KEY.trim();
   const inboxId = env.AGENTMAIL_AUTH_INBOX_ID.trim();
-  if (!apiKey || !inboxId) throw new Error("AgentMail OTP delivery is not configured");
+  if (!apiKey || !inboxId) {
+    throw new ConvexError({ kind: "OtpConfigurationMissing" });
+  }
 
   const response = await fetch(
     `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`,
@@ -42,7 +44,8 @@ const sendVerificationRequest = (async (
     },
   );
   if (!response.ok) {
-    throw new Error(`AgentMail rejected OTP delivery with status ${response.status}`);
+    console.error("OTP_DELIVERY_REJECTED", response.status);
+    throw new ConvexError({ kind: "OtpDeliveryRejected", status: response.status });
   }
 }) as unknown as EmailVerificationSender;
 
@@ -51,7 +54,9 @@ export const checkOtpLimit = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const limit = await otpLimits.limit(ctx, "emailOtpV2", { key: args.email });
-    if (!limit.ok) throw new Error("Too many sign-in code requests; try again later");
+    if (!limit.ok) {
+      throw new ConvexError({ kind: "OtpRateLimited", retryAfter: limit.retryAfter });
+    }
     return null;
   },
 });

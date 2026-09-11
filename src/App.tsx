@@ -123,8 +123,8 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
     try {
       await signIn('saath-email', { email: email.trim().toLowerCase() })
       setStep('code')
-    } catch {
-      setError('We could not send a code. Check the address and try again.')
+    } catch (requestError) {
+      setError(otpRequestErrorMessage(requestError))
     } finally {
       setBusy(false)
     }
@@ -196,4 +196,21 @@ function BackendUnavailable({ onBack }: { onBack: () => void }) {
 
 function FullPageStatus({ message }: { message: string }) {
   return <main className="centered-status"><div className="status-spinner" /><p>{message}</p></main>
+}
+
+function otpRequestErrorMessage(error: unknown) {
+  const data = typeof error === 'object' && error !== null && 'data' in error
+    ? (error as { data?: unknown }).data
+    : null
+  if (typeof data !== 'object' || data === null || !('kind' in data)) {
+    return 'We could not send a code. Please try again in a moment.'
+  }
+  const kind = (data as { kind?: unknown }).kind
+  if (kind === 'OtpRateLimited') return 'Too many code requests. Please wait before trying again.'
+  if (kind === 'OtpConfigurationMissing') return 'Email sign-in is not configured yet.'
+  if (kind === 'OtpDeliveryRejected') {
+    const status = (data as { status?: unknown }).status
+    return `AgentMail rejected the sign-in email${typeof status === 'number' ? ` (status ${status})` : ''}.`
+  }
+  return 'We could not send a code. Please try again in a moment.'
 }

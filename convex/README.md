@@ -7,7 +7,7 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
 1. Link a Convex deployment and run `npx convex dev` to generate `convex/_generated` and deploy the schema/components.
 2. Generate Auth keys with `npx @convex-dev/auth` (sets `JWT_PRIVATE_KEY` and `JWKS`) and set `SITE_URL` to the trusted frontend origin.
 3. Set server-side deployment environment variables:
-   - `AGENTMAIL_API_KEY`
+   - `AGENTMAIL_API_KEY` — an organization-level key with `inbox_create`, `inbox_read`, `message_send`, and `message_read`; an inbox-scoped key can deliver OTP from one inbox but cannot create family inboxes
    - `AGENTMAIL_WEBHOOK_SECRET`
    - `AGENTMAIL_AUTH_INBOX_ID`
    - `FIRECRAWL_API_KEY`

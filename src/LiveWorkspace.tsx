@@ -390,8 +390,15 @@ function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
     setError('')
     try {
       await createInbox({ spaceId })
-    } catch {
-      setError('We could not create the inbox. Check AgentMail setup and try again.')
+    } catch (caught) {
+      const code = convexErrorCode(caught)
+      setError(code === 'AGENTMAIL_PERMISSION'
+        ? 'The AgentMail key needs organization-level inbox creation access.'
+        : code === 'AGENTMAIL_AUTH'
+          ? 'AgentMail rejected the configured API key.'
+          : code === 'AGENTMAIL_RATE_LIMIT'
+            ? 'AgentMail is busy. Please wait a moment and try again.'
+            : 'We could not create the inbox. Check AgentMail setup and try again.')
       setBusy(false)
     }
   }
@@ -439,4 +446,10 @@ function attachmentMediaType(file: File) {
     png: 'image/png', ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     txt: 'text/plain', webp: 'image/webp', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   } as Record<string, string>)[extension ?? ''] ?? ''
+}
+
+function convexErrorCode(error: unknown) {
+  if (!error || typeof error !== 'object' || !('data' in error)) return ''
+  const data = (error as { data?: unknown }).data
+  return data && typeof data === 'object' && 'code' in data && typeof data.code === 'string' ? data.code : ''
 }

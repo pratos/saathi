@@ -94,9 +94,12 @@ export default defineSchema({
   invitations: defineTable({
     spaceId: v.id("spaces"), tokenHash: v.string(), targetEmail: v.string(),
     role: v.union(v.literal("owner"), v.literal("member")), createdBy: v.id("users"),
-    idempotencyKey: v.string(), createdAt: v.number(), expiresAt: v.number(),
+    // Optional on the schema boundary so pre-feature invitation rows do not
+    // require a privileged production data scan during deployment.
+    idempotencyKey: v.optional(v.string()), createdAt: v.optional(v.number()), expiresAt: v.number(),
     acceptedByUserId: v.optional(v.id("users")), acceptedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
-  }).index("by_token_hash", ["tokenHash"]).index("by_space_created", ["spaceId", "createdAt"])
+  }).index("by_token_hash", ["tokenHash"]).index("by_space", ["spaceId"])
+    .index("by_space_created", ["spaceId", "createdAt"])
     .index("by_creator_idempotency", ["createdBy", "idempotencyKey"]),
   agentRuns: defineTable({
     spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")), requestedBy: v.id("users"),

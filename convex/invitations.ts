@@ -27,8 +27,8 @@ export const list = query({
     await requireSpacePermission(ctx, spaceId, "manage_members");
     const rows = await ctx.db.query("invitations").withIndex("by_space_created", q => q.eq("spaceId", spaceId)).order("desc").take(30);
     const now = Date.now();
-    return rows.map(({ _id, targetEmail, role, createdAt, expiresAt, acceptedAt, revokedAt }) => ({
-      _id, targetEmail, role, createdAt, expiresAt, acceptedAt, revokedAt, expired: expiresAt <= now,
+    return rows.map(({ _id, _creationTime, targetEmail, role, createdAt, expiresAt, acceptedAt, revokedAt }) => ({
+      _id, targetEmail, role, createdAt: createdAt ?? _creationTime, expiresAt, acceptedAt, revokedAt, expired: expiresAt <= now,
     }));
   },
 });

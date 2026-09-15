@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   ArrowLeft,
+  AudioLines,
   AtSign,
   Bell,
   Bot,
@@ -30,7 +31,7 @@ import {
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
 import type { Doc, Id } from '../convex/_generated/dataModel'
-import { useLiveVoice } from './useLiveVoice'
+import { useLiveVoice, type VoiceStatus, type VoiceTurn } from './useLiveVoice'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
@@ -43,7 +44,7 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
   const acceptInvitation = useMutation(api.invitations.accept)
   const spaces = useQuery(api.spaces.mine)
-  const [selectedSpaceId, setSelectedSpaceId] = useState<Id<'spaces'> | null>(null)
+  const [selectedSpaceId, setSelectedSpaceId] = useState<Id<'spaces'> | null>(() => gmailSpaceFromUrl())
   const [invitationState, setInvitationState] = useState<'idle' | 'accepting' | 'error'>(() => invitationToken() ? 'accepting' : 'idle')
   const [invitationError, setInvitationError] = useState('')
 
@@ -129,10 +130,58 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const { signOut } = useAuthActions()
   const user = useQuery(api.users.current)
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
+  const ensurePersonalRoom = useMutation(api.rooms.ensurePersonal)
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
+  const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
+  const beginGmailConnection = useAction(api.gmail.beginConnection)
+  const confirmGmailConnection = useAction(api.gmail.confirmConnection)
   const [membersOpen, setMembersOpen] = useState(false)
+  const [selectedRoomId, setSelectedRoomId] = useState<Id<'rooms'> | null>(null)
+  const [gmailBusy, setGmailBusy] = useState(false)
+  const [gmailMessage, setGmailMessage] = useState('')
+  const gmailCallbackHandled = useRef(false)
   const sharedRoom = rooms?.find(({ room }) => room?.type === 'shared')?.room ?? rooms?.find(({ room }) => room)?.room ?? null
+  const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
+  const selectedRoom = rooms?.flatMap(({ room }) => room ? [room] : []).find(room => room._id === selectedRoomId) ?? sharedRoom
   const initials = initialsFor(user?.displayName ?? user?.name ?? user?.email ?? 'Family member')
+
+  useEffect(() => {
+    if (rooms === undefined || personalRoom) return
+    void ensurePersonalRoom({ spaceId: family.space._id }).catch(() => undefined)
+  }, [ensurePersonalRoom, family.space._id, personalRoom, rooms])
+
+  useEffect(() => {
+    const callback = gmailCallbackFromUrl()
+    if (!callback || callback.spaceId !== family.space._id || gmailCallbackHandled.current) return
+    gmailCallbackHandled.current = true
+    if (callback.status !== 'success' || !callback.connectedAccountId) {
+      // oxlint-disable-next-line react/set-state-in-effect -- The OAuth return URL is the external state being synchronized.
+      setGmailMessage('Gmail was not connected. You can try again.')
+      clearGmailCallback()
+      return
+    }
+    // oxlint-disable-next-line react/set-state-in-effect -- The OAuth return URL is the external state being synchronized.
+    setGmailBusy(true)
+    setGmailMessage('Finishing Gmail setup…')
+    void confirmGmailConnection({ spaceId: family.space._id, connectedAccountId: callback.connectedAccountId })
+      .then(() => setGmailMessage('Gmail connected. Saathi is privately reviewing the last 30 days.'))
+      .catch(() => setGmailMessage('Gmail connected at Google, but Saath could not finish setup. Please try again.'))
+      .finally(() => { setGmailBusy(false); clearGmailCallback() })
+  }, [confirmGmailConnection, family.space._id])
+
+  const connectGmail = async () => {
+    setGmailBusy(true)
+    setGmailMessage('Opening Google sign-in…')
+    try {
+      const { redirectUrl } = await beginGmailConnection({ spaceId: family.space._id })
+      window.location.assign(redirectUrl)
+    } catch (caught) {
+      setGmailBusy(false)
+      setGmailMessage(convexErrorCode(caught) === 'COMPOSIO_NOT_CONFIGURED'
+        ? 'Gmail connections need a Composio API key on this deployment.'
+        : 'Could not start Gmail connection. Please try again.')
+    }
+  }
 
   useEffect(() => {
     if (!membersOpen) return
@@ -156,9 +205,13 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <select id="family-switcher" className="dark-family-select" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>
           {families.map(({ space }) => <option key={space._id} value={space._id}>{space.name}</option>)}
         </select>
-        <span className="list-heading">Family chats</span>
-        {(rooms ?? []).flatMap(({ room }) => room ? [room] : []).map((room) => (
-          <button className={`conversation-link ${room._id === sharedRoom?._id ? 'selected' : ''}`} key={room._id}><i /><span>{room.title}</span></button>
+        <span className="list-heading">Personal</span>
+        {personalRoom
+          ? <button className={`conversation-link personal-chat-link ${personalRoom._id === selectedRoom?._id ? 'selected' : ''}`} onClick={() => setSelectedRoomId(personalRoom._id)}><Bot /><span>My Saathi</span><small>Only you</small></button>
+          : <p className="dark-empty-copy">Preparing your private chat…</p>}
+        <span className="list-heading section-gap">Family chats</span>
+        {(rooms ?? []).flatMap(({ room }) => room && room.type !== 'private' ? [room] : []).map((room) => (
+          <button className={`conversation-link ${room._id === selectedRoom?._id ? 'selected' : ''}`} key={room._id} onClick={() => setSelectedRoomId(room._id)}><i /><span>{room.title}</span></button>
         ))}
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
         <span className="list-heading section-gap">Updates</span>
@@ -168,8 +221,8 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
-      {sharedRoom ? (
-        <LiveRoom key={sharedRoom._id} room={sharedRoom} family={family} families={families} onSelectFamily={onSelectFamily} onExit={onExit} onInvite={family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
+      {selectedRoom ? (
+        <LiveRoom key={selectedRoom._id} room={selectedRoom} rooms={(rooms ?? []).flatMap(({ room }) => room ? [room] : [])} family={family} families={families} onSelectRoom={setSelectedRoomId} onSelectFamily={onSelectFamily} onExit={onExit} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
       )}
@@ -182,6 +235,11 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           : family.membership.role === 'owner'
             ? <ConnectInbox spaceId={family.space._id} />
             : <p>Ask a family owner to connect AgentMail.</p>}</section>
+        <section className="gmail-connections"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi. Other family members cannot see your connected accounts.</p>
+          {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><Check /></div>)}
+          <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
+          {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
+        </section>
         {family.membership.role === 'owner' && <section><span>Family members</span><InviteMember spaceId={family.space._id} /></section>}
         <section><span>Recent updates</span>{(inboxItems ?? []).slice(0, 3).map((item) => <div className="context-inbox-item" key={item._id}><strong>{item.subject}</strong><small>{displaySender(item.sender)} · {categoryLabel(item.category)}</small></div>)}{inboxItems?.length === 0 && <p>No family mail yet.</p>}</section>
       </aside>
@@ -190,10 +248,12 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   )
 }
 
-function LiveRoom({ room, family, families, onSelectFamily, onExit, onInvite }: {
+function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily, onExit, onInvite }: {
   room: Doc<'rooms'>
+  rooms: Doc<'rooms'>[]
   family: FamilyRow
   families: FamilyRow[]
+  onSelectRoom: (roomId: Id<'rooms'>) => void
   onSelectFamily: (spaceId: Id<'spaces'>) => void
   onExit: () => void
   onInvite?: () => void
@@ -346,13 +406,16 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit, onInvite }: 
       {dragActive && <div className="file-drop-overlay" role="status"><Upload /><strong>Drop files to share</strong><span>Photos and documents up to 20 MB</span></div>}
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onExit} aria-label="Back"><ArrowLeft /></button>
-        <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · private family conversation</p></div>
-        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span><span>F</span><span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div></div>
-        <select className="mobile-family-switcher" aria-label="Current family" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>{families.map(({ space }) => <option value={space._id} key={space._id}>{space.name}</option>)}</select>
+        <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{room.type === 'private' ? 'Only you and Saathi can see this conversation' : `${family.space.name} · private family conversation`}</p></div>
+        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div></div>
+        <div className="mobile-chat-switchers">
+          <select aria-label="Current conversation" value={room._id} onChange={(event) => onSelectRoom(event.target.value as Id<'rooms'>)}>{rooms.map(item => <option value={item._id} key={item._id}>{item.type === 'private' ? 'My Saathi · private' : item.title}</option>)}</select>
+          <select aria-label="Current family" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>{families.map(({ space }) => <option value={space._id} key={space._id}>{space.name}</option>)}</select>
+        </div>
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
-        {messages && generatedImages && attachments && timeline.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>Start with what your family needs to decide</h2><p>Write to your family, share a file, or mention <strong>@saathi</strong> when you want help.</p></div>}
+        {messages && generatedImages && attachments && timeline.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>{room.type === 'private' ? 'Your private space with Saathi' : 'Start with what your family needs to decide'}</h2><p>{room.type === 'private' ? 'Talk, type, or share a file. This room is not visible to other family members.' : <>Write to your family, share a file, or mention <strong>@saathi</strong> when you want help.</>}</p></div>}
         {timeline.map((entry) => entry.kind === 'image'
           ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
               <span className="message-avatar assistant"><Bot /></span>
@@ -368,16 +431,15 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit, onInvite }: 
           : entry.item.actorType === 'voice_transcript'
             ? entry.item.voiceSpeaker === 'user'
               ? <article className="outgoing-message saved-voice-transcript" key={`message-${entry.item._id}`}><span>You · voice transcript · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
-              : <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
+              : entry.item.voiceSpeaker === 'assistant'
+                ? <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
+                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p></div></article>
             : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>You · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
                 <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}</div></div>
               </article>)}
-        {voice.turns.map((turn, index) => turn.role === 'user'
-          ? <article className="outgoing-message live-voice-transcript" key={`live-user-${turn.startMs}-${index}`}><span>You · speaking now</span><p>{turn.text}<i className="transcript-cursor" /></p></article>
-          : <article className="person-message assistant-message live-voice-transcript" key={`live-assistant-${turn.startMs}-${index}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· speaking now</small></h3><div className="assistant-card"><p>{turn.text}<i className="transcript-cursor" /></p></div></div></article>)}
         {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
           <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
         )}
@@ -407,11 +469,9 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit, onInvite }: 
         <div className="composer-guidance">
           <div className="composer-guidance-actions">
             <button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button>
-            {voice.status === 'idle' || voice.status === 'ended' || voice.status === 'error'
-              ? <button type="button" className="voice-start" onClick={() => void voice.start()}><Mic /> Talk to Saathi</button>
-              : <><button type="button" className={voice.status === 'muted' ? 'voice-muted' : ''} onClick={voice.toggleMute} disabled={voice.status === 'requesting' || voice.status === 'connecting' || voice.status === 'ending'}>{voice.status === 'muted' ? <MicOff /> : <Mic />} {voice.status === 'requesting' ? 'Allow microphone…' : voice.status === 'connecting' ? 'Connecting…' : voice.status === 'muted' ? 'Unmute' : 'Mute'}</button><button type="button" className="voice-end" onClick={voice.end} disabled={voice.status === 'ending'}><PhoneOff /> {voice.status === 'ending' ? 'Ending…' : 'End'}</button></>}
+            <button type="button" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</button>
           </div>
-          <span>{voice.status === 'live' ? 'Voice is live · transcript appears here' : 'Enter to send · Drop photos or documents here'}</span>
+          <span>Enter to send · Drop photos or documents here</span>
         </div>
         <form onSubmit={submit}>
           <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files)} />
@@ -423,8 +483,74 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit, onInvite }: 
         {error && <p className="dark-form-error" role="alert">{error}</p>}
         {voice.error && <p className="dark-form-error" role="alert">{voice.error}</p>}
       </footer>
+      {isVoiceCallOpen(voice.status) && <VoiceCallOverlay status={voice.status} turns={voice.turns} voiceLevel={voice.voiceLevel} onMute={voice.toggleMute} onEnd={voice.end} />}
     </section>
   )
+}
+
+function VoiceCallOverlay({ status, turns, voiceLevel, onMute, onEnd }: {
+  status: VoiceStatus
+  turns: VoiceTurn[]
+  voiceLevel: number
+  onMute: () => void
+  onEnd: () => void
+}) {
+  const transcriptEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  }, [turns])
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
+
+  const statusText = status === 'requesting'
+    ? 'Waiting for microphone access…'
+    : status === 'connecting'
+      ? 'Connecting securely…'
+      : status === 'ending'
+        ? 'Finishing your call…'
+        : status === 'muted'
+          ? 'Microphone muted'
+          : turns.at(-1)?.role === 'assistant' ? 'Saathi is speaking' : 'Listening'
+  const orbStyle = { '--voice-level': voiceLevel.toFixed(3) } as CSSProperties
+
+  return <div className="voice-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="voice-call-title">
+    <section className="voice-call-sheet">
+      <header className="voice-call-header">
+        <div><span>LIVE VOICE</span><h2 id="voice-call-title">Talking with Saathi</h2></div>
+        <span className={`voice-call-status ${status === 'muted' ? 'is-muted' : ''}`}><i />{statusText}</span>
+      </header>
+      <div className="voice-orb-stage" aria-hidden="true" style={orbStyle}>
+        <div className="voice-orb-glow" />
+        <div className="voice-orb"><i /><i /><i /></div>
+      </div>
+      <div className="voice-live-transcript" aria-live="polite" aria-label="Live call transcript">
+        {turns.length === 0
+          ? <div className="voice-transcript-placeholder"><AudioLines /><p>{status === 'live' || status === 'muted' ? 'Start speaking. Your words will appear here.' : 'Your live transcript will appear here.'}</p></div>
+          : turns.map((turn, index) => <div className={`voice-caption ${turn.role}`} key={`${turn.role}-${turn.startMs}-${index}`}>
+              <strong>{turn.role === 'user' ? 'You' : 'Saathi'}</strong>
+              <p>{turn.text}{index === turns.length - 1 && <i className="transcript-cursor" />}</p>
+            </div>)}
+        <div ref={transcriptEndRef} />
+      </div>
+      <footer className="voice-call-controls">
+        <button type="button" className={status === 'muted' ? 'is-muted' : ''} onClick={onMute} disabled={!['live', 'muted'].includes(status)} aria-label={status === 'muted' ? 'Unmute microphone' : 'Mute microphone'}>
+          {status === 'muted' ? <MicOff /> : <Mic />}<span>{status === 'muted' ? 'Unmute' : 'Mute'}</span>
+        </button>
+        <button type="button" className="end-call-control" onClick={onEnd} disabled={status === 'ending'} aria-label="End voice call">
+          <PhoneOff /><span>{status === 'ending' ? 'Ending…' : 'End call'}</span>
+        </button>
+      </footer>
+    </section>
+  </div>
+}
+
+function isVoiceCallOpen(status: VoiceStatus) {
+  return status === 'requesting' || status === 'connecting' || status === 'live' || status === 'muted' || status === 'ending'
 }
 
 function AssistantText({ text }: { text: string }) {
@@ -512,6 +638,31 @@ function displaySender(value: string) {
 
 function categoryLabel(category: Doc<'inboxItems'>['category']) {
   return category === 'needs_review' ? 'Needs review' : category.charAt(0).toUpperCase() + category.slice(1)
+}
+
+function gmailSpaceFromUrl() {
+  const value = new URLSearchParams(window.location.search).get('gmailSpace')
+  return value ? value as Id<'spaces'> : null
+}
+
+function gmailCallbackFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const spaceId = params.get('gmailSpace')
+  if (!spaceId || !params.has('status')) return null
+  return {
+    spaceId: spaceId as Id<'spaces'>,
+    status: params.get('status'),
+    connectedAccountId: params.get('connected_account_id') ?? params.get('connectedAccountId'),
+  }
+}
+
+function clearGmailCallback() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('gmailSpace')
+  url.searchParams.delete('status')
+  url.searchParams.delete('connected_account_id')
+  url.searchParams.delete('connectedAccountId')
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
 }
 
 function formatRelativeTime(timestamp: number) {

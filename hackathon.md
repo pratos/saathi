@@ -131,3 +131,19 @@ credential path used by working OTP delivery instead of relying on isolated
 component environment state (`convex/invitations.ts`, `convex/liveVoice.ts`,
 `convex/agentmailInboxes.ts`, `src/LiveWorkspace.tsx`). This update is locally
 verified but not yet live-provider verified or deployed.
+
+### 2026-09-15 - Saathi private workspace and integrations
+Redesigned GPT-Live as a full-screen, bottom-up call experience with an organic
+orb driven by real microphone and remote-audio amplitude, auto-scrolling live
+captions, mute/end controls, and one authenticated, idempotent post-call summary
+instead of raw turns in the room. Added one automatic **My Saathi** room per
+family member with explicit room membership that family ownership cannot bypass;
+the existing chat, file, voice-note, and live-call paths all enforce that same
+boundary. Added multiple private Gmail accounts per member using current Composio
+Sessions and managed OAuth, 30-day inbox backfill, signed
+`GMAIL_NEW_GMAIL_MESSAGE` handling, and fail-closed usefulness classification.
+Only useful household mail reaches the member's private inbox/chat; rejected
+mail retains only an idempotency marker. Deterministic tests cover room and inbox
+isolation, summary ownership/idempotency, Gmail retention, and Standard Webhooks
+verification. Live Composio OAuth and webhook delivery still require the optional
+production Convex variables and deliberate external webhook registration.

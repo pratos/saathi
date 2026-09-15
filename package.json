@@ -16,6 +16,7 @@
   "dependencies": {
     "@agentmail/convex": "^0.1.0",
     "@auth/core": "^0.41.3",
+    "@composio/core": "^0.18.1",
     "@convex-dev/auth": "^0.0.95",
     "@convex-dev/rate-limiter": "^0.3.2",
     "@convex-dev/static-hosting": "^0.2.1",

@@ -19,7 +19,7 @@ To connect the backend, create or link a Convex development deployment and run:
 npm run dev:backend
 ```
 
-Follow [convex/README.md](./convex/README.md) for the server-side variable checklist and to configure email OTP, AgentMail, Firecrawl, and static hosting. Provider secrets belong in Convex deployment environment variables, not browser-visible Vite variables.
+Follow [convex/README.md](./convex/README.md) for the server-side variable checklist and to configure email OTP, AgentMail, Firecrawl, optional Composio Gmail ingestion, and static hosting. Provider secrets belong in Convex deployment environment variables, not browser-visible Vite variables.
 
 Run static checks with:
 
@@ -29,4 +29,4 @@ npm test
 npm run build
 ```
 
-Convex Node actions target Node 22 (see `.nvmrc`). The current implementation includes a responsive conversation-first family workspace, email OTP flow, email-bound family invitations, multi-family switching, original-plus-translation cards, decision context, Firecrawl and OpenRouter web-grounded responses, GPT-Live WebRTC conversations with live captions, explicitly requested Muse Image generation stored in Convex, 30-second family voice notes, Convex schema and authorization policies, initial AgentMail ingestion, and a durable room-scoped Pi agent runtime backed by OpenRouter DeepSeek V4.1 Flash.
+Convex Node actions target Node 22 (see `.nvmrc`). The current implementation includes a responsive conversation-first family workspace, email OTP flow, email-bound family invitations, multi-family switching, explicitly member-only **My Saathi** rooms, original-plus-translation cards, decision context, Firecrawl and OpenRouter web-grounded responses, full-screen GPT-Live WebRTC conversations with audio-reactive visuals and a single saved post-call summary, multiple private Gmail connections per member through Composio Sessions, explicitly requested Muse Image generation stored in Convex, 30-second family voice notes, Convex schema and authorization policies, initial AgentMail ingestion, and a durable room-scoped Pi agent runtime backed by OpenRouter DeepSeek V4.1 Flash.

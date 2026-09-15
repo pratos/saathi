@@ -55,10 +55,14 @@ export const post = mutation({
         "Introduce yourself briefly and ask how you can help this family.";
       const prompt = explicitlyMentioned
         ? `You were explicitly mentioned. Respond helpfully to: ${messageForSaathi}`
-        : `Ambiently assess this family message. Respond only if your input is useful; otherwise output exactly [NO_REPLY]. Message: ${messageForSaathi}`;
+        : room.assistantMode === "automatic"
+          ? `Respond helpfully to this message in the private automatic-assistant conversation: ${messageForSaathi}`
+          : `Ambiently assess this family message. Respond only if your input is useful; otherwise output exactly [NO_REPLY]. Message: ${messageForSaathi}`;
       await ctx.db.insert("agentJobs", {
         agentId: agent._id, requestedBy: userId, prompt, clientOperationId: args.clientOperationId,
-        status: "queued", attempt: 0, trigger: explicitlyMentioned ? "mention" : "ambient", createdAt: Date.now(),
+        status: "queued", attempt: 0,
+        trigger: explicitlyMentioned ? "mention" : room.assistantMode === "automatic" ? "automatic" : "ambient",
+        createdAt: Date.now(),
       });
       if (agent.status === "idle") {
         await ctx.db.patch(agent._id, { status: "running", lastError: undefined, updatedAt: Date.now() });

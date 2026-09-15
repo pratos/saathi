@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAction, useMutation } from 'convex/react'
+import { useAction } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 
-type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
+export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
 export type VoiceTurn = { role: 'user' | 'assistant'; text: string; startMs: number }
 
 export function useLiveVoice(roomId: Id<'rooms'>) {
   const createSession = useAction(api.liveVoice.startSession)
-  const saveTranscript = useMutation(api.liveVoice.saveTranscript)
+  const finishSession = useAction(api.liveVoice.finishSession)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
+  const [voiceLevel, setVoiceLevel] = useState(0)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<RTCDataChannel | null>(null)
   const microphoneRef = useRef<MediaStream | null>(null)
@@ -21,6 +22,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const fragmentsRef = useRef<VoiceFragment[]>([])
   const persistedSessionRef = useRef('')
   const closeTimerRef = useRef<number | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
   const generationRef = useRef(0)
 
   const cleanup = useCallback(() => {
@@ -34,6 +38,12 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     peerRef.current = null
     if (audioRef.current) audioRef.current.srcObject = null
     audioRef.current = null
+    if (animationFrameRef.current !== null) window.cancelAnimationFrame(animationFrameRef.current)
+    animationFrameRef.current = null
+    void audioContextRef.current?.close()
+    audioContextRef.current = null
+    analyserRef.current = null
+    setVoiceLevel(0)
   }, [])
 
   const persistKnownTranscript = useCallback(async () => {
@@ -41,16 +51,24 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     if (!sessionId || persistedSessionRef.current === sessionId) return
     persistedSessionRef.current = sessionId
     const turns = groupVoiceFragments(fragmentsRef.current)
-    if (!turns.length) return
     try {
-      await saveTranscript({ roomId, sessionId, turns })
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await finishSession({ roomId, sessionId, turns })
+          break
+        } catch (caught) {
+          if (attempt === 1) throw caught
+          await new Promise(resolve => window.setTimeout(resolve, 750))
+        }
+      }
       setFragments([])
       fragmentsRef.current = []
     } catch {
-      setError('The conversation ended, but its transcript could not be saved.')
+      persistedSessionRef.current = ''
+      setError('The conversation ended, but its summary could not be saved.')
       setStatus('error')
     }
-  }, [roomId, saveTranscript])
+  }, [finishSession, roomId])
 
   useEffect(() => () => {
     generationRef.current += 1
@@ -75,13 +93,43 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       audio.autoplay = true
       audioRef.current = audio
       peer.addEventListener('track', event => {
-        audio.srcObject = event.streams[0] ?? new MediaStream([event.track])
+        const remoteStream = event.streams[0] ?? new MediaStream([event.track])
+        audio.srcObject = remoteStream
+        const analyser = analyserRef.current
+        const audioContext = audioContextRef.current
+        if (analyser && audioContext) audioContext.createMediaStreamSource(remoteStream).connect(analyser)
         void audio.play().catch(() => setError('Select the page to allow Saathi’s voice to play.'))
       })
       const microphone = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (generation !== generationRef.current) return microphone.getTracks().forEach(track => track.stop())
       microphoneRef.current = microphone
       microphone.getAudioTracks().forEach(track => peer.addTrack(track, microphone))
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      const silentOutput = audioContext.createGain()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.72
+      silentOutput.gain.value = 0
+      analyser.connect(silentOutput).connect(audioContext.destination)
+      audioContext.createMediaStreamSource(microphone).connect(analyser)
+      audioContextRef.current = audioContext
+      analyserRef.current = analyser
+      const samples = new Uint8Array(analyser.fftSize)
+      let lastLevelUpdate = 0
+      const measureLevel = (now: number) => {
+        analyser.getByteTimeDomainData(samples)
+        let sum = 0
+        for (const sample of samples) {
+          const amplitude = (sample - 128) / 128
+          sum += amplitude * amplitude
+        }
+        if (now - lastLevelUpdate > 50) {
+          setVoiceLevel(Math.min(1, Math.sqrt(sum / samples.length) * 5.5))
+          lastLevelUpdate = now
+        }
+        animationFrameRef.current = window.requestAnimationFrame(measureLevel)
+      }
+      animationFrameRef.current = window.requestAnimationFrame(measureLevel)
 
       const channel = peer.createDataChannel('oai-events')
       channelRef.current = channel
@@ -171,6 +219,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     status,
     error,
     turns: useMemo(() => groupVoiceFragments(fragments), [fragments]),
+    voiceLevel,
     start,
     end,
     toggleMute,

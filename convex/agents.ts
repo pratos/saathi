@@ -26,7 +26,7 @@ const jobDoc = v.object({
   prompt: v.string(), clientOperationId: v.string(), status: jobStatus, attempt: v.number(),
   leaseId: v.optional(v.string()), createdAt: v.number(), startedAt: v.optional(v.number()),
   completedAt: v.optional(v.number()), error: v.optional(v.string()), responseText: v.optional(v.string()),
-  trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"))),
+  trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"), v.literal("automatic"))),
   activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"))),
 });
 const workItem = v.object({

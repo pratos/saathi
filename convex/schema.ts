@@ -33,6 +33,7 @@ export default defineSchema({
     spaceId: v.id("spaces"),
     type: v.union(v.literal("private"), v.literal("shared"), v.literal("case")),
     title: v.string(), assistantMode: v.union(v.literal("automatic"), v.literal("mention"), v.literal("off")),
+    personalOwnerId: v.optional(v.id("users")),
     createdBy: v.id("users"), createdAt: v.number(), archivedAt: v.optional(v.number()),
   }).index("by_space", ["spaceId"]),
   roomMembers: defineTable({
@@ -65,6 +66,16 @@ export default defineSchema({
     sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
     createdAt: v.number(), finishedAt: v.optional(v.number()),
   }).index("by_session_id", ["sessionId"]).index("by_room_created", ["roomId", "createdAt"]),
+  gmailConnections: defineTable({
+    spaceId: v.id("spaces"), userId: v.id("users"), connectedAccountId: v.string(),
+    alias: v.string(), email: v.optional(v.string()), triggerId: v.string(),
+    status: v.union(v.literal("active"), v.literal("error")),
+    createdAt: v.number(), lastSyncedAt: v.optional(v.number()),
+  }).index("by_space_user", ["spaceId", "userId"])
+    .index("by_connected_account", ["connectedAccountId"]),
+  gmailProcessedMessages: defineTable({
+    connectionId: v.id("gmailConnections"), externalMessageId: v.string(), useful: v.boolean(), processedAt: v.number(),
+  }).index("by_connection_message", ["connectionId", "externalMessageId"]),
   voiceNotes: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
     authorUserId: v.id("users"), storageId: v.id("_storage"), mediaType: v.string(),
@@ -120,7 +131,7 @@ export default defineSchema({
     status: v.union(v.literal("queued"), v.literal("running"), v.literal("complete"), v.literal("failed")),
     attempt: v.number(), leaseId: v.optional(v.string()), createdAt: v.number(),
     startedAt: v.optional(v.number()), completedAt: v.optional(v.number()), error: v.optional(v.string()),
-    responseText: v.optional(v.string()), trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"))),
+    responseText: v.optional(v.string()), trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"), v.literal("automatic"))),
     activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"))),
   }).index("by_agent_status_created", ["agentId", "status", "createdAt"])
     .index("by_agent_created", ["agentId", "createdAt"])

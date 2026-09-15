@@ -17,6 +17,8 @@ const app = defineApp({
     OPENAI_API_KEY: v.optional(v.string()),
     OPENROUTER_API_KEY: v.string(),
     SARVAM_API_KEY: v.string(),
+    COMPOSIO_API_KEY: v.optional(v.string()),
+    COMPOSIO_WEBHOOK_SECRET: v.optional(v.string()),
   },
 });
 

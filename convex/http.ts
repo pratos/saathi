@@ -4,6 +4,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { components, internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import { handle as composioWebhook } from "./composioWebhook";
 
 const http = httpRouter();
 const agentmail = new AgentMail(components.agentmail, {
@@ -20,6 +21,7 @@ http.route({
     agentmail.handleWebhook(ctx as unknown as Parameters<typeof agentmail.handleWebhook>[0], request),
   ),
 });
+http.route({ path: "/composio/webhook", method: "POST", handler: composioWebhook });
 registerStaticRoutes(http, components.staticHosting);
 
 export default http;

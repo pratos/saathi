@@ -15,6 +15,8 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
    - `OPENAI_API_KEY` (required for GPT-Live voice conversations and inbox extraction)
    - `OPENROUTER_API_KEY` (durable Saathi agents using DeepSeek V4.1 Flash)
    - `SARVAM_API_KEY` (Saaras voice-note transcription)
+   - `COMPOSIO_API_KEY` (optional; enables member-managed Gmail OAuth and ingestion)
+   - `COMPOSIO_WEBHOOK_SECRET` (optional until Gmail is enabled; verifies Composio Standard Webhooks)
 4. Register `https://<deployment>.convex.site/agentmail/webhook` in AgentMail. Firecrawl's component webhook is mounted at `/firecrawl/webhook`.
 5. Upload the Vite build with `npx @convex-dev/static-hosting upload --build` (add `--prod` for production).
 
@@ -37,6 +39,7 @@ Provider credentials do not belong in GitHub Actions. Configure these directly o
 - `OPENROUTER_API_KEY` for the default family model.
 - `OPENAI_API_KEY` for inbox extraction and optional OpenAI model profiles.
 - `SARVAM_API_KEY` for voice-note transcription.
+- `COMPOSIO_API_KEY` and `COMPOSIO_WEBHOOK_SECRET` to enable private Gmail connections.
 - `OPENAI_MODEL_LUNA`, `OPENAI_MODEL_TERRA`, `OPENAI_MODEL_SOL`, and `OPENAI_MODEL_ASTRA` when those optional profiles are enabled.
 
 `CONVEX_SITE_URL` and `CONVEX_CLOUD_URL` are supplied automatically by Convex and must not be set manually.
@@ -45,7 +48,11 @@ Call `users.ensureCurrent` once after authentication, then scope every family re
 
 Voice notes use `voiceNotes.generateUploadUrl` followed by a direct browser upload and `voiceNotes.submit`. Submission accepts recordings up to 30 seconds and 5 MB, validates the stored MIME type, re-checks room posting permission, and schedules a server-side Sarvam transcription. Clients read the audio URL and live transcript status through `voiceNotes.getByMessage`.
 
-Live conversations use browser WebRTC with `gpt-live-1`. The authenticated `liveVoice.startSession` action exchanges the browser SDP offer while keeping `OPENAI_API_KEY` server-side; hosted web search is available through Responses delegation. Transcript deltas appear in the room while people speak and are saved idempotently when the session closes. The browser never receives the permanent OpenAI key.
+Live conversations use browser WebRTC with `gpt-live-1`. The authenticated `liveVoice.startSession` action exchanges the browser SDP offer while keeping `OPENAI_API_KEY` server-side; hosted web search is available through Responses delegation. Transcript deltas remain in the full-screen call UI while people speak. Session ownership is rechecked at close, and exactly one concise summary is inserted idempotently without invoking the text agent; existing transcript rows remain readable. The browser never receives the permanent OpenAI key.
+
+Each active family member can create one automatic-assistant **My Saathi** room per family. Access always requires an explicit `roomMembers` grant: family ownership does not bypass the private-room check. Messages, files, voice notes, and GPT-Live calls reuse the same room authorization boundary.
+
+Gmail uses Composio-managed OAuth through Sessions with explicit multi-account selection. Saath stores connected-account identifiers and display metadata, never OAuth credentials or tokens. A new connection schedules a 30-day `GMAIL_FETCH_EMAILS` inbox backfill, and `GMAIL_NEW_GMAIL_MESSAGE` events enter through `POST /composio/webhook`. The endpoint verifies Standard Webhooks headers with a 300-second replay window. A strict classifier fails closed: useful household mail is stored in the member's private inbox and My Saathi room; rejected mail stores only its message idempotency marker. To enable production delivery, set the two Composio variables above and register `https://giant-caiman-748.convex.site/composio/webhook` as the project webhook in Composio. Registration changes shared external state and is intentionally not performed by the application deployment.
 
 Family owners can send seven-day email invitations from the family workspace. Invitation URLs contain a random bearer token, but Convex stores only its SHA-256 hash. Acceptance requires Convex Auth to verify the exact invited email address, then atomically grants the family membership and shared-room access. Owners can revoke pending invitations.
 

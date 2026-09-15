@@ -10,9 +10,9 @@
 - **Components:** @agentmail/convex, @convex-dev/rate-limiter, @convex-dev/static-hosting, @convex-dev/workflow, @firecrawl/firecrawl-convex
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, file storage, realtime subscriptions, durable workflows, scheduled lease recovery
 - **Auth:** Convex Auth
-- **AI models:** deepseek/deepseek-v4.1-flash, meta/muse-image, gpt-5-mini, saaras:v3
+- **AI models:** deepseek/deepseek-v4.1-flash, meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-11T10:44:28Z
+- **Last updated:** 2026-09-15T07:53:25Z
 
 ## Log
 
@@ -120,3 +120,14 @@ queries, inline previews, drag-and-drop, and upload states. Saathi responses now
 render streamed Markdown with readable headings, lists, emphasis, code, and safe
 links (`convex/agentmailInboxes.ts`, `convex/attachments.ts`,
 `convex/attachments.test.ts`, `src/LiveWorkspace.tsx`, `src/App.css`).
+
+### 2026-09-15 - 093738b
+Added owner-managed, email-bound family invitations with hashed bearer tokens,
+expiry, revocation, rate limits, identity-matched acceptance, and atomic family
+and room grants. Added authenticated `gpt-live-1` WebRTC conversations with
+live captions and idempotent room transcripts, while keeping the OpenAI key on
+the Convex backend. Routed family inbox creation through the app-owned AgentMail
+credential path used by working OTP delivery instead of relying on isolated
+component environment state (`convex/invitations.ts`, `convex/liveVoice.ts`,
+`convex/agentmailInboxes.ts`, `src/LiveWorkspace.tsx`). This update is locally
+verified but not yet live-provider verified or deployed.

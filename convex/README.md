@@ -12,6 +12,7 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
    - `AGENTMAIL_AUTH_INBOX_ID`
    - `FIRECRAWL_API_KEY`
    - `FIRECRAWL_WEBHOOK_SECRET` (recommended for durable crawls)
+   - `OPENAI_API_KEY` (required for GPT-Live voice conversations and inbox extraction)
    - `OPENROUTER_API_KEY` (durable Saathi agents using DeepSeek V4.1 Flash)
    - `SARVAM_API_KEY` (Saaras voice-note transcription)
 4. Register `https://<deployment>.convex.site/agentmail/webhook` in AgentMail. Firecrawl's component webhook is mounted at `/firecrawl/webhook`.
@@ -43,5 +44,9 @@ Provider credentials do not belong in GitHub Actions. Configure these directly o
 Call `users.ensureCurrent` once after authentication, then scope every family request with a selected `spaceId`. Static routes are registered last so auth discovery and webhook routes cannot be swallowed by SPA fallback.
 
 Voice notes use `voiceNotes.generateUploadUrl` followed by a direct browser upload and `voiceNotes.submit`. Submission accepts recordings up to 30 seconds and 5 MB, validates the stored MIME type, re-checks room posting permission, and schedules a server-side Sarvam transcription. Clients read the audio URL and live transcript status through `voiceNotes.getByMessage`.
+
+Live conversations use browser WebRTC with `gpt-live-1`. The authenticated `liveVoice.startSession` action exchanges the browser SDP offer while keeping `OPENAI_API_KEY` server-side; hosted web search is available through Responses delegation. Transcript deltas appear in the room while people speak and are saved idempotently when the session closes. The browser never receives the permanent OpenAI key.
+
+Family owners can send seven-day email invitations from the family workspace. Invitation URLs contain a random bearer token, but Convex stores only its SHA-256 hash. Acceptance requires Convex Auth to verify the exact invited email address, then atomically grants the family membership and shared-room access. Owners can revoke pending invitations.
 
 Durable Saathi sessions use `agents.create`, `agents.send`, and `agents.get`. Every agent belongs to one family room, inherits that room's RBAC, serializes prompts through a FIFO mailbox, and uses bounded transcript context plus explicit memory. Exact attempt leases reject late results after worker recovery. Client operation IDs make create/send retries idempotent, and prompts are rate limited per family and user. The Node action runtime is pinned to Node 22 in `convex.json`.

@@ -15,17 +15,22 @@ import {
   LogOut,
   Mail,
   MessageSquareText,
+  Mic,
+  MicOff,
   Paperclip,
+  PhoneOff,
   Plus,
   Send,
   Settings2,
   ShieldCheck,
   Sparkles,
   Upload,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
 import type { Doc, Id } from '../convex/_generated/dataModel'
+import { useLiveVoice } from './useLiveVoice'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
@@ -36,18 +41,41 @@ const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
+  const acceptInvitation = useMutation(api.invitations.accept)
   const spaces = useQuery(api.spaces.mine)
   const [selectedSpaceId, setSelectedSpaceId] = useState<Id<'spaces'> | null>(null)
+  const [invitationState, setInvitationState] = useState<'idle' | 'accepting' | 'error'>(() => invitationToken() ? 'accepting' : 'idle')
+  const [invitationError, setInvitationError] = useState('')
 
   useEffect(() => {
     void ensureCurrent({}).catch(() => undefined)
   }, [ensureCurrent])
+
+  useEffect(() => {
+    const token = invitationToken()
+    if (!token || invitationState !== 'accepting') return
+    void sha256(token).then(tokenHash => acceptInvitation({ tokenHash })).then(spaceId => {
+      setSelectedSpaceId(spaceId)
+      clearInvitationToken()
+      setInvitationState('idle')
+    }).catch(error => {
+      const code = convexErrorCode(error)
+      setInvitationError(code === 'INVITATION_WRONG_USER'
+        ? 'This invitation belongs to a different email address. Sign out and use the address that received it.'
+        : code === 'INVITATION_EXPIRED'
+          ? 'This invitation has expired. Ask a family owner for a new one.'
+          : 'This invitation is invalid or has already been revoked.')
+      setInvitationState('error')
+    })
+  }, [acceptInvitation, invitationState])
 
   const families = useMemo(() => {
     if (!spaces) return []
     return spaces.flatMap((row) => row.space ? [{ membership: row.membership, space: row.space }] : [])
   }, [spaces])
 
+  if (invitationState === 'accepting') return <LiveStatus message="Adding you to the invited family…" />
+  if (invitationState === 'error') return <InvitationError message={invitationError} onDismiss={() => { clearInvitationToken(); setInvitationState('idle') }} />
   if (spaces === undefined) return <LiveStatus message="Loading your private family spaces…" />
   if (families.length === 0) return <CreateFirstFamily onExit={onExit} />
 
@@ -102,8 +130,16 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const user = useQuery(api.users.current)
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
+  const [membersOpen, setMembersOpen] = useState(false)
   const sharedRoom = rooms?.find(({ room }) => room?.type === 'shared')?.room ?? rooms?.find(({ room }) => room)?.room ?? null
   const initials = initialsFor(user?.displayName ?? user?.name ?? user?.email ?? 'Family member')
+
+  useEffect(() => {
+    if (!membersOpen) return
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => event.key === 'Escape' && setMembersOpen(false)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [membersOpen])
 
   return (
     <main className="saath-workspace live-conversation-workspace">
@@ -133,7 +169,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       </aside>
 
       {sharedRoom ? (
-        <LiveRoom key={sharedRoom._id} room={sharedRoom} family={family} families={families} onSelectFamily={onSelectFamily} onExit={onExit} />
+        <LiveRoom key={sharedRoom._id} room={sharedRoom} family={family} families={families} onSelectFamily={onSelectFamily} onExit={onExit} onInvite={family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
       )}
@@ -146,18 +182,21 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           : family.membership.role === 'owner'
             ? <ConnectInbox spaceId={family.space._id} />
             : <p>Ask a family owner to connect AgentMail.</p>}</section>
+        {family.membership.role === 'owner' && <section><span>Family members</span><InviteMember spaceId={family.space._id} /></section>}
         <section><span>Recent updates</span>{(inboxItems ?? []).slice(0, 3).map((item) => <div className="context-inbox-item" key={item._id}><strong>{item.subject}</strong><small>{displaySender(item.sender)} · {categoryLabel(item.category)}</small></div>)}{inboxItems?.length === 0 && <p>No family mail yet.</p>}</section>
       </aside>
+      {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
     </main>
   )
 }
 
-function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
+function LiveRoom({ room, family, families, onSelectFamily, onExit, onInvite }: {
   room: Doc<'rooms'>
   family: FamilyRow
   families: FamilyRow[]
   onSelectFamily: (spaceId: Id<'spaces'>) => void
   onExit: () => void
+  onInvite?: () => void
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
   const generatedImages = useQuery(api.images.forRoom, { roomId: room._id, limit: 20 })
@@ -180,6 +219,7 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
   const activeJob = saathi?.jobs.find((job) => job.status === 'running') ?? saathi?.jobs.find((job) => job.status === 'queued')
   const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
   const attachmentMessageIds = useMemo(() => new Set((attachments ?? []).map((item) => item.messageId)), [attachments])
+  const voice = useLiveVoice(room._id)
   const timeline = useMemo(() => [
     ...(messages ?? []).filter((item) => !attachmentMessageIds.has(item._id)).map((item) => ({ kind: 'message' as const, createdAt: item.createdAt, item })),
     ...(generatedImages ?? []).map((item) => ({ kind: 'image' as const, createdAt: item.createdAt, item })),
@@ -307,7 +347,7 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onExit} aria-label="Back"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · private family conversation</p></div>
-        <div className="participant-stack"><span>YOU</span><span>F</span><span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div>
+        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span><span>F</span><span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div></div>
         <select className="mobile-family-switcher" aria-label="Current family" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>{families.map(({ space }) => <option value={space._id} key={space._id}>{space.name}</option>)}</select>
       </header>
       <div className="conversation-feed live-feed">
@@ -325,12 +365,19 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
                   ? <a className="shared-image" href={entry.item.url} target="_blank" rel="noreferrer"><img src={entry.item.url} alt={entry.item.fileName} /><small>{entry.item.fileName} · {formatFileSize(entry.item.sizeBytes)}</small></a>
                   : <a className="shared-document" href={entry.item.url ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!entry.item.url}><FileText /><span><strong>{entry.item.fileName}</strong><small>{formatFileSize(entry.item.sizeBytes)}</small></span></a>}
               </article>
-          : entry.item.actorType === 'user'
+          : entry.item.actorType === 'voice_transcript'
+            ? entry.item.voiceSpeaker === 'user'
+              ? <article className="outgoing-message saved-voice-transcript" key={`message-${entry.item._id}`}><span>You · voice transcript · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
+              : <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
+            : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>You · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
                 <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}</div></div>
               </article>)}
+        {voice.turns.map((turn, index) => turn.role === 'user'
+          ? <article className="outgoing-message live-voice-transcript" key={`live-user-${turn.startMs}-${index}`}><span>You · speaking now</span><p>{turn.text}<i className="transcript-cursor" /></p></article>
+          : <article className="person-message assistant-message live-voice-transcript" key={`live-assistant-${turn.startMs}-${index}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· speaking now</small></h3><div className="assistant-card"><p>{turn.text}<i className="transcript-cursor" /></p></div></div></article>)}
         {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
           <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
         )}
@@ -357,7 +404,15 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
       </div>
       <footer className="conversation-composer">
         {uploads.length > 0 && <div className="upload-queue" aria-live="polite">{uploads.map((upload) => <div className={upload.status} key={upload.id}>{upload.status === 'uploading' ? <span className="upload-spinner" /> : <FileText />}<span><strong>{upload.name}</strong><small>{upload.status === 'uploading' ? 'Uploading…' : upload.message}</small></span>{upload.status === 'error' && <button type="button" onClick={() => setUploads((current) => current.filter((item) => item.id !== upload.id))} aria-label={`Dismiss ${upload.name}`}><X /></button>}</div>)}</div>}
-        <div className="composer-guidance"><button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button><span>Enter to send · Drop photos or documents here</span></div>
+        <div className="composer-guidance">
+          <div className="composer-guidance-actions">
+            <button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button>
+            {voice.status === 'idle' || voice.status === 'ended' || voice.status === 'error'
+              ? <button type="button" className="voice-start" onClick={() => void voice.start()}><Mic /> Talk to Saathi</button>
+              : <><button type="button" className={voice.status === 'muted' ? 'voice-muted' : ''} onClick={voice.toggleMute} disabled={voice.status === 'requesting' || voice.status === 'connecting' || voice.status === 'ending'}>{voice.status === 'muted' ? <MicOff /> : <Mic />} {voice.status === 'requesting' ? 'Allow microphone…' : voice.status === 'connecting' ? 'Connecting…' : voice.status === 'muted' ? 'Unmute' : 'Mute'}</button><button type="button" className="voice-end" onClick={voice.end} disabled={voice.status === 'ending'}><PhoneOff /> {voice.status === 'ending' ? 'Ending…' : 'End'}</button></>}
+          </div>
+          <span>{voice.status === 'live' ? 'Voice is live · transcript appears here' : 'Enter to send · Drop photos or documents here'}</span>
+        </div>
         <form onSubmit={submit}>
           <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files)} />
           <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your family or type @saathi…" aria-label="Message for your family" rows={1} />
@@ -366,6 +421,7 @@ function LiveRoom({ room, family, families, onSelectFamily, onExit }: {
           <button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></button>
         </form>
         {error && <p className="dark-form-error" role="alert">{error}</p>}
+        {voice.error && <p className="dark-form-error" role="alert">{voice.error}</p>}
       </footer>
     </section>
   )
@@ -404,6 +460,41 @@ function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
   }
 
   return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Create a private email address for this family.</p><button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</button>{error && <small role="alert">{error}</small>}</form>
+}
+
+function InviteMember({ spaceId }: { spaceId: Id<'spaces'> }) {
+  const invitations = useQuery(api.invitations.list, { spaceId })
+  const createInvitation = useAction(api.invitations.createAndSend)
+  const revokeInvitation = useMutation(api.invitations.revoke)
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<'member' | 'owner'>('member')
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setFeedback('')
+    try {
+      await createInvitation({ spaceId, targetEmail: email, role, clientOperationId: crypto.randomUUID().replaceAll('-', '') })
+      setEmail('')
+      setFeedback('Invitation sent. They can join after signing in with that email.')
+    } catch (error) {
+      setFeedback(convexErrorCode(error) === 'RATE_LIMITED'
+        ? 'Too many invitations were sent. Please wait and try again.'
+        : 'The invitation could not be sent. Check the email and AgentMail setup.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pending = invitations?.filter(invitation => !invitation.acceptedAt && !invitation.revokedAt && !invitation.expired) ?? []
+  return <div className="invite-member-card"><form onSubmit={submit}><label htmlFor={`invite-email-${spaceId}`}><UserPlus /> Invite by email</label><input id={`invite-email-${spaceId}`} type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="family@example.com" required /><div><select value={role} onChange={event => setRole(event.target.value as 'member' | 'owner')} aria-label="Invitation role"><option value="member">Member</option><option value="owner">Owner</option></select><button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</button></div></form>{feedback && <small role="status">{feedback}</small>}{pending.map(invitation => <div className="pending-invitation" key={invitation._id}><span><strong>{invitation.targetEmail}</strong><small>{invitation.role} · expires {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(invitation.expiresAt)}</small></span><button type="button" onClick={() => void revokeInvitation({ invitationId: invitation._id })}>Revoke</button></div>)}</div>
+}
+
+function InvitationError({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const { signOut } = useAuthActions()
+  return <main className="centered-status"><Mail size={34} /><h1>Could not accept invitation</h1><p>{message}</p><div className="status-actions"><button className="primary" onClick={() => void signOut()}>Sign in with another email</button><button className="secondary" onClick={onDismiss}>Open my workspace</button></div></main>
 }
 
 function LiveStatus({ message }: { message: string }) {
@@ -452,4 +543,19 @@ function convexErrorCode(error: unknown) {
   if (!error || typeof error !== 'object' || !('data' in error)) return ''
   const data = (error as { data?: unknown }).data
   return data && typeof data === 'object' && 'code' in data && typeof data.code === 'string' ? data.code : ''
+}
+
+function invitationToken() {
+  return new URLSearchParams(window.location.search).get('invite')?.trim() ?? ''
+}
+
+function clearInvitationToken() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('invite')
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }

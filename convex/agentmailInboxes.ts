@@ -1,9 +1,6 @@
-import { AgentMail } from "@agentmail/convex";
 import { ConvexError, v } from "convex/values";
-import { components, internal } from "./_generated/api";
-import { action } from "./_generated/server";
-
-const agentmail = new AgentMail(components.agentmail);
+import { internal } from "./_generated/api";
+import { action, env } from "./_generated/server";
 
 export const createForFamily = action({
   args: { spaceId: v.id("spaces") },
@@ -15,7 +12,7 @@ export const createForFamily = action({
     );
     if (family.existingInboxId) {
       try {
-        const existing: unknown = await agentmail.getInbox(ctx, family.existingInboxId);
+        const existing = await agentmailRequest(`/inboxes/${encodeURIComponent(family.existingInboxId)}`);
         return parseInbox(existing);
       } catch (error) {
         throw providerError(error);
@@ -23,9 +20,12 @@ export const createForFamily = action({
     }
 
     try {
-      const created: unknown = await agentmail.createInbox(ctx, {
-        displayName: `${family.name} family inbox`,
-        clientId: `saathi-family-${spaceId}`,
+      const created = await agentmailRequest("/inboxes", {
+        method: "POST",
+        body: JSON.stringify({
+          display_name: `${family.name} family inbox`,
+          client_id: `saathi-family-${spaceId}`,
+        }),
       });
       const inbox = parseInbox(created);
       await ctx.runMutation(internal.spaces.attachCreatedInbox, { spaceId, inboxId: inbox.inboxId });
@@ -35,6 +35,27 @@ export const createForFamily = action({
     }
   },
 });
+
+async function agentmailRequest(path: string, init?: RequestInit): Promise<unknown> {
+  const response = await fetch(`https://api.agentmail.to/v0${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${env.AGENTMAIL_API_KEY.trim()}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+    },
+  });
+  if (!response.ok) throw new AgentMailRequestError(response.status);
+  return response.json();
+}
+
+class AgentMailRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super("AgentMail request failed");
+    this.status = status;
+  }
+}
 
 function parseInbox(value: unknown) {
   if (!value || typeof value !== "object") {
@@ -49,8 +70,7 @@ function parseInbox(value: unknown) {
 
 function providerError(error: unknown) {
   if (error instanceof ConvexError) return error;
-  const message = error instanceof Error ? error.message : String(error);
-  const status = Number(message.match(/AgentMail API error (\d{3})/)?.[1]);
+  const status = error instanceof AgentMailRequestError ? error.status : Number.NaN;
   console.error(`AgentMail inbox operation failed (${Number.isFinite(status) ? status : "unknown status"})`);
   if (status === 401) {
     return new ConvexError({ code: "AGENTMAIL_AUTH", message: "AgentMail rejected the configured API key" });

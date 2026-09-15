@@ -9,10 +9,12 @@ import { v } from "convex/values";
 // App-owned routing keeps Auth discovery and AgentMail at stable root URLs.
 const app = defineApp({
   env: {
+    SITE_URL: v.string(),
     AGENTMAIL_API_KEY: v.string(),
     AGENTMAIL_AUTH_INBOX_ID: v.string(),
     FIRECRAWL_API_KEY: v.string(),
     FIRECRAWL_WEBHOOK_SECRET: v.optional(v.string()),
+    OPENAI_API_KEY: v.optional(v.string()),
     OPENROUTER_API_KEY: v.string(),
     SARVAM_API_KEY: v.string(),
   },

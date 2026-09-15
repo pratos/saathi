@@ -34,8 +34,10 @@ type Env = {
   readonly AGENTMAIL_AUTH_INBOX_ID: string;
   readonly FIRECRAWL_API_KEY: string;
   readonly FIRECRAWL_WEBHOOK_SECRET: string | undefined;
+  readonly OPENAI_API_KEY: string | undefined;
   readonly OPENROUTER_API_KEY: string;
   readonly SARVAM_API_KEY: string;
+  readonly SITE_URL: string;
 };
 
 /**

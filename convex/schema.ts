@@ -56,10 +56,15 @@ export default defineSchema({
   }).index("by_inbox_thread", ["inboxId", "threadId"]).index("by_space", ["spaceId"]),
   messages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), authorUserId: v.optional(v.id("users")),
-    actorType: v.union(v.literal("user"), v.literal("assistant"), v.literal("email_guest")),
+    actorType: v.union(v.literal("user"), v.literal("assistant"), v.literal("email_guest"), v.literal("voice_transcript")),
     origin: v.union(v.literal("app"), v.literal("agentmail"), v.literal("assistant")),
-    originalText: v.string(), language, idempotencyKey: v.string(), createdAt: v.number(),
+    originalText: v.string(), language, idempotencyKey: v.string(),
+    voiceSpeaker: v.optional(v.union(v.literal("user"), v.literal("assistant"))), createdAt: v.number(),
   }).index("by_room_created", ["roomId", "createdAt"]).index("by_room_idempotency", ["roomId", "idempotencyKey"]),
+  liveVoiceSessions: defineTable({
+    sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
+    createdAt: v.number(), finishedAt: v.optional(v.number()),
+  }).index("by_session_id", ["sessionId"]).index("by_room_created", ["roomId", "createdAt"]),
   voiceNotes: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
     authorUserId: v.id("users"), storageId: v.id("_storage"), mediaType: v.string(),
@@ -89,8 +94,10 @@ export default defineSchema({
   invitations: defineTable({
     spaceId: v.id("spaces"), tokenHash: v.string(), targetEmail: v.string(),
     role: v.union(v.literal("owner"), v.literal("member")), createdBy: v.id("users"),
-    expiresAt: v.number(), acceptedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
-  }).index("by_token_hash", ["tokenHash"]).index("by_space", ["spaceId"]),
+    idempotencyKey: v.string(), createdAt: v.number(), expiresAt: v.number(),
+    acceptedByUserId: v.optional(v.id("users")), acceptedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
+  }).index("by_token_hash", ["tokenHash"]).index("by_space_created", ["spaceId", "createdAt"])
+    .index("by_creator_idempotency", ["createdBy", "idempotencyKey"]),
   agentRuns: defineTable({
     spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")), requestedBy: v.id("users"),
     capability: v.string(), status: v.union(v.literal("pending"), v.literal("running"), v.literal("succeeded"), v.literal("failed")),

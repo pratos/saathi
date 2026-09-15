@@ -46,9 +46,10 @@ export default defineSchema({
     agentmailMessageId: v.string(), agentmailThreadId: v.string(), sender: v.string(),
     subject: v.string(), originalText: v.string(), originalHtml: v.optional(v.string()),
     detectedLanguage: v.optional(language), visibility, privateOwnerId: v.optional(v.id("users")),
-    category: v.union(v.literal("bills"), v.literal("school"), v.literal("travel"), v.literal("subscriptions"), v.literal("home"), v.literal("receipts"), v.literal("needs_review")),
+    category: v.union(v.literal("bills"), v.literal("school"), v.literal("travel"), v.literal("subscriptions"), v.literal("home"), v.literal("receipts"), v.literal("bank"), v.literal("needs_review")),
     status: v.union(v.literal("received"), v.literal("processing"), v.literal("ready"), v.literal("failed")),
     extractedAmount: v.optional(v.string()), extractedDueAt: v.optional(v.number()),
+    sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
     receivedAt: v.number(),
   }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]).index("by_space_category_received", ["spaceId", "category", "receivedAt"]),
   emailThreads: defineTable({
@@ -76,6 +77,24 @@ export default defineSchema({
   gmailProcessedMessages: defineTable({
     connectionId: v.id("gmailConnections"), externalMessageId: v.string(), useful: v.boolean(), processedAt: v.number(),
   }).index("by_connection_message", ["connectionId", "externalMessageId"]),
+  familyBudgets: defineTable({
+    spaceId: v.id("spaces"),
+    category: v.literal("food"),
+    monthlyLimit: v.number(),
+    currency: v.literal("INR"),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_space_category", ["spaceId", "category"]),
+  familySpend: defineTable({
+    spaceId: v.id("spaces"),
+    category: v.literal("food"),
+    amount: v.number(),
+    currency: v.literal("INR"),
+    merchant: v.optional(v.string()),
+    sourceInboxItemId: v.optional(v.id("inboxItems")),
+    createdBy: v.id("users"),
+    spentAt: v.number(),
+  }).index("by_space_category_spent", ["spaceId", "category", "spentAt"]).index("by_source_inbox", ["sourceInboxItemId"]),
   voiceNotes: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
     authorUserId: v.id("users"), storageId: v.id("_storage"), mediaType: v.string(),

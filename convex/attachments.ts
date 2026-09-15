@@ -2,7 +2,7 @@ import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
-import { requireRoomPermission } from "./lib/authz";
+import { requireRoomPermission, requireSpacePermission } from "./lib/authz";
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set([
@@ -35,6 +35,7 @@ const attachmentView = v.object({
   createdAt: v.number(),
   url: v.union(v.string(), v.null()),
 });
+const spaceAttachmentView = attachmentView.extend({ roomId: v.id("rooms"), roomTitle: v.string() });
 
 export const generateUploadUrl = mutation({
   args: { roomId: v.id("rooms") },
@@ -130,6 +131,32 @@ export const forRoom = query({
       createdAt: attachment.createdAt,
       url: await ctx.storage.getUrl(attachment.storageId),
     })));
+  },
+});
+
+export const forSpace = query({
+  args: { spaceId: v.id("spaces"), limit: v.optional(v.number()) },
+  returns: v.array(spaceAttachmentView),
+  handler: async (ctx, { spaceId, limit }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "read");
+    const grants = await ctx.db.query("roomMembers").withIndex("by_user", q => q.eq("userId", userId)).collect();
+    const rooms = await Promise.all(grants.map(grant => ctx.db.get(grant.roomId)));
+    const allowedRooms = rooms.filter(room => room && room.spaceId === spaceId && !room.archivedAt);
+    const perRoom = await Promise.all(allowedRooms.map(async room => {
+      const attachments = await ctx.db.query("attachments").withIndex("by_room_created", q => q.eq("roomId", room!._id)).order("desc").take(40);
+      return Promise.all(attachments.map(async attachment => ({
+        _id: attachment._id,
+        messageId: attachment.messageId,
+        fileName: attachment.fileName,
+        mediaType: attachment.mediaType,
+        sizeBytes: attachment.sizeBytes,
+        createdAt: attachment.createdAt,
+        url: await ctx.storage.getUrl(attachment.storageId),
+        roomId: room!._id,
+        roomTitle: room!.type === "private" ? "My Saathi" : room!.title,
+      })));
+    }));
+    return perRoom.flat().sort((left, right) => right.createdAt - left.createdAt).slice(0, Math.min(Math.max(limit ?? 40, 1), 100));
   },
 });
 

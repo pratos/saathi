@@ -10,6 +10,7 @@ import {
   Bell,
   Bot,
   Check,
+  Copy,
   FileText,
   Folder,
   LockKeyhole,
@@ -132,13 +133,21 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
   const ensurePersonalRoom = useMutation(api.rooms.ensurePersonal)
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
+  const foodBudget = useQuery(api.budget.food, { spaceId: family.space._id })
+  const setFoodLimit = useMutation(api.budget.setFoodLimit)
   const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
+  const [budgetDraft, setBudgetDraft] = useState('')
+  const [budgetBusy, setBudgetBusy] = useState(false)
   const beginGmailConnection = useAction(api.gmail.beginConnection)
   const confirmGmailConnection = useAction(api.gmail.confirmConnection)
   const [membersOpen, setMembersOpen] = useState(false)
   const [selectedRoomId, setSelectedRoomId] = useState<Id<'rooms'> | null>(null)
   const [gmailBusy, setGmailBusy] = useState(false)
   const [gmailMessage, setGmailMessage] = useState('')
+  const [pane, setPane] = useState<'chats' | 'updates' | 'files'>('chats')
+  const [copiedInbox, setCopiedInbox] = useState(false)
+  const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
+  const setPreferredLanguage = useMutation(api.users.ensureCurrent)
   const gmailCallbackHandled = useRef(false)
   const sharedRoom = rooms?.find(({ room }) => room?.type === 'shared')?.room ?? rooms?.find(({ room }) => room)?.room ?? null
   const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
@@ -194,9 +203,9 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
     <main className="saath-workspace live-conversation-workspace">
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
-        <button className="rail-action active"><MessageSquareText /><span>Chats</span></button>
-        <button className="rail-action"><Bell /><span>Updates</span></button>
-        <button className="rail-action"><Folder /><span>Files</span></button>
+        <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={() => setPane('chats')}><MessageSquareText /><span>Chats</span></button>
+        <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => setPane('updates')}><Bell /><span>Updates</span></button>
+        <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => setPane('files')}><Folder /><span>Files</span></button>
         <button className="rail-profile" onClick={() => void signOut()} aria-label="Sign out">{initials}</button>
       </aside>
 
@@ -215,13 +224,23 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         ))}
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
         <span className="list-heading section-gap">Updates</span>
-        <button className="conversation-link"><i /><span>Family inbox</span><b>{inboxItems?.length ?? 0}</b></button>
+        <button className={`conversation-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => setPane('updates')}><i /><span>Family inbox</span><b>{inboxItems?.length ?? 0}</b></button>
         <span className="list-heading section-gap">My reading language</span>
-        <div className="language-setting"><strong>English</strong><button>Change</button></div>
+        <label className="language-setting" htmlFor="reading-language"><strong>{languageLabel(user?.preferredLanguage)}</strong>
+          <select id="reading-language" value={user?.preferredLanguage ?? 'en'} onChange={(event) => void setPreferredLanguage({ preferredLanguage: event.target.value as 'en' | 'hi' | 'mr' })} aria-label="My reading language">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="mr">Marathi</option>
+          </select>
+        </label>
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
-      {selectedRoom ? (
+      {pane === 'updates' ? (
+        <FamilyUpdates family={family} items={inboxItems} onBack={() => setPane('chats')} />
+      ) : pane === 'files' ? (
+        <FamilyFiles family={family} files={spaceFiles} onBack={() => setPane('chats')} onOpenRoom={(roomId) => { setSelectedRoomId(roomId); setPane('chats') }} />
+      ) : selectedRoom ? (
         <LiveRoom key={selectedRoom._id} room={selectedRoom} rooms={(rooms ?? []).flatMap(({ room }) => room ? [room] : [])} family={family} families={families} onSelectRoom={setSelectedRoomId} onSelectFamily={onSelectFamily} onExit={onExit} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
@@ -231,7 +250,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <div className="context-title"><h2>This family</h2><button onClick={onExit}>Switch mode</button></div>
         <section><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
         <section><span>Family inbox</span>{family.space.agentmailInboxId
-          ? <p className="confirmed"><Check /> AgentMail is connected</p>
+          ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy ID'}</button></div>
           : family.membership.role === 'owner'
             ? <ConnectInbox spaceId={family.space._id} />
             : <p>Ask a family owner to connect AgentMail.</p>}</section>
@@ -239,6 +258,12 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><Check /></div>)}
           <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
           {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
+        </section>
+        <section className="food-budget">
+          <span>Food budget</span>
+          <p>Approved food receipts, including Swiggy and Zomato, count toward this monthly budget.</p>
+          <strong>{foodBudget?.monthlyLimit != null ? `₹${Math.round(foodBudget.spentThisMonth)} of ₹${Math.round(foodBudget.monthlyLimit)} this month` : `₹${Math.round(foodBudget?.spentThisMonth ?? 0)} tracked this month`}</strong>
+          {family.membership.role === 'owner' && <form onSubmit={(event) => { event.preventDefault(); const monthlyLimit = Number(budgetDraft); if (!monthlyLimit) return; setBudgetBusy(true); void setFoodLimit({ spaceId: family.space._id, monthlyLimit }).then(() => setBudgetDraft('')).finally(() => setBudgetBusy(false)) }}><input type="number" min={500} max={1000000} placeholder="Monthly limit in ₹" value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} aria-label="Monthly food budget" /><button type="submit" disabled={budgetBusy || !budgetDraft}>{budgetBusy ? 'Saving…' : 'Set limit'}</button></form>}
         </section>
         {family.membership.role === 'owner' && <section><span>Family members</span><InviteMember spaceId={family.space._id} /></section>}
         <section><span>Recent updates</span>{(inboxItems ?? []).slice(0, 3).map((item) => <div className="context-inbox-item" key={item._id}><strong>{item.subject}</strong><small>{displaySender(item.sender)} · {categoryLabel(item.category)}</small></div>)}{inboxItems?.length === 0 && <p>No family mail yet.</p>}</section>
@@ -266,6 +291,8 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
   const retrySaathi = useMutation(api.agents.send)
   const generateAttachmentUploadUrl = useMutation(api.attachments.generateUploadUrl)
   const submitAttachment = useMutation(api.attachments.submit)
+  const pendingMoney = useQuery(api.gmailData.pendingForRoom, room.type === 'private' ? { roomId: room._id } : 'skip')
+  const shareMoney = useMutation(api.gmailData.shareWithFamily)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [retrying, setRetrying] = useState(false)
@@ -438,7 +465,7 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>You · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
-                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}</div></div>
+                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <button type="button" className="share-family-mail" onClick={() => { const match = pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey); if (match) void shareMoney({ inboxItemId: match._id }) }}>Share with family inbox</button>}</div></div>
               </article>)}
         {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
           <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
@@ -627,6 +654,52 @@ function LiveStatus({ message }: { message: string }) {
   return <main className="centered-status"><div className="status-spinner" /><p>{message}</p></main>
 }
 
+function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Doc<'inboxItems'>[] | undefined; onBack: () => void }) {
+  return <section className="conversation-pane">
+    <header className="conversation-header live-room-header">
+      <button className="mobile-chat-back" onClick={onBack} aria-label="Back"><ArrowLeft /></button>
+      <div><div className="title-line"><h2>Family inbox</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · shared household mail only</p></div>
+    </header>
+    <div className="conversation-feed live-feed">
+      {items === undefined && <div className="dark-loading"><i /><i /><i /></div>}
+      {items?.length === 0 && <div className="dark-empty-state compact"><Bell /><h2>No shared family mail yet</h2><p>Money mail stays in My Saathi until someone shares it here.</p></div>}
+      {items?.map(item => <article className="person-message" key={item._id}>
+        <span className="message-avatar email"><Mail /></span>
+        <div><h3>{item.subject} <small>· {categoryLabel(item.category)} · {formatRelativeTime(item.receivedAt)}</small></h3><div className="simple-message"><p>{displaySender(item.sender)}</p>{item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}</div></div>
+      </article>)}
+    </div>
+  </section>
+}
+
+function FamilyFiles({ family, files, onBack, onOpenRoom }: {
+  family: FamilyRow
+  files: Array<{ _id: Id<'attachments'>; fileName: string; mediaType: string; sizeBytes: number; createdAt: number; url: string | null; roomId: Id<'rooms'>; roomTitle: string }> | undefined
+  onBack: () => void
+  onOpenRoom: (roomId: Id<'rooms'>) => void
+}) {
+  return <section className="conversation-pane">
+    <header className="conversation-header live-room-header">
+      <button className="mobile-chat-back" onClick={onBack} aria-label="Back"><ArrowLeft /></button>
+      <div><div className="title-line"><h2>Files</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · stored in Convex</p></div>
+    </header>
+    <div className="conversation-feed live-feed">
+      {files === undefined && <div className="dark-loading"><i /><i /><i /></div>}
+      {files?.length === 0 && <div className="dark-empty-state compact"><Folder /><h2>No files yet</h2><p>Photos and documents you share in chats are stored in Convex file storage.</p></div>}
+      {files?.map(file => <article className="outgoing-message attachment-message" key={file._id}>
+        <span>{file.roomTitle} · {formatRelativeTime(file.createdAt)}</span>
+        {file.mediaType.startsWith('image/') && file.url
+          ? <a className="shared-image" href={file.url} target="_blank" rel="noreferrer"><img src={file.url} alt={file.fileName} /><small>{file.fileName} · {formatFileSize(file.sizeBytes)}</small></a>
+          : <a className="shared-document" href={file.url ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!file.url}><FileText /><span><strong>{file.fileName}</strong><small>{formatFileSize(file.sizeBytes)}</small></span></a>}
+        <button type="button" className="open-file-room" onClick={() => onOpenRoom(file.roomId)}>Open conversation</button>
+      </article>)}
+    </div>
+  </section>
+}
+
+function languageLabel(value: 'en' | 'hi' | 'mr' | undefined) {
+  return value === 'hi' ? 'Hindi' : value === 'mr' ? 'Marathi' : 'English'
+}
+
 function initialsFor(value: string) {
   const clean = value.includes('<') ? value.split('<')[0].trim() : value.split('@')[0]
   return clean.split(/\s|[._-]/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'F'
@@ -637,7 +710,10 @@ function displaySender(value: string) {
 }
 
 function categoryLabel(category: Doc<'inboxItems'>['category']) {
-  return category === 'needs_review' ? 'Needs review' : category.charAt(0).toUpperCase() + category.slice(1)
+  if (category === 'needs_review') return 'Needs review'
+  if (category === 'bank') return 'Bank'
+  if (category === 'receipts') return 'Purchase'
+  return category.charAt(0).toUpperCase() + category.slice(1)
 }
 
 function gmailSpaceFromUrl() {

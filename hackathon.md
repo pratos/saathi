@@ -147,3 +147,8 @@ mail retains only an idempotency marker. Deterministic tests cover room and inbo
 isolation, summary ownership/idempotency, Gmail retention, and Standard Webhooks
 verification. Live Composio OAuth and webhook delivery still require the optional
 production Convex variables and deliberate external webhook registration.
+
+### 2026-09-15 - Money mail approval and food budget
+Money-related Gmail now stays in My Saathi until the owner shares it. Shared items
+become family-inbox entries. Food spend from approved Swiggy/Zomato receipts is
+tracked against an owner-set monthly budget. Swiggy MCP ordering is not connected.

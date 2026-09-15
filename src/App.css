@@ -380,7 +380,12 @@ button { border: 0; background: none; color: inherit; }
 .conversation-link.selected { color: var(--aqua-soft); background: var(--teal); }
 .language-setting { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 12px; }
 .language-setting strong { font-size: 17px; }
-.language-setting button { color: var(--text-soft); font-size: 14px; }
+.language-setting select { height: 40px; padding: 0 10px; border: 0; border-radius: 10px; color: var(--text-soft); background: var(--panel-raised); }
+.agentmail-id { display: grid; gap: 8px; margin-top: 12px; }
+.agentmail-id code { overflow: hidden; padding: 10px 12px; border-radius: 10px; color: var(--text-warm); background: #202b25; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.agentmail-id button { min-height: 40px !important; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
+.agentmail-id svg { width: 16px; }
+.open-file-room { min-height: 36px !important; margin-top: 8px; color: var(--aqua-soft); font-size: 12px; font-weight: 700; }
 .conversation-pane { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #1a231e; }
 .conversation-header { min-height: 98px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 20px 28px; border-bottom: 1px solid var(--border-dark); }
 .conversation-header h2 { margin: 0; color: var(--text-warm); font-size: clamp(22px, 2vw, 28px); font-weight: 500; letter-spacing: -.025em; }
@@ -835,6 +840,12 @@ button { border: 0; background: none; color: inherit; }
 .connect-gmail svg { width: 17px; }
 .connect-gmail:disabled { cursor: wait; opacity: .62; }
 .gmail-status { display: block; margin-top: 8px; color: #c5cec8; font-size: 11px; line-height: 1.4; }
+.food-budget p { margin: 7px 0 10px; color: var(--text-soft); font-size: 12px; line-height: 1.45; }
+.food-budget strong { display: block; color: var(--text-warm); font-size: 13px; }
+.food-budget form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: 10px; }
+.food-budget input { min-width: 0; height: 40px; padding: 0 10px; border: 0; border-radius: 10px; color: var(--text-warm); background: #202b25; }
+.food-budget button { min-height: 40px !important; padding: 0 12px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
+.share-family-mail { min-height: 36px !important; margin-top: 12px; padding: 0 12px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
 .status-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .status-actions button { min-height: 46px; padding: 0 16px; border-radius: 12px; }
 .family-dialog-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(6,10,8,.72); }

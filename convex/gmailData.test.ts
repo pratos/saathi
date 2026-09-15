@@ -15,6 +15,9 @@ describe("private Gmail ingestion", () => {
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "family-create-001", createdAt });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
       await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: createdAt });
+      const familyRoomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family conversation", assistantMode: "mention", createdBy: ownerId, createdAt });
+      await ctx.db.insert("roomMembers", { roomId: familyRoomId, userId: ownerId, role: "manager", createdAt });
+      await ctx.db.insert("roomMembers", { roomId: familyRoomId, userId: memberId, role: "participant", createdAt });
       const connectionId = await ctx.db.insert("gmailConnections", {
         spaceId, userId: memberId, connectedAccountId: "ca_member_primary", alias: "Personal Gmail",
         triggerId: "ti_member_primary", status: "active", createdAt,
@@ -23,7 +26,7 @@ describe("private Gmail ingestion", () => {
     });
     const member = t.withIdentity({ subject: String(memberId) });
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const common = { connectionId, threadId: "thread-family-1", receivedAt: 1_700_000_000_000, category: "needs_review" as const };
+    const common = { connectionId, threadId: "thread-family-1", receivedAt: 1_700_000_000_000, category: "receipts" as const };
 
     await member.mutation(internal.gmailData.saveClassification, {
       ...common,
@@ -50,12 +53,13 @@ describe("private Gmail ingestion", () => {
     const useful = {
       ...common,
       externalMessageId: "useful-1",
-      sender: "school@example.test",
-      subject: "Field trip permission due Friday",
-      text: "Return the signed permission form by Friday.",
+      sender: "statements@hdfcbank.test",
+      subject: "Credit card statement due 21 Sep",
+      text: "Your credit card bill of Rs 4,320 is due on 21 Sep.",
       useful: true,
-      summary: "The field trip permission form is due Friday.",
-      category: "school" as const,
+      summary: "HDFC credit card bill of Rs 4,320 is due 21 Sep.",
+      category: "bills" as const,
+      amount: "4320",
     };
     await expect(member.mutation(internal.gmailData.saveClassification, useful)).resolves.not.toBeNull();
     await expect(member.mutation(internal.gmailData.saveClassification, useful)).resolves.toBeNull();
@@ -63,10 +67,17 @@ describe("private Gmail ingestion", () => {
     const memberRooms = await member.query(api.rooms.list, { spaceId });
     const personalRoom = memberRooms.find(row => row.room?.type === "private")?.room;
     expect(personalRoom).toMatchObject({ title: "My Saathi", assistantMode: "automatic", personalOwnerId: memberId });
-    expect(await member.query(api.inbox.list, { spaceId })).toHaveLength(1);
+    expect(await member.query(api.inbox.list, { spaceId })).toEqual([]);
+    expect(await member.query(api.gmailData.pendingForRoom, { roomId: personalRoom!._id })).toHaveLength(1);
     expect(await member.query(api.rooms.messages, { roomId: personalRoom!._id })).toHaveLength(1);
     expect(await owner.query(api.inbox.list, { spaceId })).toEqual([]);
     await expect(owner.query(api.rooms.messages, { roomId: personalRoom!._id })).rejects.toThrow(/permission/i);
+
+    const pending = await member.query(api.gmailData.pendingForRoom, { roomId: personalRoom!._id });
+    await expect(owner.mutation(api.gmailData.shareWithFamily, { inboxItemId: pending[0]._id })).rejects.toThrow(/permission/i);
+    await member.mutation(api.gmailData.shareWithFamily, { inboxItemId: pending[0]._id });
+    expect(await owner.query(api.inbox.list, { spaceId })).toHaveLength(1);
+    expect(await member.query(api.gmailData.pendingForRoom, { roomId: personalRoom!._id })).toEqual([]);
 
     const persisted = await t.run(async ctx => ({
       markers: await ctx.db.query("gmailProcessedMessages").collect(),
@@ -76,7 +87,8 @@ describe("private Gmail ingestion", () => {
     }));
     expect(persisted.markers).toHaveLength(2);
     expect(persisted.inbox).toHaveLength(1);
-    expect(persisted.messages).toHaveLength(1);
+    expect(persisted.inbox[0]).toMatchObject({ visibility: "space", category: "bills" });
+    expect(persisted.messages).toHaveLength(2);
     expect(persisted.jobs).toEqual([]);
   });
 });

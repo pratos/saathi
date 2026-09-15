@@ -9,6 +9,7 @@ export const list = query({
     const candidates = await ctx.db.query("inboxItems").withIndex("by_space_received", q => q.eq("spaceId", spaceId)).order("desc").take(Math.min(Math.max(limit ?? 50, 1), 100));
     const allowed = [];
     for (const item of candidates) {
+      if (item.visibility !== "space") continue;
       try {
         await requireInboxItemPermission(ctx, item._id, "read");
         allowed.push(item);

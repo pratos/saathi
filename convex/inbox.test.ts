@@ -84,5 +84,6 @@ describe("family inbox processing", () => {
     const usage = await owner.query(api.spaces.usageBreakdown, { spaceId: seeded.spaceId });
     expect(usage.tier).toBe("med");
     expect(usage.rows.some(row => row.costClass === "email_extraction")).toBe(true);
+    expect(usage.entries.some(row => row.costClass === "email_extraction")).toBe(true);
   });
 });

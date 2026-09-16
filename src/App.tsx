@@ -114,19 +114,41 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const sendCode = async () => {
+    await signIn('saath-email', { email: email.trim().toLowerCase() })
+    setStep('code')
+  }
 
   const requestCode = async (event: FormEvent) => {
     event.preventDefault()
     setBusy(true)
     setError('')
+    setNotice('')
     try {
-      await signIn('saath-email', { email: email.trim().toLowerCase() })
-      setStep('code')
+      await sendCode()
     } catch (requestError) {
       setError(otpRequestErrorMessage(requestError))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const resendCode = async () => {
+    setResending(true)
+    setError('')
+    setNotice('')
+    setCode('')
+    try {
+      await sendCode()
+      setNotice('A new code is on its way. The previous one will no longer work.')
+    } catch (requestError) {
+      setError(otpRequestErrorMessage(requestError))
+    } finally {
+      setResending(false)
     }
   }
 
@@ -170,12 +192,14 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
           <form onSubmit={verifyCode}>
             <label htmlFor="live-code">One-time code</label>
             <div className="field-with-icon"><KeyRound size={20} /><input id="live-code" className="otp-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} placeholder="000000" required autoFocus /></div>
-            <button className="primary large" type="submit" disabled={busy || code.length !== 6}>{busy ? 'Checking code…' : 'Verify and continue'} <ArrowRight size={20} /></button>
-            <button className="text-button" type="button" onClick={() => { setStep('email'); setCode(''); setError('') }}>Use a different email</button>
+            <button className="primary large" type="submit" disabled={busy || resending || code.length !== 6}>{busy ? 'Checking code…' : 'Verify and continue'} <ArrowRight size={20} /></button>
+            <button className="text-button" type="button" onClick={() => void resendCode()} disabled={busy || resending}>{resending ? 'Sending a new code…' : 'Request a new code'}</button>
+            <button className="text-button" type="button" onClick={() => { setStep('email'); setCode(''); setError(''); setNotice('') }} disabled={busy || resending}>Use a different email</button>
           </form>
         )}
 
         {step === 'verifying' && <div className="status-spinner" aria-label="Signing in" />}
+        {notice && !error && <p className="form-notice" role="status">{notice}</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="security-note"><ShieldCheck size={18} /><span><strong>Private by design</strong>Your code expires after 10 minutes and can only be used once.</span></div>
       </section>

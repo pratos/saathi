@@ -201,6 +201,8 @@ button { border: 0; background: none; color: inherit; }
 .security-note svg { flex: 0 0 auto; margin-top: 2px; }
 .security-note strong { display: block; margin-bottom: 2px; color: #345643; }
 .form-error { margin: 14px 0 0 !important; color: #a13f35 !important; font-size: 13px !important; line-height: 1.5 !important; }
+.form-notice { margin: 14px 0 0 !important; color: #8ae1ac !important; font-size: 13px !important; line-height: 1.5 !important; }
+.live-auth-card .text-button:disabled { opacity: .6; }
 .status-spinner { width: 34px; height: 34px; margin: 26px auto; border: 3px solid #eadfd8; border-top-color: var(--coral); border-radius: 50%; animation: spin .8s linear infinite; }
 .centered-status { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 13px; padding: 30px; color: #635b60; background: var(--paper); text-align: center; }
 .centered-status h1 { margin: 0; color: #302b2f; font: 600 36px 'Fraunces', serif; }
@@ -538,9 +540,12 @@ button { border: 0; background: none; color: inherit; }
 .model-tier-picker button.selected { color: #143334; background: var(--aqua); }
 .model-tier-picker small { color: var(--text-soft); font-size: 11px; }
 .model-tier-picker button.selected small { color: #24514c; }
-.usage-list { display: grid; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
-.usage-list strong, .usage-list small { display: block; }
-.usage-list small { color: var(--text-soft); font-size: 11px; }
+.usage-ledger { display: grid; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #2a3730; }
+.usage-ledger > span { color: var(--text-soft); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.usage-ledger > p { margin: 0; color: var(--text-soft); font-size: 12px; line-height: 1.45; }
+.usage-list, .usage-entries { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.usage-list strong, .usage-list small, .usage-entries strong, .usage-entries small { display: block; }
+.usage-list small, .usage-entries small { color: var(--text-soft); font-size: 11px; }
 .inbox-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .inbox-actions button { min-height: 36px !important; padding: 0 12px; border-radius: 10px; color: #143334; background: var(--aqua); font-size: 12px; font-weight: 800; }
 .inbox-actions button.secondary { color: var(--text-warm); background: #2a3730; }

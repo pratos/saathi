@@ -819,7 +819,12 @@ function ModelTierControls({ spaceId }: { spaceId: Id<'spaces'> }) {
         </button>
       ))}
     </div>
-    {(usage?.rows ?? []).length > 0 && <ul className="usage-list">{usage!.rows.map(row => <li key={`${row.provider}-${row.model}-${row.unit}-${row.costClass}`}><strong>{row.model}</strong><small>{Math.round(row.quantity)} {row.unit === 'token' ? 'tokens' : row.unit} · {row.costClass}</small></li>)}</ul>}
+    <div className="usage-ledger">
+      <span>Usage ledger</span>
+      {(usage?.rows ?? []).length === 0 && usage !== undefined && <p>No metered usage yet. Chat, images, and voice will appear here.</p>}
+      {(usage?.rows ?? []).length > 0 && <ul className="usage-list">{usage!.rows.map(row => <li key={`${row.provider}-${row.model}-${row.unit}-${row.costClass}`}><strong>{row.model}</strong><small>{formatUsageQuantity(row.quantity, row.unit)} · {row.costClass}</small></li>)}</ul>}
+      {(usage?.entries ?? []).length > 0 && <ul className="usage-entries">{usage!.entries.map(entry => <li key={entry._id}><strong>{entry.costClass}</strong><small>{formatUsageQuantity(entry.quantity, entry.unit)} · {entry.model} · {formatRelativeTime(entry.createdAt)}</small></li>)}</ul>}
+    </div>
   </div>
 }
 
@@ -1038,6 +1043,13 @@ function clearGmailCallback() {
   url.searchParams.delete('connected_account_id')
   url.searchParams.delete('connectedAccountId')
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+function formatUsageQuantity(quantity: number, unit: string) {
+  if (unit === 'token') return `${Math.round(quantity)} tokens`
+  if (unit === 'audio_hour') return `${Math.max(1, Math.round(quantity * 60))} min audio`
+  if (unit === 'request') return `${Math.round(quantity)} ${Math.round(quantity) === 1 ? 'request' : 'requests'}`
+  return `${quantity.toFixed(quantity >= 10 ? 0 : 2)} ${unit}`
 }
 
 function formatRelativeTime(timestamp: number) {

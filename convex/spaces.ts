@@ -213,6 +213,15 @@ export const usageBreakdown = query({
     rows: v.array(v.object({
       provider: v.string(), model: v.string(), unit: v.string(), quantity: v.number(), costClass: v.string(),
     })),
+    entries: v.array(v.object({
+      _id: v.id("usageLedger"),
+      createdAt: v.number(),
+      provider: v.string(),
+      model: v.string(),
+      unit: v.string(),
+      quantity: v.number(),
+      costClass: v.string(),
+    })),
   }),
   handler: async (ctx, { spaceId }) => {
     await requireSpacePermission(ctx, spaceId, "manage_members");
@@ -227,7 +236,20 @@ export const usageBreakdown = query({
       if (existing) existing.quantity += row.quantity;
       else grouped.set(key, { provider: row.provider, model, unit: row.unit, quantity: row.quantity, costClass: row.costClass });
     }
-    return { tier: tier.id, model: tier.model, rows: [...grouped.values()] };
+    return {
+      tier: tier.id,
+      model: tier.model,
+      rows: [...grouped.values()],
+      entries: ledger.slice(0, 40).map(row => ({
+        _id: row._id,
+        createdAt: row.createdAt,
+        provider: row.provider,
+        model: row.model ?? "unknown",
+        unit: row.unit,
+        quantity: row.quantity,
+        costClass: row.costClass,
+      })),
+    };
   },
 });
 

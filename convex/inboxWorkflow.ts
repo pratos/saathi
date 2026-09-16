@@ -1,4 +1,4 @@
-import { vResultValidator, vWorkflowId, WorkflowManager } from "@convex-dev/workflow";
+import { start, vResultValidator, vWorkflowId, WorkflowManager } from "@convex-dev/workflow";
 import { z } from "zod";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -55,6 +55,18 @@ export const processInboxItem = workflow
       processingNotes: documents.notes || extraction.notes,
     }, { inline: true });
   });
+
+export const enqueue = internalMutation({
+  args: { inboxItemId: v.id("inboxItems") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await start(ctx, internal.inboxWorkflow.processInboxItem, args, {
+      onComplete: internal.inboxWorkflow.handleComplete,
+      context: args,
+    });
+    return null;
+  },
+});
 
 export const markProcessing = internalMutation({
   args: { inboxItemId: v.id("inboxItems") },

@@ -52,6 +52,30 @@ export const register = internalMutation({
   },
 });
 
+const gmailConnectionDoc = v.object({
+  _id: v.id("gmailConnections"),
+  _creationTime: v.number(),
+  spaceId: v.id("spaces"),
+  userId: v.id("users"),
+  connectedAccountId: v.string(),
+  alias: v.string(),
+  email: v.optional(v.string()),
+  triggerId: v.string(),
+  status: v.union(v.literal("active"), v.literal("error")),
+  createdAt: v.number(),
+  lastSyncedAt: v.optional(v.number()),
+});
+
+export const mineInternal = internalQuery({
+  args: { spaceId: v.id("spaces"), userId: v.id("users") },
+  returns: v.array(gmailConnectionDoc),
+  handler: async (ctx, { spaceId, userId }) => {
+    const principal = await requireSpacePermission(ctx, spaceId, "read");
+    if (principal.userId !== userId) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail list belongs to another user" });
+    return ctx.db.query("gmailConnections").withIndex("by_space_user", q => q.eq("spaceId", spaceId).eq("userId", userId)).take(20);
+  },
+});
+
 export const connectionForProcessing = internalQuery({
   args: { connectionId: v.id("gmailConnections") },
   handler: async (ctx, { connectionId }) => ctx.db.get(connectionId),
@@ -60,7 +84,7 @@ export const connectionForProcessing = internalQuery({
 export const saveClassification = internalMutation({
   args: {
     connectionId: v.id("gmailConnections"), externalMessageId: v.string(), threadId: v.string(),
-    sender: v.string(), subject: v.string(), text: v.string(), receivedAt: v.number(), useful: v.boolean(),
+    sender: v.string(), subject: v.string(), text: v.string(), html: v.optional(v.string()), receivedAt: v.number(), useful: v.boolean(),
     summary: v.string(), category, amount: v.optional(v.string()), merchant: v.optional(v.string()),
   },
   returns: v.union(v.id("inboxItems"), v.null()),
@@ -83,11 +107,13 @@ export const saveClassification = internalMutation({
       sender: args.sender,
       subject: args.subject,
       originalText: args.text,
+      originalHtml: args.html,
       visibility: "private",
       privateOwnerId: connection.userId,
       category: args.category,
-      status: "ready",
+      status: "received",
       extractedAmount: args.amount,
+      extractedMerchant: args.merchant,
       receivedAt: args.receivedAt,
     });
     await ctx.db.insert("messages", {
@@ -108,6 +134,7 @@ export const saveClassification = internalMutation({
       resourceId: String(inboxItemId),
       createdAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(0, internal.inboxWorkflow.enqueue, { inboxItemId });
     return inboxItemId;
   },
 });
@@ -135,7 +162,11 @@ export const shareWithFamily = mutation({
       .filter(q => q.eq(q.field("type"), "shared")).first();
     if (!familyRoom) throw new ConvexError({ code: "NOT_FOUND", message: "This family does not have a shared conversation yet" });
     const now = Date.now();
-    await ctx.db.patch(item._id, { visibility: "space", sharedAt: now, sharedByUserId: userId, roomId: familyRoom._id });
+    await ctx.db.patch(item._id, {
+      visibility: "space", sharedAt: now, sharedByUserId: userId, roomId: familyRoom._id,
+      status: item.documentParseStatus ? item.status : "received",
+      heartbeatMessageId: undefined,
+    });
     await ctx.db.insert("messages", {
       spaceId: item.spaceId,
       roomId: familyRoom._id,
@@ -172,6 +203,9 @@ export const shareWithFamily = mutation({
       resourceId: String(item._id),
       createdAt: now,
     });
+    if (!item.documentParseStatus || item.documentParseStatus === "none") {
+      await ctx.scheduler.runAfter(0, internal.inboxWorkflow.enqueue, { inboxItemId: item._id });
+    }
     return item._id;
   },
 });

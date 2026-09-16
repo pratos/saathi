@@ -76,6 +76,9 @@ describe("family inbox processing", () => {
       category: "bills", status: "ready", direction: "incoming", documentParseStatus: "parsed", extractedMerchant: "BEST",
     });
     expect(item?.heartbeatMessageId).toBeTruthy();
+    await owner.mutation(api.inbox.reprocess, { inboxItemId: seeded.inboxItemId });
+    const reprocessed = await t.run(ctx => ctx.db.get(seeded.inboxItemId));
+    expect(reprocessed?.status).toBe("received");
     const usage = await owner.query(api.spaces.usageBreakdown, { spaceId: seeded.spaceId });
     expect(usage.tier).toBe("med");
     expect(usage.rows.some(row => row.costClass === "email_extraction")).toBe(true);

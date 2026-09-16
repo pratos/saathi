@@ -917,6 +917,7 @@ button { border: 0; background: none; color: inherit; }
 .connect-gmail { width: 100%; min-height: 42px !important; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 9px; border-radius: 11px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
 .connect-gmail svg { width: 17px; }
 .connect-gmail:disabled { cursor: wait; opacity: .62; }
+.connect-gmail.secondary { color: var(--text-warm); background: #2a3730; }
 .gmail-status { display: block; margin-top: 8px; color: #c5cec8; font-size: 11px; line-height: 1.4; }
 .food-budget p { margin: 7px 0 10px; color: var(--text-soft); font-size: 12px; line-height: 1.45; }
 .food-budget strong { display: block; color: var(--text-warm); font-size: 13px; }

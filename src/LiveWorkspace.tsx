@@ -145,6 +145,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const [budgetBusy, setBudgetBusy] = useState(false)
   const beginGmailConnection = useAction(api.gmail.beginConnection)
   const confirmGmailConnection = useAction(api.gmail.confirmConnection)
+  const checkGmailNow = useAction(api.gmail.checkNow)
   const [membersOpen, setMembersOpen] = useState(false)
   const [selectedRoomId, setSelectedRoomId] = useState<Id<'rooms'> | null>(null)
   const [gmailBusy, setGmailBusy] = useState(false)
@@ -321,6 +322,14 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <section className="gmail-connections"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi. Other family members cannot see your connected accounts.</p>
           {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><Check /></div>)}
           <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
+          {(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary" onClick={() => {
+            setGmailBusy(true)
+            setGmailMessage('Checking connected Gmail…')
+            void checkGmailNow({ spaceId: family.space._id })
+              .then(count => setGmailMessage(count ? 'Checking inboxes now. New bills and receipts appear in My Saathi first.' : 'No Gmail accounts are connected yet.'))
+              .catch(() => setGmailMessage('Could not check Gmail right now.'))
+              .finally(() => setGmailBusy(false))
+          }} disabled={gmailBusy}>Check for new mail</button>}
           {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
         </section>
         <section className="food-budget">
@@ -859,6 +868,7 @@ function LiveStatus({ message }: { message: string }) {
 function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Doc<'inboxItems'>[] | undefined; onBack: () => void }) {
   const confirmAction = useMutation(api.inbox.confirmAction)
   const dismissAction = useMutation(api.inbox.dismissAction)
+  const reprocess = useMutation(api.inbox.reprocess)
   return <section className="conversation-pane">
     <header className="conversation-header live-room-header">
       <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
@@ -884,6 +894,9 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {item.actionStatus === 'suggested' && <div className="inbox-actions">
               <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Confirm action</button>
               <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Not now</button>
+            </div>}
+            {item.actionStatus !== 'suggested' && <div className="inbox-actions">
+              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attachments</button>
             </div>}
             {item.actionStatus === 'confirmed' && <small>Action confirmed for the family.</small>}
           </div>

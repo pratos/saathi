@@ -62,6 +62,8 @@ describe("family inbox processing", () => {
       inboxItemId: seeded.inboxItemId,
       category: "bills",
       amount: "1200",
+      amountInr: "1200",
+      amountUsd: null,
       dueAt: 1_800_000_000_000,
       merchant: "BEST",
       period: "Sep 2026",
@@ -78,7 +80,7 @@ describe("family inbox processing", () => {
     expect(item?.heartbeatMessageId).toBeTruthy();
     await owner.mutation(api.inbox.reprocess, { inboxItemId: seeded.inboxItemId });
     const reprocessed = await t.run(ctx => ctx.db.get(seeded.inboxItemId));
-    expect(reprocessed?.status).toBe("received");
+    expect(reprocessed?.status).toBe("processing");
     const usage = await owner.query(api.spaces.usageBreakdown, { spaceId: seeded.spaceId });
     expect(usage.tier).toBe("med");
     expect(usage.rows.some(row => row.costClass === "email_extraction")).toBe(true);

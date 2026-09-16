@@ -17,27 +17,30 @@ export const food = query({
       monthlyLimit: budget?.monthlyLimit ?? null,
       spentThisMonth,
       remaining: budget ? Math.max(0, budget.monthlyLimit - spentThisMonth) : null,
-      currency: "INR" as const,
+      currency: budget?.currency ?? "INR",
     };
   },
 });
 
 export const setFoodLimit = mutation({
-  args: { spaceId: v.id("spaces"), monthlyLimit: v.number() },
+  args: { spaceId: v.id("spaces"), monthlyLimit: v.number(), currency: v.optional(v.union(v.literal("INR"), v.literal("USD"))) },
   returns: v.id("familyBudgets"),
-  handler: async (ctx, { spaceId, monthlyLimit }) => {
+  handler: async (ctx, { spaceId, monthlyLimit, currency }) => {
     const { userId } = await requireSpacePermission(ctx, spaceId, "manage_members");
-    if (!Number.isFinite(monthlyLimit) || monthlyLimit < 500 || monthlyLimit > 1_000_000) {
-      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Set a monthly food budget between ₹500 and ₹10,00,000" });
+    const chosen = currency ?? "INR";
+    const min = chosen === "USD" ? 20 : 500;
+    const max = chosen === "USD" ? 20_000 : 1_000_000;
+    if (!Number.isFinite(monthlyLimit) || monthlyLimit < min || monthlyLimit > max) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: chosen === "USD" ? "Set a monthly food budget between $20 and $20,000" : "Set a monthly food budget between ₹500 and ₹10,00,000" });
     }
     const existing = await ctx.db.query("familyBudgets").withIndex("by_space_category", q => q.eq("spaceId", spaceId).eq("category", "food")).unique();
     const now = Date.now();
     if (existing) {
-      await ctx.db.patch(existing._id, { monthlyLimit, updatedBy: userId, updatedAt: now });
+      await ctx.db.patch(existing._id, { monthlyLimit, currency: chosen, updatedBy: userId, updatedAt: now });
       return existing._id;
     }
     return await ctx.db.insert("familyBudgets", {
-      spaceId, category: "food", monthlyLimit, currency: "INR", updatedBy: userId, updatedAt: now,
+      spaceId, category: "food", monthlyLimit, currency: chosen, updatedBy: userId, updatedAt: now,
     });
   },
 });

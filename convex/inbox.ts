@@ -60,7 +60,7 @@ export const reprocess = mutation({
   handler: async (ctx, { inboxItemId }) => {
     const { item } = await requireInboxItemPermission(ctx, inboxItemId, "read");
     if (item.visibility !== "space") throw new ConvexError({ code: "FORBIDDEN", message: "Only shared family inbox items can be reprocessed here" });
-    await ctx.db.patch(item._id, { status: "received", heartbeatMessageId: undefined });
+    await ctx.db.patch(item._id, { status: "processing", heartbeatMessageId: undefined });
     await ctx.scheduler.runAfter(0, internal.inboxWorkflow.enqueue, { inboxItemId: item._id });
     return item._id;
   },

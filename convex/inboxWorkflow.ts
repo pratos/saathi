@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { env, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { parsePublicDocument } from "./lib/firecrawlParse";
-import { extractPasswordHints, findDocumentUrls, inferDirection } from "./lib/inboxExtract";
+import { attachmentHint, extractPasswordHints, findDocumentUrls, inferDirection } from "./lib/inboxExtract";
 
 const category = v.union(
   v.literal("bills"),
@@ -27,6 +27,8 @@ const actionValidator = v.object({
 const extractionSchema = z.object({
   category: z.enum(["bills", "school", "travel", "subscriptions", "home", "receipts", "bank", "needs_review"]),
   amount: z.string().nullable(),
+  amountInr: z.string().nullable(),
+  amountUsd: z.string().nullable(),
   dueAt: z.number().int().positive().nullable(),
   merchant: z.string().nullable(),
   period: z.string().nullable(),
@@ -108,10 +110,24 @@ export const parseDocuments = internalAction({
     status: v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed")),
     notes: v.string(),
   }),
-  handler: async (ctx, args) => {
-    const item = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
+  handler: async (ctx, args): Promise<{ markdown: string; status: "none" | "parsed" | "password" | "failed"; notes: string }> => {
+    const item: {
+      subject: string;
+      originalText: string;
+      originalHtml: string | null;
+      sender: string;
+      familyInboxId: string | null;
+    } = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
     const urls = findDocumentUrls(item.originalHtml ?? "", item.originalText);
-    if (urls.length === 0) return { markdown: "", status: "none" as const, notes: "" };
+    if (urls.length === 0) {
+      return {
+        markdown: "",
+        status: "none" as const,
+        notes: attachmentHint(item.originalHtml ?? "", item.originalText, item.subject)
+          ? "This email mentions a PDF or invoice, but no public document link was available to parse."
+          : "",
+      };
+    }
     const apiKey = env.FIRECRAWL_API_KEY;
     if (!apiKey) return { markdown: "", status: "failed" as const, notes: "Document parsing needs FIRECRAWL_API_KEY." };
     const parsed: string[] = [];
@@ -141,6 +157,8 @@ export const extract = internalAction({
   returns: v.object({
     category,
     amount: v.union(v.string(), v.null()),
+    amountInr: v.union(v.string(), v.null()),
+    amountUsd: v.union(v.string(), v.null()),
     dueAt: v.union(v.number(), v.null()),
     merchant: v.union(v.string(), v.null()),
     period: v.union(v.string(), v.null()),
@@ -156,6 +174,8 @@ export const extract = internalAction({
       return {
         category: "needs_review" as const,
         amount: null,
+        amountInr: null,
+        amountUsd: null,
         dueAt: null,
         merchant: null,
         period: null,
@@ -173,7 +193,7 @@ export const extract = internalAction({
         input: [
           {
             role: "system",
-            content: "Classify this household email. Extract only explicitly stated amount, due date, merchant, and billing period. direction is incoming unless the family clearly sent money or placed the order. Suggest confirmable household actions such as unsubscribe, pay_bill, or review_statement. Never invent URLs. dueAt must be a Unix timestamp in milliseconds or null.",
+            content: "Classify this household email. Subscriptions, tax invoices, and software receipts are purchases. Extract the exact paid amount in INR and USD when stated (amountInr, amountUsd), plus merchant and billing period. direction is incoming unless the family clearly sent money. Suggest confirmable household actions such as unsubscribe, pay_bill, or review_statement. Never invent URLs. dueAt must be a Unix timestamp in milliseconds or null.",
           },
           {
             role: "user",
@@ -188,10 +208,12 @@ export const extract = internalAction({
             schema: {
               type: "object",
               additionalProperties: false,
-              required: ["category", "amount", "dueAt", "merchant", "period", "direction", "notes", "actions"],
+              required: ["category", "amount", "amountInr", "amountUsd", "dueAt", "merchant", "period", "direction", "notes", "actions"],
               properties: {
                 category: { type: "string", enum: ["bills", "school", "travel", "subscriptions", "home", "receipts", "bank", "needs_review"] },
                 amount: { type: ["string", "null"] },
+                amountInr: { type: ["string", "null"] },
+                amountUsd: { type: ["string", "null"] },
                 dueAt: { type: ["integer", "null"] },
                 merchant: { type: ["string", "null"] },
                 period: { type: ["string", "null"] },
@@ -240,6 +262,8 @@ export const applyExtraction = internalMutation({
     inboxItemId: v.id("inboxItems"),
     category,
     amount: v.union(v.string(), v.null()),
+    amountInr: v.union(v.string(), v.null()),
+    amountUsd: v.union(v.string(), v.null()),
     dueAt: v.union(v.number(), v.null()),
     merchant: v.union(v.string(), v.null()),
     period: v.union(v.string(), v.null()),
@@ -278,7 +302,9 @@ export const applyExtraction = internalMutation({
     }
     await ctx.db.patch(item._id, {
       category: args.category,
-      extractedAmount: args.amount ?? undefined,
+      extractedAmount: args.amount ?? args.amountInr ?? args.amountUsd ?? undefined,
+      extractedAmountInr: args.amountInr ?? undefined,
+      extractedAmountUsd: args.amountUsd ?? undefined,
       extractedDueAt: args.dueAt ?? undefined,
       extractedMerchant: args.merchant ?? undefined,
       extractedPeriod: args.period ?? undefined,

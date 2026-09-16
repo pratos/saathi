@@ -142,6 +142,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const setFoodLimit = useMutation(api.budget.setFoodLimit)
   const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
   const [budgetDraft, setBudgetDraft] = useState('')
+  const [budgetCurrency, setBudgetCurrency] = useState<'INR' | 'USD'>('INR')
   const [budgetBusy, setBudgetBusy] = useState(false)
   const beginGmailConnection = useAction(api.gmail.beginConnection)
   const confirmGmailConnection = useAction(api.gmail.confirmConnection)
@@ -222,20 +223,20 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
     setPane(next)
     setMobileNav('detail')
   }
-  const mobileScreen = pane === 'family'
+  const mobileScreen = pane === 'family' && mobileNav === 'detail'
     ? 'family'
     : pane === 'updates' || pane === 'files' || mobileNav === 'detail'
       ? 'detail'
       : 'home'
 
   return (
-    <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}`}>
+    <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
         <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
-        <button className="rail-profile" onClick={() => openPane('family')} aria-label="Family admin">{initials}</button>
+        <button className="rail-profile" onClick={() => void signOut()} aria-label="Sign out">{initials}</button>
       </aside>
 
       <aside className="conversation-list live-conversation-list">
@@ -270,23 +271,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
             </button>
           ))}
         </div>
-        <span className="list-heading section-gap">Image presets</span>
-        <div className="image-preset-picker" role="radiogroup" aria-label="Preferred image preset">
-          {IMAGE_PRESET_GROUPS.map(group => (
-            <section key={group}>
-              <span>{imagePresetGroupLabel(group)}</span>
-              <div>
-                {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => (
-                  <button type="button" key={preset.id} role="radio" aria-checked={(user?.preferredImageStyle ?? 'warm_family') === preset.id} className={(user?.preferredImageStyle ?? 'warm_family') === preset.id ? 'selected' : ''} onClick={() => void setPreferredLanguage({ preferredImageStyle: preset.id })}>
-                    <strong>{preset.label}</strong>
-                    <small>{preset.hint}</small>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-        <button className="dark-sign-out" onClick={() => openPane('family')}><Settings2 /> Family admin</button>
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
@@ -335,8 +319,13 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <section className="food-budget">
           <span>Food budget</span>
           <p>Approved food receipts, including Swiggy and Zomato, count toward this monthly budget.</p>
-          <strong>{foodBudget?.monthlyLimit != null ? `₹${Math.round(foodBudget.spentThisMonth)} of ₹${Math.round(foodBudget.monthlyLimit)} this month` : `₹${Math.round(foodBudget?.spentThisMonth ?? 0)} tracked this month`}</strong>
-          {family.membership.role === 'owner' && <form onSubmit={(event) => { event.preventDefault(); const monthlyLimit = Number(budgetDraft); if (!monthlyLimit) return; setBudgetBusy(true); void setFoodLimit({ spaceId: family.space._id, monthlyLimit }).then(() => setBudgetDraft('')).finally(() => setBudgetBusy(false)) }}><input type="number" min={500} max={1000000} placeholder="Monthly limit in ₹" value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} aria-label="Monthly food budget" /><button type="submit" disabled={budgetBusy || !budgetDraft}>{budgetBusy ? 'Saving…' : 'Set limit'}</button></form>}
+          <strong>{foodBudget?.monthlyLimit != null ? `${foodBudget.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget.spentThisMonth)} of ${foodBudget.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget.monthlyLimit)} this month` : `${foodBudget?.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget?.spentThisMonth ?? 0)} tracked this month`}</strong>
+          {family.membership.role === 'owner' && <form onSubmit={(event) => { event.preventDefault(); const monthlyLimit = Number(budgetDraft); if (!monthlyLimit) return; setBudgetBusy(true); void setFoodLimit({ spaceId: family.space._id, monthlyLimit, currency: budgetCurrency }).then(() => setBudgetDraft('')).finally(() => setBudgetBusy(false)) }}>
+            <div className="chip-row" role="radiogroup" aria-label="Budget currency">
+              {(['INR', 'USD'] as const).map(code => <button type="button" key={code} role="radio" aria-checked={budgetCurrency === code} className={budgetCurrency === code ? 'selected' : ''} onClick={() => setBudgetCurrency(code)}>{code}</button>)}
+            </div>
+            <input type="number" min={budgetCurrency === 'USD' ? 20 : 500} max={budgetCurrency === 'USD' ? 20000 : 1000000} placeholder={budgetCurrency === 'USD' ? 'Monthly limit in $' : 'Monthly limit in ₹'} value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} aria-label="Monthly food budget" /><button type="submit" disabled={budgetBusy || !budgetDraft}>{budgetBusy ? 'Saving…' : 'Set limit'}</button>
+          </form>}
         </section>
         {family.membership.role === 'owner' && <section><span>Family model</span><ModelTierControls spaceId={family.space._id} /></section>}
         {family.membership.role === 'owner' && <section><span>Your keys</span><ByokKeys spaceId={family.space._id} /></section>}
@@ -347,7 +336,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
         <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
         <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
-        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')}><Settings2 /><span>Family</span></button>
+        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-label="Family admin"><Settings2 /><span>Admin</span></button>
       </nav>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
@@ -372,6 +361,10 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   const pendingMoney = useQuery(api.gmailData.pendingForRoom, room.type === 'private' ? { roomId: room._id } : 'skip')
   const shareMoney = useMutation(api.gmailData.shareWithFamily)
   const [message, setMessage] = useState('')
+  const [imageDraft, setImageDraft] = useState('')
+  const [imageOpen, setImageOpen] = useState(false)
+  const profile = useQuery(api.users.current)
+  const [imageStyle, setImageStyle] = useState<(typeof IMAGE_PRESETS)[number]['id']>(profile?.preferredImageStyle ?? 'warm_family')
   const [busy, setBusy] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [error, setError] = useState('')
@@ -397,6 +390,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: 'end' })
   }, [messages?.length, generatedImages?.length, attachments?.length, activeJob?.responseText, activeJob?.status, activeJob?.computerInteractiveLiveViewUrl, activeJob?.computerLiveViewUrl])
+
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -601,9 +595,26 @@ function LiveRoom({ room, family, onBack, onInvite }: {
             <button type="button" onClick={() => cameraInputRef.current?.click()}><Camera /> Camera</button>
             <button type="button" onClick={() => receiptInputRef.current?.click()}><FileText /> Receipt</button>
             <button type="button" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</button>
+            <button type="button" onClick={() => setImageOpen(current => !current)}><Sparkles /> Create image</button>
           </div>
           <span>Enter to send · Drop photos or documents here</span>
         </div>
+        {imageOpen && <ImagePromptBox
+          prompt={imageDraft}
+          style={imageStyle}
+          onPrompt={setImageDraft}
+          onStyle={setImageStyle}
+          onCancel={() => setImageOpen(false)}
+          onApprove={() => {
+            const text = imageDraft.trim()
+            if (!text) return
+            const preset = IMAGE_PRESETS.find(item => item.id === imageStyle)
+            setMessage(`@saathi Create an image in the ${preset?.label ?? 'Warm household'} style: ${text}`)
+            setImageOpen(false)
+            setImageDraft('')
+            requestAnimationFrame(() => textareaRef.current?.focus())
+          }}
+        />}
         <form onSubmit={submit}>
           <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files, 'library')} />
           <input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => chooseFiles(event.target.files, 'camera')} />
@@ -690,6 +701,39 @@ function AssistantText({ text }: { text: string }) {
       ? <a href={href} target="_blank" rel="noreferrer">{children}</a>
       : <span>{children}</span>,
   }}>{text}</ReactMarkdown></div>
+}
+
+function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove }: {
+  prompt: string
+  style: (typeof IMAGE_PRESETS)[number]['id']
+  onPrompt: (value: string) => void
+  onStyle: (value: (typeof IMAGE_PRESETS)[number]['id']) => void
+  onCancel: () => void
+  onApprove: () => void
+}) {
+  return <div className="image-prompt-box" role="dialog" aria-label="Create an image">
+    <label htmlFor="image-prompt">What should Saathi draw?</label>
+    <textarea id="image-prompt" value={prompt} onChange={event => onPrompt(event.target.value)} rows={2} placeholder="A family rangoli by the door, in Hindi labels…" />
+    <div className="image-preset-picker compact" role="radiogroup" aria-label="Image style">
+      {IMAGE_PRESET_GROUPS.map(group => (
+        <section key={group}>
+          <span>{imagePresetGroupLabel(group)}</span>
+          <div>
+            {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => (
+              <button type="button" key={preset.id} role="radio" aria-checked={style === preset.id} className={style === preset.id ? 'selected' : ''} onClick={() => onStyle(preset.id)}>
+                <strong>{preset.label}</strong>
+                <small>{preset.hint}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+    <div className="inbox-actions">
+      <button type="button" onClick={onApprove} disabled={!prompt.trim()}>Use this style</button>
+      <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+    </div>
+  </div>
 }
 
 function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
@@ -884,9 +928,12 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
           <div className="simple-message">
             <p>{displaySender(item.sender)}</p>
             {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
-            {item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
+            {item.extractedAmountInr && <p>INR: {item.extractedAmountInr}</p>}
+            {item.extractedAmountUsd && <p>USD: {item.extractedAmountUsd}</p>}
+            {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
             {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
             {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
+            {item.status === 'processing' && <p>Reading attachments…</p>}
             {item.documentParseStatus === 'parsed' && <p>Attached document read with Firecrawl Parse.</p>}
             {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
@@ -896,7 +943,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
               <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Not now</button>
             </div>}
             {item.actionStatus !== 'suggested' && <div className="inbox-actions">
-              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attachments</button>
+              <button type="button" className="secondary" disabled={item.status === 'processing'} onClick={() => void reprocess({ inboxItemId: item._id })}>{item.status === 'processing' ? 'Reading…' : 'Read attachments'}</button>
             </div>}
             {item.actionStatus === 'confirmed' && <small>Action confirmed for the family.</small>}
           </div>

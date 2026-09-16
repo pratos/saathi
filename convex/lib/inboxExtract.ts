@@ -3,6 +3,8 @@ const PASSWORD_LINE = /(?:password|passcode|passwd|pdf\s*password)\s*[:-]\s*([^\
 const HINT_LINE = /(?:password|passcode).{0,40}(?:invoice|policy|account|customer|reference|dob|date of birth|phone|mobile).{0,40}/i;
 const SENSITIVE_HINT = /\b(?:\d{12,19}|cvv|otp)\b/i;
 
+const ATTACHMENT_HINT = /\b(pdf|invoice|attachment|tax invoice|receipt)\b/i;
+
 export function findDocumentUrls(html: string, text: string) {
   const found = new Set<string>();
   for (const match of `${html}\n${text}`.matchAll(PDF_URL)) {
@@ -11,6 +13,10 @@ export function findDocumentUrls(html: string, text: string) {
     if (found.size >= 2) break;
   }
   return [...found];
+}
+
+export function attachmentHint(html: string, text: string, subject: string) {
+  return ATTACHMENT_HINT.test(`${subject}\n${html}\n${text}`);
 }
 
 export function extractPasswordHints(subject: string, text: string) {

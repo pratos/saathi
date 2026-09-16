@@ -154,6 +154,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const [pane, setPane] = useState<'chats' | 'updates' | 'files' | 'family'>('chats')
   const [mobileNav, setMobileNav] = useState<'home' | 'detail'>('home')
   const [copiedInbox, setCopiedInbox] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
   const createSpace = useMutation(api.spaces.create)
   const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
@@ -236,7 +237,15 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
         <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
-        <button className="rail-profile" onClick={() => void signOut()} aria-label="Sign out">{initials}</button>
+        <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Family admin"><Settings2 /><span>Admin</span></button>
+        <div className="rail-session">
+          <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
+          {profileOpen && <div className="session-menu" role="menu">
+            <p>{user?.email ?? user?.displayName ?? 'Signed in'}</p>
+            <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /> Family admin</button>
+            <button type="button" role="menuitem" onClick={() => void signOut()}><LogOut /> Sign out</button>
+          </div>}
+        </div>
       </aside>
 
       <aside className="conversation-list live-conversation-list">
@@ -292,10 +301,10 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <div className="context-title"><h2>Family admin</h2><button onClick={onExit}>Switch mode</button></div>
         <section>
           <span>Families</span>
-          <p>You can own up to 3 family spaces.</p>
-          {ownedFamilyCount < 3
+          <p>{family.membership.role === 'owner' ? 'You can own up to 3 family spaces.' : 'Connect your Gmail here. Only owners can change family-wide settings.'}</p>
+          {family.membership.role === 'owner' && (ownedFamilyCount < 3
             ? <button type="button" className="connect-gmail" onClick={() => setCreateFamilyOpen(true)}><Plus /> Create another family</button>
-            : <small className="gmail-status">You already own 3 families.</small>}
+            : <small className="gmail-status">You already own 3 families.</small>)}
         </section>
         <section><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
         <section><span>Family inbox</span>{family.space.agentmailInboxId

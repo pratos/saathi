@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import ReactMarkdown from 'react-markdown'
@@ -9,6 +9,7 @@ import {
   AtSign,
   Bell,
   Bot,
+  Camera,
   Check,
   Copy,
   FileText,
@@ -19,6 +20,7 @@ import {
   MessageSquareText,
   Mic,
   MicOff,
+  Monitor,
   Paperclip,
   PhoneOff,
   Plus,
@@ -32,6 +34,8 @@ import {
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
 import type { Doc, Id } from '../convex/_generated/dataModel'
+import { IMAGE_PRESET_GROUPS, IMAGE_PRESETS } from '../convex/lib/imageSafety'
+import { VoiceBlob } from './VoiceBlob'
 import { useLiveVoice, type VoiceStatus, type VoiceTurn } from './useLiveVoice'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
@@ -39,7 +43,8 @@ type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; 
 
 const ACCEPTED_ATTACHMENTS = 'image/jpeg,image/png,image/webp,image/gif,image/heic,application/pdf,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
 const SUPPORTED_ATTACHMENT_TYPES = new Set(ACCEPTED_ATTACHMENTS.split(','))
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024
+const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 
 export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
@@ -144,8 +149,12 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const [selectedRoomId, setSelectedRoomId] = useState<Id<'rooms'> | null>(null)
   const [gmailBusy, setGmailBusy] = useState(false)
   const [gmailMessage, setGmailMessage] = useState('')
-  const [pane, setPane] = useState<'chats' | 'updates' | 'files'>('chats')
+  const [pane, setPane] = useState<'chats' | 'updates' | 'files' | 'family'>('chats')
+  const [mobileNav, setMobileNav] = useState<'home' | 'detail'>('home')
   const [copiedInbox, setCopiedInbox] = useState(false)
+  const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
+  const createSpace = useMutation(api.spaces.create)
+  const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
   const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
   const setPreferredLanguage = useMutation(api.users.ensureCurrent)
   const gmailCallbackHandled = useRef(false)
@@ -199,55 +208,110 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [membersOpen])
 
+  const openHome = () => {
+    setPane('chats')
+    setMobileNav('home')
+  }
+  const openRoom = (roomId: Id<'rooms'>) => {
+    setSelectedRoomId(roomId)
+    setPane('chats')
+    setMobileNav('detail')
+  }
+  const openPane = (next: 'updates' | 'files' | 'family') => {
+    setPane(next)
+    setMobileNav('detail')
+  }
+  const mobileScreen = pane === 'family'
+    ? 'family'
+    : pane === 'updates' || pane === 'files' || mobileNav === 'detail'
+      ? 'detail'
+      : 'home'
+
   return (
-    <main className="saath-workspace live-conversation-workspace">
+    <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
-        <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={() => setPane('chats')}><MessageSquareText /><span>Chats</span></button>
-        <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => setPane('updates')}><Bell /><span>Updates</span></button>
-        <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => setPane('files')}><Folder /><span>Files</span></button>
-        <button className="rail-profile" onClick={() => void signOut()} aria-label="Sign out">{initials}</button>
+        <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
+        <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
+        <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
+        <button className="rail-profile" onClick={() => openPane('family')} aria-label="Family admin">{initials}</button>
       </aside>
 
       <aside className="conversation-list live-conversation-list">
-        <label className="family-select-label" htmlFor="family-switcher">Current family</label>
-        <select id="family-switcher" className="dark-family-select" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>
-          {families.map(({ space }) => <option key={space._id} value={space._id}>{space.name}</option>)}
-        </select>
+        <div className="mobile-home-header">
+          <h1>Chats</h1>
+          <button type="button" onClick={() => openPane('family')} aria-label="Family admin"><Settings2 /></button>
+        </div>
+        <span className="family-select-label" id="family-switcher-label">Current family</span>
+        <div className="family-switcher" role="group" aria-labelledby="family-switcher-label">
+          {families.map(({ space }) => (
+            <button type="button" key={space._id} className={space._id === family.space._id ? 'selected' : ''} onClick={() => onSelectFamily(space._id)}>
+              {space.name}
+            </button>
+          ))}
+        </div>
         <span className="list-heading">Personal</span>
         {personalRoom
-          ? <button className={`conversation-link personal-chat-link ${personalRoom._id === selectedRoom?._id ? 'selected' : ''}`} onClick={() => setSelectedRoomId(personalRoom._id)}><Bot /><span>My Saathi</span><small>Only you</small></button>
+          ? <button className={`conversation-link personal-chat-link ${personalRoom._id === selectedRoom?._id ? 'selected' : ''}`} onClick={() => openRoom(personalRoom._id)}><Bot /><span>My Saathi<small>Only you</small></span></button>
           : <p className="dark-empty-copy">Preparing your private chat…</p>}
         <span className="list-heading section-gap">Family chats</span>
         {(rooms ?? []).flatMap(({ room }) => room && room.type !== 'private' ? [room] : []).map((room) => (
-          <button className={`conversation-link ${room._id === selectedRoom?._id ? 'selected' : ''}`} key={room._id} onClick={() => setSelectedRoomId(room._id)}><i /><span>{room.title}</span></button>
+          <button className={`conversation-link ${room._id === selectedRoom?._id ? 'selected' : ''}`} key={room._id} onClick={() => openRoom(room._id)}><i /><span>{room.title}</span></button>
         ))}
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
         <span className="list-heading section-gap">Updates</span>
-        <button className={`conversation-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => setPane('updates')}><i /><span>Family inbox</span><b>{inboxItems?.length ?? 0}</b></button>
+        <button className={`conversation-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => openPane('updates')}><i /><span>Family inbox</span><b>{inboxItems?.length ?? 0}</b></button>
         <span className="list-heading section-gap">My reading language</span>
-        <label className="language-setting" htmlFor="reading-language"><strong>{languageLabel(user?.preferredLanguage)}</strong>
-          <select id="reading-language" value={user?.preferredLanguage ?? 'en'} onChange={(event) => void setPreferredLanguage({ preferredLanguage: event.target.value as 'en' | 'hi' | 'mr' })} aria-label="My reading language">
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-            <option value="mr">Marathi</option>
-          </select>
-        </label>
+        <div className="language-setting" role="radiogroup" aria-label="My reading language">
+          {(['en', 'hi', 'mr'] as const).map(code => (
+            <button type="button" key={code} role="radio" aria-checked={(user?.preferredLanguage ?? 'en') === code} className={(user?.preferredLanguage ?? 'en') === code ? 'selected' : ''} onClick={() => void setPreferredLanguage({ preferredLanguage: code })}>
+              {languageLabel(code)}
+            </button>
+          ))}
+        </div>
+        <span className="list-heading section-gap">Image presets</span>
+        <div className="image-preset-picker" role="radiogroup" aria-label="Preferred image preset">
+          {IMAGE_PRESET_GROUPS.map(group => (
+            <section key={group}>
+              <span>{imagePresetGroupLabel(group)}</span>
+              <div>
+                {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => (
+                  <button type="button" key={preset.id} role="radio" aria-checked={(user?.preferredImageStyle ?? 'warm_family') === preset.id} className={(user?.preferredImageStyle ?? 'warm_family') === preset.id ? 'selected' : ''} onClick={() => void setPreferredLanguage({ preferredImageStyle: preset.id })}>
+                    <strong>{preset.label}</strong>
+                    <small>{preset.hint}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+        <button className="dark-sign-out" onClick={() => openPane('family')}><Settings2 /> Family admin</button>
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
       {pane === 'updates' ? (
-        <FamilyUpdates family={family} items={inboxItems} onBack={() => setPane('chats')} />
+        <FamilyUpdates family={family} items={inboxItems} onBack={openHome} />
       ) : pane === 'files' ? (
-        <FamilyFiles family={family} files={spaceFiles} onBack={() => setPane('chats')} onOpenRoom={(roomId) => { setSelectedRoomId(roomId); setPane('chats') }} />
+        <FamilyFiles family={family} files={spaceFiles} onBack={openHome} onOpenRoom={openRoom} />
       ) : selectedRoom ? (
-        <LiveRoom key={selectedRoom._id} room={selectedRoom} rooms={(rooms ?? []).flatMap(({ room }) => room ? [room] : [])} family={family} families={families} onSelectRoom={setSelectedRoomId} onSelectFamily={onSelectFamily} onExit={onExit} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
+        <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} onBack={openHome} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
       )}
 
       <aside className="conversation-context live-context">
-        <div className="context-title"><h2>This family</h2><button onClick={onExit}>Switch mode</button></div>
+        <header className="conversation-header live-room-header mobile-family-header">
+          <button className="mobile-chat-back" onClick={openHome} aria-label="Back to chats"><ArrowLeft /></button>
+          <div><div className="title-line"><h2>Family admin</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name}</p></div>
+        </header>
+        <div className="context-title"><h2>Family admin</h2><button onClick={onExit}>Switch mode</button></div>
+        <section>
+          <span>Families</span>
+          <p>You can own up to 3 family spaces.</p>
+          {ownedFamilyCount < 3
+            ? <button type="button" className="connect-gmail" onClick={() => setCreateFamilyOpen(true)}><Plus /> Create another family</button>
+            : <small className="gmail-status">You already own 3 families.</small>}
+        </section>
         <section><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
         <section><span>Family inbox</span>{family.space.agentmailInboxId
           ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy ID'}</button></div>
@@ -265,22 +329,27 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           <strong>{foodBudget?.monthlyLimit != null ? `₹${Math.round(foodBudget.spentThisMonth)} of ₹${Math.round(foodBudget.monthlyLimit)} this month` : `₹${Math.round(foodBudget?.spentThisMonth ?? 0)} tracked this month`}</strong>
           {family.membership.role === 'owner' && <form onSubmit={(event) => { event.preventDefault(); const monthlyLimit = Number(budgetDraft); if (!monthlyLimit) return; setBudgetBusy(true); void setFoodLimit({ spaceId: family.space._id, monthlyLimit }).then(() => setBudgetDraft('')).finally(() => setBudgetBusy(false)) }}><input type="number" min={500} max={1000000} placeholder="Monthly limit in ₹" value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} aria-label="Monthly food budget" /><button type="submit" disabled={budgetBusy || !budgetDraft}>{budgetBusy ? 'Saving…' : 'Set limit'}</button></form>}
         </section>
+        {family.membership.role === 'owner' && <section><span>Family model</span><ModelTierControls spaceId={family.space._id} /></section>}
+        {family.membership.role === 'owner' && <section><span>Your keys</span><ByokKeys spaceId={family.space._id} /></section>}
         {family.membership.role === 'owner' && <section><span>Family members</span><InviteMember spaceId={family.space._id} /></section>}
         <section><span>Recent updates</span>{(inboxItems ?? []).slice(0, 3).map((item) => <div className="context-inbox-item" key={item._id}><strong>{item.subject}</strong><small>{displaySender(item.sender)} · {categoryLabel(item.category)}</small></div>)}{inboxItems?.length === 0 && <p>No family mail yet.</p>}</section>
       </aside>
+      <nav className="mobile-workspace-nav" aria-label="Workspace">
+        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
+        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
+        <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
+        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')}><Settings2 /><span>Family</span></button>
+      </nav>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
+      {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
     </main>
   )
 }
 
-function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily, onExit, onInvite }: {
+function LiveRoom({ room, family, onBack, onInvite }: {
   room: Doc<'rooms'>
-  rooms: Doc<'rooms'>[]
   family: FamilyRow
-  families: FamilyRow[]
-  onSelectRoom: (roomId: Id<'rooms'>) => void
-  onSelectFamily: (spaceId: Id<'spaces'>) => void
-  onExit: () => void
+  onBack: () => void
   onInvite?: () => void
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
@@ -301,6 +370,9 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
   const [dragActive, setDragActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const receiptInputRef = useRef<HTMLInputElement>(null)
+  const captureRef = useRef<'library' | 'camera' | 'receipt'>('library')
   const dragDepthRef = useRef(0)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const activeJob = saathi?.jobs.find((job) => job.status === 'running') ?? saathi?.jobs.find((job) => job.status === 'queued')
@@ -315,7 +387,7 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages?.length, generatedImages?.length, attachments?.length, activeJob?.responseText, activeJob?.status])
+  }, [messages?.length, generatedImages?.length, attachments?.length, activeJob?.responseText, activeJob?.status, activeJob?.computerInteractiveLiveViewUrl, activeJob?.computerLiveViewUrl])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -361,12 +433,13 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
     }
   }
 
-  const uploadFiles = async (files: File[]) => {
+  const uploadFiles = async (files: File[], capture: 'library' | 'camera' | 'receipt' = 'library') => {
     for (const file of files) {
       const id = crypto.randomUUID()
       const mediaType = attachmentMediaType(file)
-      if (file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) {
-        setUploads((current) => [...current, { id, name: file.name, status: 'error', message: 'Files must be smaller than 20 MB.' }])
+      const maxBytes = mediaType.startsWith('image/') ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES
+      if (file.size <= 0 || file.size > maxBytes) {
+        setUploads((current) => [...current, { id, name: file.name, status: 'error', message: mediaType.startsWith('image/') ? 'Images must be smaller than 20 MB.' : 'Documents must be smaller than 50 MB.' }])
         continue
       }
       if (!SUPPORTED_ATTACHMENT_TYPES.has(mediaType)) {
@@ -390,6 +463,7 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
           fileName: file.name,
           mediaType,
           clientOperationId: id.replaceAll('-', ''),
+          capture,
         })
         setUploads((current) => current.filter((upload) => upload.id !== id))
       } catch {
@@ -400,10 +474,13 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
     }
   }
 
-  const chooseFiles = (files: FileList | null) => {
+  const chooseFiles = (files: FileList | null, capture: 'library' | 'camera' | 'receipt' = captureRef.current) => {
     if (!files?.length) return
-    void uploadFiles(Array.from(files))
+    void uploadFiles(Array.from(files), capture)
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (receiptInputRef.current) receiptInputRef.current.value = ''
+    captureRef.current = 'library'
   }
 
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
@@ -430,15 +507,11 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
 
   return (
     <section className={`conversation-pane ${dragActive ? 'is-dragging-files' : ''}`} onDragEnter={handleDragEnter} onDragOver={(event) => event.dataTransfer.types.includes('Files') && event.preventDefault()} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-      {dragActive && <div className="file-drop-overlay" role="status"><Upload /><strong>Drop files to share</strong><span>Photos and documents up to 20 MB</span></div>}
+      {dragActive && <div className="file-drop-overlay" role="status"><Upload /><strong>Drop files to share</strong><span>Photos up to 20 MB · PDFs up to 50 MB</span></div>}
       <header className="conversation-header live-room-header">
-        <button className="mobile-chat-back" onClick={onExit} aria-label="Back"><ArrowLeft /></button>
+        <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{room.type === 'private' ? 'Only you and Saathi can see this conversation' : `${family.space.name} · private family conversation`}</p></div>
         <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div></div>
-        <div className="mobile-chat-switchers">
-          <select aria-label="Current conversation" value={room._id} onChange={(event) => onSelectRoom(event.target.value as Id<'rooms'>)}>{rooms.map(item => <option value={item._id} key={item._id}>{item.type === 'private' ? 'My Saathi · private' : item.title}</option>)}</select>
-          <select aria-label="Current family" value={family.space._id} onChange={(event) => onSelectFamily(event.target.value as Id<'spaces'>)}>{families.map(({ space }) => <option value={space._id} key={space._id}>{space.name}</option>)}</select>
-        </div>
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
@@ -446,7 +519,7 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
         {timeline.map((entry) => entry.kind === 'image'
           ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
               <span className="message-avatar assistant"><Bot /></span>
-              <div><h3>Saathi <small>· generated image</small></h3><figure className="generated-image-card"><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><figcaption>{entry.item.prompt}</figcaption></figure></div>
+              <div><h3>Saathi <small>· {imageKindLabel(entry.item.kind)}</small></h3><figure className="generated-image-card"><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><figcaption>{entry.item.prompt}</figcaption></figure></div>
             </article>
           : entry.kind === 'attachment'
             ? <article className="outgoing-message attachment-message" key={`attachment-${entry.item._id}`}>
@@ -454,6 +527,8 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
                 {entry.item.mediaType.startsWith('image/') && entry.item.url
                   ? <a className="shared-image" href={entry.item.url} target="_blank" rel="noreferrer"><img src={entry.item.url} alt={entry.item.fileName} /><small>{entry.item.fileName} · {formatFileSize(entry.item.sizeBytes)}</small></a>
                   : <a className="shared-document" href={entry.item.url ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!entry.item.url}><FileText /><span><strong>{entry.item.fileName}</strong><small>{formatFileSize(entry.item.sizeBytes)}</small></span></a>}
+                {entry.item.transcriptStatus === 'pending' && <small className="photo-read-status">Reading with a small model…</small>}
+                {entry.item.transcript && <p className="photo-read-text">{entry.item.extractedMerchant ? `${entry.item.extractedMerchant}${entry.item.extractedAmount ? ` · ${entry.item.extractedAmount}` : ''}` : entry.item.transcript}</p>}
               </article>
           : entry.item.actorType === 'voice_transcript'
             ? entry.item.voiceSpeaker === 'user'
@@ -467,6 +542,17 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
                 <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <button type="button" className="share-family-mail" onClick={() => { const match = pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey); if (match) void shareMoney({ inboxItemId: match._id }) }}>Share with family inbox</button>}</div></div>
               </article>)}
+        {voice.summarizing && (
+          <article className="person-message assistant-message saathi-stream" aria-live="polite">
+            <span className="message-avatar assistant"><Bot /></span>
+            <div>
+              <h3>Saathi <small>· writing a call summary</small></h3>
+              <div className="assistant-card streaming-card">
+                <div className="typing-indicator" aria-label="Saathi is typing a voice call summary"><i /><i /><i /></div>
+              </div>
+            </div>
+          </article>
+        )}
         {activeJob?.trigger === 'ambient' && !activeJob.responseText && (
           <div className="ambient-check" role="status"><Sparkles /> Saathi is checking whether help is needed…</div>
         )}
@@ -474,11 +560,17 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
           <article className="person-message assistant-message saathi-stream" aria-live="polite">
             <span className="message-avatar assistant"><Bot /></span>
             <div>
-              <h3>Saathi <small>· {activeJob.status === 'queued' ? 'getting ready' : activeJob.activity === 'searching_web' ? 'searching the web' : activeJob.activity === 'generating_image' ? 'creating an image' : activeJob.responseText ? 'typing' : 'thinking'}</small></h3>
+              <h3>Saathi <small>· {activeJob.status === 'queued' ? 'getting ready' : activeJob.activity === 'searching_web' ? 'searching the web' : activeJob.activity === 'generating_image' ? 'creating an image' : activeJob.activity === 'using_computer' ? 'using a live browser' : activeJob.responseText ? 'typing' : 'thinking'}</small></h3>
               <div className="assistant-card streaming-card">
+                {computerViewUrl(activeJob) && (
+                  <div className="computer-live-view">
+                    <div className="computer-live-view-header"><Monitor /><span>Live browser</span><small>Sign in here if needed. Saathi keeps site cookies, not your password.</small></div>
+                    <iframe title="Saathi live browser" src={computerViewUrl(activeJob)} allow="clipboard-write" referrerPolicy="no-referrer" />
+                  </div>
+                )}
                 {activeJob.responseText
                   ? <div className="streaming-markdown"><AssistantText text={activeJob.responseText} /></div>
-                  : <div className="typing-indicator" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : 'Saathi is thinking'}><i /><i /><i /></div>}
+                  : <div className="typing-indicator" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : activeJob.activity === 'using_computer' ? 'Saathi is using a live browser' : 'Saathi is thinking'}><i /><i /><i /></div>}
               </div>
             </div>
           </article>
@@ -496,14 +588,20 @@ function LiveRoom({ room, rooms, family, families, onSelectRoom, onSelectFamily,
         <div className="composer-guidance">
           <div className="composer-guidance-actions">
             <button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button>
+            <button type="button" onClick={() => { captureRef.current = 'library'; fileInputRef.current?.click() }}><Folder /> Photos</button>
+            <button type="button" onClick={() => cameraInputRef.current?.click()}><Camera /> Camera</button>
+            <button type="button" onClick={() => receiptInputRef.current?.click()}><FileText /> Receipt</button>
             <button type="button" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</button>
           </div>
           <span>Enter to send · Drop photos or documents here</span>
         </div>
         <form onSubmit={submit}>
-          <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files)} />
+          <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files, 'library')} />
+          <input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => chooseFiles(event.target.files, 'camera')} />
+          <input ref={receiptInputRef} className="visually-hidden" type="file" accept="image/*,application/pdf" onChange={(event) => chooseFiles(event.target.files, 'receipt')} />
           <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your family or type @saathi…" aria-label="Message for your family" rows={1} />
           <button className="composer-attachment" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></button>
+          <button className="composer-camera" type="button" onClick={() => cameraInputRef.current?.click()} aria-label="Take a photo"><Camera /></button>
           <button className="composer-mention" type="button" onClick={addSaathiMention} aria-label="Mention Saathi"><AtSign /></button>
           <button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></button>
         </form>
@@ -543,17 +641,14 @@ function VoiceCallOverlay({ status, turns, voiceLevel, onMute, onEnd }: {
         : status === 'muted'
           ? 'Microphone muted'
           : turns.at(-1)?.role === 'assistant' ? 'Saathi is speaking' : 'Listening'
-  const orbStyle = { '--voice-level': voiceLevel.toFixed(3) } as CSSProperties
-
   return <div className="voice-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="voice-call-title">
     <section className="voice-call-sheet">
       <header className="voice-call-header">
         <div><span>LIVE VOICE</span><h2 id="voice-call-title">Talking with Saathi</h2></div>
         <span className={`voice-call-status ${status === 'muted' ? 'is-muted' : ''}`}><i />{statusText}</span>
       </header>
-      <div className="voice-orb-stage" aria-hidden="true" style={orbStyle}>
-        <div className="voice-orb-glow" />
-        <div className="voice-orb"><i /><i /><i /></div>
+      <div className="voice-orb-stage">
+        <VoiceBlob level={voiceLevel} muted={status === 'muted'} />
       </div>
       <div className="voice-live-transcript" aria-live="polite" aria-label="Live call transcript">
         {turns.length === 0
@@ -588,6 +683,43 @@ function AssistantText({ text }: { text: string }) {
   }}>{text}</ReactMarkdown></div>
 }
 
+function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
+  ownedCount: number
+  onClose: () => void
+  onCreated: (spaceId: Id<'spaces'>) => void
+  createSpace: (args: { name: string; creationKey: string }) => Promise<Id<'spaces'>>
+}) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const spaceId = await createSpace({ name, creationKey: crypto.randomUUID().replaceAll('-', '') })
+      onCreated(spaceId)
+    } catch (caught) {
+      setError(convexErrorCode(caught) === 'FAMILY_LIMIT'
+        ? 'You can own up to 3 families.'
+        : 'We could not create this family. Please try again.')
+      setBusy(false)
+    }
+  }
+  return <div className="family-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="create-family-title" onMouseDown={event => event.stopPropagation()}>
+      <header><div><span>New family</span><h2 id="create-family-title">Create another family space</h2></div><button type="button" onClick={onClose} aria-label="Close"><X /></button></header>
+      <p>You own {ownedCount} of 3 families. Each family keeps its chats, inbox, and Saathi separate.</p>
+      <form className="dark-connect-card" onSubmit={submit}>
+        <label htmlFor="new-family-name">Family name</label>
+        <input id="new-family-name" value={name} onChange={event => setName(event.target.value)} minLength={2} maxLength={80} required autoFocus />
+        <button type="submit" disabled={busy || name.trim().length < 2}>{busy ? 'Creating…' : 'Create family'}</button>
+        {error && <small role="alert">{error}</small>}
+      </form>
+    </section>
+  </div>
+}
+
 function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
   const createInbox = useAction(api.agentmailInboxes.createForFamily)
   const [busy, setBusy] = useState(false)
@@ -613,6 +745,76 @@ function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
   }
 
   return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Create a private email address for this family.</p><button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</button>{error && <small role="alert">{error}</small>}</form>
+}
+
+function ModelTierControls({ spaceId }: { spaceId: Id<'spaces'> }) {
+  const usage = useQuery(api.spaces.usageBreakdown, { spaceId })
+  const setModelTier = useMutation(api.spaces.setModelTier)
+  const tiers = [
+    { id: 'low' as const, label: 'Low', detail: 'DeepSeek Flash' },
+    { id: 'med' as const, label: 'Med', detail: 'Luna mid' },
+    { id: 'high' as const, label: 'High', detail: 'Grok 4.6 mid' },
+    { id: 'ultra' as const, label: 'Ultra', detail: 'Sol high' },
+  ]
+  return <div className="model-tier-card">
+    <p>Owners choose how hard Saathi thinks. Medium is the default.</p>
+    <div className="model-tier-picker" role="radiogroup" aria-label="Family model">
+      {tiers.map(tier => (
+        <button type="button" key={tier.id} role="radio" aria-checked={(usage?.tier ?? 'med') === tier.id} className={(usage?.tier ?? 'med') === tier.id ? 'selected' : ''} onClick={() => void setModelTier({ spaceId, tier: tier.id })}>
+          <strong>{tier.label}</strong>
+          <small>{tier.detail}</small>
+        </button>
+      ))}
+    </div>
+    {(usage?.rows ?? []).length > 0 && <ul className="usage-list">{usage!.rows.map(row => <li key={`${row.provider}-${row.model}-${row.unit}-${row.costClass}`}><strong>{row.model}</strong><small>{Math.round(row.quantity)} {row.unit === 'token' ? 'tokens' : row.unit} · {row.costClass}</small></li>)}</ul>}
+  </div>
+}
+
+function ByokKeys({ spaceId }: { spaceId: Id<'spaces'> }) {
+  const keys = useQuery(api.spaces.providerKeyStatus, { spaceId })
+  const saveKey = useMutation(api.spaces.saveProviderKey)
+  const removeKey = useMutation(api.spaces.removeProviderKey)
+  const [provider, setProvider] = useState<'openai' | 'openrouter' | 'codex'>('openai')
+  const [secret, setSecret] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setFeedback('')
+    try {
+      await saveKey({ spaceId, provider, secret })
+      setSecret('')
+      setFeedback('Saved. Saathi will use this key for this family.')
+    } catch {
+      setFeedback('That key could not be saved. Check the prefix and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <div className="byok-card">
+    <p>Paste an OpenAI, OpenRouter, or Codex API key. ChatGPT login is not an API. The secret is encrypted; only the last four characters are shown.</p>
+    <form onSubmit={submit}>
+      <div className="chip-row" role="radiogroup" aria-label="Provider">
+        {([
+          { id: 'openai' as const, label: 'OpenAI API' },
+          { id: 'openrouter' as const, label: 'OpenRouter' },
+          { id: 'codex' as const, label: 'Codex' },
+        ]).map(option => (
+          <button type="button" key={option.id} role="radio" aria-checked={provider === option.id} className={provider === option.id ? 'selected' : ''} onClick={() => setProvider(option.id)}>{option.label}</button>
+        ))}
+      </div>
+      <input type="password" autoComplete="off" value={secret} onChange={event => setSecret(event.target.value)} placeholder={provider === 'openrouter' ? 'sk-or-…' : 'sk-…'} aria-label="API key" required />
+      <button type="submit" disabled={busy || secret.trim().length < 20}>{busy ? 'Saving…' : 'Save key'}</button>
+    </form>
+    {feedback && <small role="status">{feedback}</small>}
+    {(keys ?? []).map(key => <div className="byok-row" key={key.provider}>
+      <span><strong>{key.provider === 'openrouter' ? 'OpenRouter' : key.provider === 'codex' ? 'Codex' : 'OpenAI'}</strong><small>ending {key.lastFour}</small></span>
+      <button type="button" onClick={() => void removeKey({ spaceId, provider: key.provider })}>Remove</button>
+    </div>)}
+  </div>
 }
 
 function InviteMember({ spaceId }: { spaceId: Id<'spaces'> }) {
@@ -642,7 +844,7 @@ function InviteMember({ spaceId }: { spaceId: Id<'spaces'> }) {
   }
 
   const pending = invitations?.filter(invitation => !invitation.acceptedAt && !invitation.revokedAt && !invitation.expired) ?? []
-  return <div className="invite-member-card"><form onSubmit={submit}><label htmlFor={`invite-email-${spaceId}`}><UserPlus /> Invite by email</label><input id={`invite-email-${spaceId}`} type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="family@example.com" required /><div><select value={role} onChange={event => setRole(event.target.value as 'member' | 'owner')} aria-label="Invitation role"><option value="member">Member</option><option value="owner">Owner</option></select><button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</button></div></form>{feedback && <small role="status">{feedback}</small>}{pending.map(invitation => <div className="pending-invitation" key={invitation._id}><span><strong>{invitation.targetEmail}</strong><small>{invitation.role} · expires {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(invitation.expiresAt)}</small></span><button type="button" onClick={() => void revokeInvitation({ invitationId: invitation._id })}>Revoke</button></div>)}</div>
+  return <div className="invite-member-card"><form onSubmit={submit}><label htmlFor={`invite-email-${spaceId}`}><UserPlus /> Invite by email</label><input id={`invite-email-${spaceId}`} type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="family@example.com" required /><div className="chip-row" role="radiogroup" aria-label="Invitation role">{(['member', 'owner'] as const).map(option => <button type="button" key={option} role="radio" aria-checked={role === option} className={role === option ? 'selected' : ''} onClick={() => setRole(option)}>{option === 'owner' ? 'Owner' : 'Member'}</button>)}<button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</button></div></form>{feedback && <small role="status">{feedback}</small>}{pending.map(invitation => <div className="pending-invitation" key={invitation._id}><span><strong>{invitation.targetEmail}</strong><small>{invitation.role} · expires {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(invitation.expiresAt)}</small></span><button type="button" onClick={() => void revokeInvitation({ invitationId: invitation._id })}>Revoke</button></div>)}</div>
 }
 
 function InvitationError({ message, onDismiss }: { message: string; onDismiss: () => void }) {
@@ -655,17 +857,37 @@ function LiveStatus({ message }: { message: string }) {
 }
 
 function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Doc<'inboxItems'>[] | undefined; onBack: () => void }) {
+  const confirmAction = useMutation(api.inbox.confirmAction)
+  const dismissAction = useMutation(api.inbox.dismissAction)
   return <section className="conversation-pane">
     <header className="conversation-header live-room-header">
-      <button className="mobile-chat-back" onClick={onBack} aria-label="Back"><ArrowLeft /></button>
+      <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
       <div><div className="title-line"><h2>Family inbox</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · shared household mail only</p></div>
     </header>
     <div className="conversation-feed live-feed">
       {items === undefined && <div className="dark-loading"><i /><i /><i /></div>}
       {items?.length === 0 && <div className="dark-empty-state compact"><Bell /><h2>No shared family mail yet</h2><p>Money mail stays in My Saathi until someone shares it here.</p></div>}
-      {items?.map(item => <article className="person-message" key={item._id}>
+      {items?.map(item => <article className="person-message inbox-card" key={item._id}>
         <span className="message-avatar email"><Mail /></span>
-        <div><h3>{item.subject} <small>· {categoryLabel(item.category)} · {formatRelativeTime(item.receivedAt)}</small></h3><div className="simple-message"><p>{displaySender(item.sender)}</p>{item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}</div></div>
+        <div>
+          <h3>{item.subject} <small>· {categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
+          <div className="simple-message">
+            <p>{displaySender(item.sender)}</p>
+            {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
+            {item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
+            {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
+            {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
+            {item.documentParseStatus === 'parsed' && <p>Attached document read with Firecrawl Parse.</p>}
+            {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
+            {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
+            {(item.suggestedActions ?? []).map(action => <p key={`${item._id}-${action.kind}`}>{action.label}{action.detail ? ` — ${action.detail}` : ''}</p>)}
+            {item.actionStatus === 'suggested' && <div className="inbox-actions">
+              <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Confirm action</button>
+              <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Not now</button>
+            </div>}
+            {item.actionStatus === 'confirmed' && <small>Action confirmed for the family.</small>}
+          </div>
+        </div>
       </article>)}
     </div>
   </section>
@@ -679,7 +901,7 @@ function FamilyFiles({ family, files, onBack, onOpenRoom }: {
 }) {
   return <section className="conversation-pane">
     <header className="conversation-header live-room-header">
-      <button className="mobile-chat-back" onClick={onBack} aria-label="Back"><ArrowLeft /></button>
+      <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
       <div><div className="title-line"><h2>Files</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · stored in Convex</p></div>
     </header>
     <div className="conversation-feed live-feed">
@@ -698,6 +920,23 @@ function FamilyFiles({ family, files, onBack, onOpenRoom }: {
 
 function languageLabel(value: 'en' | 'hi' | 'mr' | undefined) {
   return value === 'hi' ? 'Hindi' : value === 'mr' ? 'Marathi' : 'English'
+}
+
+function imagePresetGroupLabel(value: typeof IMAGE_PRESET_GROUPS[number]) {
+  if (value === 'infographic') return 'Infographics'
+  if (value === 'devotional') return 'Devotional'
+  if (value === 'art') return 'Art'
+  return 'Family'
+}
+
+function imageKindLabel(value: 'scene' | 'infographic' | 'devotional' | undefined) {
+  if (value === 'infographic') return 'infographic'
+  if (value === 'devotional') return 'devotional image'
+  return 'generated image'
+}
+
+function computerViewUrl(job: { computerInteractiveLiveViewUrl?: string; computerLiveViewUrl?: string }) {
+  return job.computerInteractiveLiveViewUrl || job.computerLiveViewUrl || ''
 }
 
 function initialsFor(value: string) {

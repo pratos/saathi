@@ -44,9 +44,28 @@ describe("durable family agent", () => {
     })).toBe(jobId);
     const snapshot = await owner.query(api.agents.get, { agentId });
     expect(snapshot?.agent).toMatchObject({
-      roomId, provider: "openrouter", model: "deepseek/deepseek-v4.1-flash", status: "running",
+      roomId, provider: "openrouter", model: "openai/gpt-5.6-luna", status: "running",
     });
     expect(snapshot?.jobs).toEqual(expect.arrayContaining([expect.objectContaining({ _id: jobId, status: "queued" })]));
+  });
+
+  test("first agent job is seeded with recent room chat and shared file notes", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { roomId, ownerId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const storageId = await t.run(ctx => ctx.storage.store(new Blob(["gif"], { type: "image/gif" })));
+    await owner.mutation(api.attachments.submit, {
+      roomId, storageId, fileName: "Aerial.gif", mediaType: "image/gif", clientOperationId: "gif-upload-001",
+    });
+    await owner.mutation(api.messages.post, {
+      roomId, text: "what's the above gif about?", language: "en", clientOperationId: "ask-gif-001",
+    });
+    const snapshot = await owner.query(api.agents.forRoom, { roomId });
+    expect(snapshot?.agent).toBeTruthy();
+    const work = await t.run(ctx => ctx.runMutation(internal.agents.beginNext, { agentId: snapshot!.agent._id }));
+    expect(JSON.stringify(work?.messages)).toContain("Aerial.gif");
+    expect(JSON.stringify(work?.messages)).toContain("what's the above gif about?");
   });
 
   test("creates Saathi lazily and distinguishes ambient checks from explicit mentions", async () => {
@@ -251,6 +270,47 @@ describe("durable family agent", () => {
     expect(await owner.query(api.images.forRoom, { roomId })).toEqual([
       expect.objectContaining({ prompt: "A family card", model: "meta/muse-image", mediaType: "image/png" }),
     ]);
+  });
+
+  test("publishes a live browser view only for the active authorized lease", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { ownerId, roomId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const agentId = await owner.mutation(api.agents.create, {
+      roomId, name: "Saathi", clientOperationId: "create-computer-agent",
+    });
+    const jobId = await owner.mutation(api.agents.send, {
+      agentId, prompt: "Open Swiggy and show my orders", clientOperationId: "use-computer-job",
+    });
+    const lease = await t.mutation(internal.agents.beginNext, { agentId });
+
+    expect(await t.query(internal.agents.computerJobContext, {
+      agentId, jobId, leaseId: "stale-lease",
+    })).toBeNull();
+    expect(await t.query(internal.agents.computerJobContext, {
+      agentId, jobId, leaseId: lease!.leaseId,
+    })).toEqual({ profileName: `saathi-user-${ownerId}`, imageStyle: "warm_family", language: "en" });
+
+    await t.mutation(internal.agents.updateComputerView, {
+      agentId, jobId, leaseId: "stale-lease",
+      liveViewUrl: "https://liveview.firecrawl.dev/stale",
+      interactiveLiveViewUrl: "https://liveview.firecrawl.dev/stale-control",
+    });
+    const staleJob = (await owner.query(api.agents.forRoom, { roomId }))?.jobs.find(job => job._id === jobId);
+    expect(staleJob?.computerLiveViewUrl).toBeUndefined();
+    expect(staleJob?.computerInteractiveLiveViewUrl).toBeUndefined();
+
+    await t.mutation(internal.agents.updateComputerView, {
+      agentId, jobId, leaseId: lease!.leaseId,
+      liveViewUrl: "https://liveview.firecrawl.dev/watch",
+      interactiveLiveViewUrl: "https://liveview.firecrawl.dev/control",
+    });
+    expect((await owner.query(api.agents.forRoom, { roomId }))?.jobs.find(job => job._id === jobId)).toMatchObject({
+      activity: "using_computer",
+      computerLiveViewUrl: "https://liveview.firecrawl.dev/watch",
+      computerInteractiveLiveViewUrl: "https://liveview.firecrawl.dev/control",
+    });
   });
 });
 

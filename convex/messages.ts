@@ -3,7 +3,8 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { requireRoomPermission } from "./lib/authz";
-import { SAATHI_MENTION, SAATHI_MODEL, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
+import { DEFAULT_MODEL_TIER, resolveModelTier } from "./lib/modelTiers";
+import { SAATHI_MENTION, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
 
 const limits = new RateLimiter(components.rateLimiter, {
   postMessage: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 10 },
@@ -44,9 +45,11 @@ export const post = mutation({
       let agent = await ctx.db.query("agents").withIndex("by_room", q => q.eq("roomId", room._id)).first();
       if (!agent) {
         const now = Date.now();
+        const space = await ctx.db.get(room.spaceId);
+        const route = resolveModelTier(space?.modelTier ?? DEFAULT_MODEL_TIER);
         const agentId = await ctx.db.insert("agents", {
           spaceId: room.spaceId, roomId: room._id, createdBy: userId, creationKey: "saathi-default",
-          name: "Saathi", systemPrompt: SAATHI_SYSTEM_PROMPT, provider: "openrouter", model: SAATHI_MODEL,
+          name: "Saathi", systemPrompt: SAATHI_SYSTEM_PROMPT, provider: "openrouter", model: route.model,
           status: "idle", createdAt: now, updatedAt: now,
         });
         agent = (await ctx.db.get(agentId))!;

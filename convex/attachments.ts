@@ -1,10 +1,13 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
-import { components } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { components, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { env, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireRoomPermission, requireSpacePermission } from "./lib/authz";
+import { resolveOpenAiKey } from "./lib/providerKeys";
 
-const MAX_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set([
   "application/msword",
   "application/pdf",
@@ -26,6 +29,8 @@ const limits = new RateLimiter(components.rateLimiter, {
   createFileUpload: { kind: "token bucket", rate: 20, period: MINUTE, capacity: 5 },
 });
 
+const attachmentKind = v.union(v.literal("photo"), v.literal("receipt"), v.literal("document"));
+const transcriptStatus = v.union(v.literal("pending"), v.literal("ready"), v.literal("failed"));
 const attachmentView = v.object({
   _id: v.id("attachments"),
   messageId: v.id("messages"),
@@ -34,6 +39,11 @@ const attachmentView = v.object({
   sizeBytes: v.number(),
   createdAt: v.number(),
   url: v.union(v.string(), v.null()),
+  kind: v.optional(attachmentKind),
+  transcriptStatus: v.optional(transcriptStatus),
+  transcript: v.optional(v.string()),
+  extractedAmount: v.optional(v.string()),
+  extractedMerchant: v.optional(v.string()),
 });
 const spaceAttachmentView = attachmentView.extend({ roomId: v.id("rooms"), roomTitle: v.string() });
 
@@ -55,6 +65,7 @@ export const submit = mutation({
     fileName: v.string(),
     mediaType: v.string(),
     clientOperationId: v.string(),
+    capture: v.optional(v.union(v.literal("library"), v.literal("camera"), v.literal("receipt"))),
   },
   returns: v.object({ messageId: v.id("messages"), attachmentId: v.id("attachments") }),
   handler: async (ctx, args) => {
@@ -81,9 +92,15 @@ export const submit = mutation({
     const metadata = await ctx.db.system.get("_storage", args.storageId);
     const mediaType = args.mediaType.split(";", 1)[0].trim().toLowerCase();
     const storedMediaType = metadata?.contentType?.split(";", 1)[0]?.toLowerCase();
+    const maxBytes = mediaType.startsWith("image/") ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
     if (!metadata || !ALLOWED_MEDIA_TYPES.has(mediaType) || (storedMediaType && storedMediaType !== mediaType)
-      || metadata.size <= 0 || metadata.size > MAX_SIZE_BYTES) {
-      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Use a supported image or document up to 20 MB" });
+      || metadata.size <= 0 || metadata.size > maxBytes) {
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: mediaType.startsWith("image/")
+          ? "Use a supported image up to 20 MB"
+          : "Use a supported document up to 50 MB",
+      });
     }
 
     const now = Date.now();
@@ -98,6 +115,8 @@ export const submit = mutation({
       idempotencyKey: args.clientOperationId,
       createdAt: now,
     });
+    const kind = attachmentKindFor(mediaType, args.capture);
+    const shouldRead = kind === "photo" || kind === "receipt" || mediaType === "application/pdf";
     const attachmentId = await ctx.db.insert("attachments", {
       spaceId: room.spaceId,
       roomId: args.roomId,
@@ -108,7 +127,12 @@ export const submit = mutation({
       mediaType,
       sizeBytes: metadata.size,
       createdAt: now,
+      kind,
+      transcriptStatus: shouldRead ? "pending" : undefined,
     });
+    if (shouldRead) {
+      await ctx.scheduler.runAfter(0, kind === "document" ? internal.attachments.readDocument : internal.attachments.readPhoto, { attachmentId });
+    }
     return { messageId, attachmentId };
   },
 });
@@ -130,6 +154,11 @@ export const forRoom = query({
       sizeBytes: attachment.sizeBytes,
       createdAt: attachment.createdAt,
       url: await ctx.storage.getUrl(attachment.storageId),
+      kind: attachment.kind,
+      transcriptStatus: attachment.transcriptStatus,
+      transcript: attachment.transcript,
+      extractedAmount: attachment.extractedAmount,
+      extractedMerchant: attachment.extractedMerchant,
     })));
   },
 });
@@ -154,11 +183,268 @@ export const forSpace = query({
         url: await ctx.storage.getUrl(attachment.storageId),
         roomId: room!._id,
         roomTitle: room!.type === "private" ? "My Saathi" : room!.title,
+        kind: attachment.kind,
+        transcriptStatus: attachment.transcriptStatus,
+        transcript: attachment.transcript,
+        extractedAmount: attachment.extractedAmount,
+        extractedMerchant: attachment.extractedMerchant,
       })));
     }));
     return perRoom.flat().sort((left, right) => right.createdAt - left.createdAt).slice(0, Math.min(Math.max(limit ?? 40, 1), 100));
   },
 });
+
+export const readPhoto = internalAction({
+  args: { attachmentId: v.id("attachments") },
+  returns: v.null(),
+  handler: async (ctx, { attachmentId }): Promise<null> => {
+    const photo: { storageId: Id<"_storage">; mediaType: string; kind: "photo" | "receipt" | "document"; spaceId: Id<"spaces"> } | null =
+      await ctx.runQuery(internal.attachments.loadPhotoRead, { attachmentId });
+    if (!photo) return null;
+    const apiKey = await resolveOpenAiKey(ctx, photo.spaceId);
+    if (!apiKey) {
+      await ctx.runMutation(internal.attachments.failPhotoRead, { attachmentId, error: "Photo reading needs OPENAI_API_KEY." });
+      return null;
+    }
+    try {
+      const bytes = await ctx.storage.get(photo.storageId);
+      if (!bytes) throw new Error("The photo is no longer in storage.");
+      const result = await interpretHouseholdPhoto(apiKey, photo.mediaType, bytes, photo.kind === "receipt");
+      await ctx.runMutation(internal.attachments.savePhotoRead, {
+        attachmentId,
+        transcript: result.transcript,
+        extractedAmount: result.amount,
+        extractedMerchant: result.merchant,
+        kind: result.looksLikeReceipt ? "receipt" : photo.kind,
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.attachments.failPhotoRead, {
+        attachmentId,
+        error: error instanceof Error ? error.message : "Could not read this photo.",
+      });
+    }
+    return null;
+  },
+});
+
+export const loadPhotoRead = internalQuery({
+  args: { attachmentId: v.id("attachments") },
+  returns: v.union(v.object({
+    storageId: v.id("_storage"),
+    mediaType: v.string(),
+    kind: attachmentKind,
+    spaceId: v.id("spaces"),
+  }), v.null()),
+  handler: async (ctx, { attachmentId }) => {
+    const attachment = await ctx.db.get(attachmentId);
+    if (!attachment || attachment.transcriptStatus !== "pending") return null;
+    return {
+      storageId: attachment.storageId,
+      mediaType: attachment.mediaType,
+      kind: attachment.kind ?? "photo",
+      spaceId: attachment.spaceId,
+    };
+  },
+});
+
+export const savePhotoRead = internalMutation({
+  args: {
+    attachmentId: v.id("attachments"),
+    transcript: v.string(),
+    extractedAmount: v.optional(v.string()),
+    extractedMerchant: v.optional(v.string()),
+    kind: attachmentKind,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const attachment = await ctx.db.get(args.attachmentId);
+    if (!attachment) return null;
+    await ctx.db.patch(args.attachmentId, {
+      transcriptStatus: "ready",
+      transcript: args.transcript.slice(0, 4_000),
+      extractedAmount: args.extractedAmount,
+      extractedMerchant: args.extractedMerchant,
+      kind: args.kind,
+    });
+    if (args.kind === "receipt" && args.transcript) {
+      await ctx.db.patch(attachment.messageId, {
+        originalText: args.extractedMerchant
+          ? `Receipt from ${args.extractedMerchant}${args.extractedAmount ? ` · ${args.extractedAmount}` : ""}`
+          : args.transcript.slice(0, 280),
+      });
+    }
+    return null;
+  },
+});
+
+export const readDocument = internalAction({
+  args: { attachmentId: v.id("attachments") },
+  returns: v.null(),
+  handler: async (ctx, { attachmentId }): Promise<null> => {
+    const file: { storageId: Id<"_storage">; fileName: string; mediaType: string } | null =
+      await ctx.runQuery(internal.attachments.loadDocumentRead, { attachmentId });
+    if (!file) return null;
+    try {
+      const bytes = await ctx.storage.get(file.storageId);
+      if (!bytes) throw new Error("The document is no longer in storage.");
+      const markdown = await parseStoredPdf(file.fileName, bytes);
+      if (!markdown) throw new Error("Could not read this PDF.");
+      await ctx.runMutation(internal.attachments.savePhotoRead, {
+        attachmentId,
+        transcript: markdown.slice(0, 4_000),
+        kind: "document",
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.attachments.failPhotoRead, {
+        attachmentId,
+        error: error instanceof Error ? error.message : "Could not read this document.",
+      });
+    }
+    return null;
+  },
+});
+
+export const loadDocumentRead = internalQuery({
+  args: { attachmentId: v.id("attachments") },
+  returns: v.union(v.object({
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mediaType: v.string(),
+  }), v.null()),
+  handler: async (ctx, { attachmentId }) => {
+    const attachment = await ctx.db.get(attachmentId);
+    if (!attachment || attachment.transcriptStatus !== "pending" || attachment.mediaType !== "application/pdf") return null;
+    return { storageId: attachment.storageId, fileName: attachment.fileName, mediaType: attachment.mediaType };
+  },
+});
+
+export const failPhotoRead = internalMutation({
+  args: { attachmentId: v.id("attachments"), error: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { attachmentId, error }) => {
+    const attachment = await ctx.db.get(attachmentId);
+    if (!attachment) return null;
+    await ctx.db.patch(attachmentId, { transcriptStatus: "failed", transcript: error.slice(0, 280) });
+    return null;
+  },
+});
+
+async function interpretHouseholdPhoto(apiKey: string, mediaType: string, bytes: Blob, preferReceipt: boolean) {
+  const buffer = new Uint8Array(await bytes.arrayBuffer());
+  const image = `data:${mediaType};base64,${encodeBase64(buffer)}`;
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-5-mini",
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: preferReceipt
+              ? "Read this household photo. If it is a receipt, bill, or purchase slip, extract merchant, amount, date, and a one-line summary. If it is a family photo, write a short caption. Never invent card numbers. JSON only."
+              : "Read this household photo. If it is a receipt or bill, extract merchant, amount, date, and a one-line summary. Otherwise write a short family-safe caption. JSON only.",
+          },
+          { type: "input_image", image_url: image },
+        ],
+      }],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "household_photo_read",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["looksLikeReceipt", "transcript", "amount", "merchant"],
+            properties: {
+              looksLikeReceipt: { type: "boolean" },
+              transcript: { type: "string" },
+              amount: { type: ["string", "null"] },
+              merchant: { type: ["string", "null"] },
+            },
+          },
+        },
+      },
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!response.ok) throw new Error(`Photo reading failed (${response.status}).`);
+  const parsed = parsePhotoRead(await response.json());
+  if (!parsed) throw new Error("Photo reading returned no usable text.");
+  return parsed;
+}
+
+function parsePhotoRead(payload: unknown) {
+  const text = extractOutputText(payload);
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as { looksLikeReceipt?: unknown; transcript?: unknown; amount?: unknown; merchant?: unknown };
+    const transcript = typeof parsed.transcript === "string" ? parsed.transcript.trim() : "";
+    if (!transcript) return null;
+    return {
+      looksLikeReceipt: parsed.looksLikeReceipt === true,
+      transcript,
+      amount: typeof parsed.amount === "string" && parsed.amount.trim() ? parsed.amount.trim() : undefined,
+      merchant: typeof parsed.merchant === "string" && parsed.merchant.trim() ? parsed.merchant.trim() : undefined,
+    };
+  } catch {
+    return { looksLikeReceipt: false, transcript: text, amount: undefined, merchant: undefined };
+  }
+}
+
+function extractOutputText(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const root = payload as Record<string, unknown>;
+  if (typeof root.output_text === "string" && root.output_text.trim()) return root.output_text.trim();
+  const output = Array.isArray(root.output) ? root.output : [];
+  for (const item of output) {
+    if (!item || typeof item !== "object" || !("content" in item) || !Array.isArray(item.content)) continue;
+    for (const block of item.content) {
+      if (block && typeof block === "object" && "text" in block && typeof block.text === "string" && block.text.trim()) {
+        return block.text.trim();
+      }
+    }
+  }
+  return "";
+}
+
+function encodeBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function parseStoredPdf(fileName: string, bytes: Blob) {
+  const apiKey = env.FIRECRAWL_API_KEY;
+  if (!apiKey) throw new Error("Document reading needs FIRECRAWL_API_KEY.");
+  const form = new FormData();
+  form.set("file", bytes, fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
+  form.set("options", JSON.stringify({ formats: ["markdown"], parsers: [{ type: "pdf", mode: "auto", maxPages: 20 }] }));
+  const response = await fetch("https://api.firecrawl.dev/v2/parse", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+    signal: AbortSignal.timeout(60_000),
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`Document parsing failed (${response.status}).`);
+  try {
+    const markdown = JSON.parse(body) as { data?: { markdown?: unknown }; markdown?: unknown };
+    const text = typeof markdown.data?.markdown === "string" ? markdown.data.markdown
+      : typeof markdown.markdown === "string" ? markdown.markdown : "";
+    return text.trim();
+  } catch {
+    return "";
+  }
+}
+
+function attachmentKindFor(mediaType: string, capture?: "library" | "camera" | "receipt") {
+  if (capture === "receipt") return "receipt" as const;
+  if (mediaType.startsWith("image/")) return "photo" as const;
+  return "document" as const;
+}
 
 function sanitizeFileName(value: string) {
   const fileName = [...value].map(character => {

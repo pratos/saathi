@@ -3,9 +3,12 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireRoomPermission } from "./lib/authz";
-import { isNoReplyText, SAATHI_MODEL, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
+import { profileNameForUser } from "./lib/firecrawlInteract";
+import { imageKindValidator, imageLanguageValidator, imageStyleValidator } from "./lib/imageSafety";
+import { DEFAULT_MODEL_TIER, resolveModelTier } from "./lib/modelTiers";
+import { isNoReplyText, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
 
 const MAX_CONTEXT_MESSAGES = 200;
 
@@ -27,7 +30,9 @@ const jobDoc = v.object({
   leaseId: v.optional(v.string()), createdAt: v.number(), startedAt: v.optional(v.number()),
   completedAt: v.optional(v.number()), error: v.optional(v.string()), responseText: v.optional(v.string()),
   trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"), v.literal("automatic"))),
-  activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"))),
+  activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"), v.literal("using_computer"))),
+  computerLiveViewUrl: v.optional(v.string()),
+  computerInteractiveLiveViewUrl: v.optional(v.string()),
 });
 const workItem = v.object({
   agent: agentDoc,
@@ -59,9 +64,11 @@ export const create = mutation({
     }
 
     const now = Date.now();
+    const space = await ctx.db.get(room.spaceId);
+    const route = resolveModelTier(space?.modelTier ?? DEFAULT_MODEL_TIER);
     return ctx.db.insert("agents", {
       spaceId: room.spaceId, roomId: room._id, createdBy: userId, creationKey: args.clientOperationId,
-      name, systemPrompt, provider: "openrouter", model: SAATHI_MODEL, status: "idle", createdAt: now, updatedAt: now,
+      name, systemPrompt, provider: "openrouter", model: route.model, status: "idle", createdAt: now, updatedAt: now,
     });
   },
 });
@@ -156,17 +163,23 @@ export const beginNext = internalMutation({
     const startedAt = Date.now();
     const attempt = job.attempt + 1;
     const leaseId = `${job._id}:${attempt}`;
-    await ctx.db.patch(job._id, { status: "running", startedAt, attempt, leaseId, error: undefined, activity: undefined });
+    await ctx.db.patch(job._id, {
+      status: "running", startedAt, attempt, leaseId, error: undefined, activity: undefined,
+      computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined,
+    });
     await ctx.scheduler.runAfter(10 * 60 * 1000 + 30_000, internal.agents.recover, { agentId, jobId: job._id, leaseId });
 
     const recentMessages = await ctx.db.query("agentMessages").withIndex("by_agent_sequence", q =>
       q.eq("agentId", agentId),
     ).order("desc").take(MAX_CONTEXT_MESSAGES);
     const nextSequence = (recentMessages[0]?.sequence ?? -1) + 1;
+    const history = recentMessages.reverse().map(entry => entry.message);
+    const roomHistory = await seedRoomHistory(ctx, agent.roomId);
+    const seeded = roomHistory.length > 0 ? roomHistory : history;
     return {
       agent,
       job: { ...job, status: "running" as const, startedAt, attempt, leaseId },
-      messages: recentMessages.reverse().map(entry => entry.message),
+      messages: seeded,
       nextSequence,
       leaseId,
     };
@@ -177,6 +190,7 @@ export const finish = internalMutation({
   args: {
     agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string(),
     nextSequence: v.number(), messages: v.array(v.any()), error: v.optional(v.string()),
+    inputTokens: v.optional(v.number()), outputTokens: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -198,11 +212,20 @@ export const finish = internalMutation({
     await ctx.db.patch(job._id, {
       status: args.error ? "failed" : "complete", completedAt: Date.now(), error: args.error,
       leaseId: undefined, responseText: responseText || undefined, activity: undefined,
+      computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined,
     });
     if (!args.error && responseText) {
       await ctx.db.insert("messages", {
         spaceId: agent.spaceId, roomId: agent.roomId, actorType: "assistant", origin: "assistant",
         originalText: responseText, language: "en", idempotencyKey: `agent-${job._id}`, createdAt: Date.now(),
+      });
+    }
+    const inputTokens = Math.max(0, args.inputTokens ?? 0);
+    const outputTokens = Math.max(0, args.outputTokens ?? 0);
+    if (inputTokens + outputTokens > 0) {
+      await ctx.db.insert("usageLedger", {
+        spaceId: agent.spaceId, userId: job.requestedBy, provider: "openrouter", model: agent.model,
+        unit: "token", quantity: inputTokens + outputTokens, costClass: "chat", createdAt: Date.now(),
       });
     }
     await scheduleNextOrIdle(ctx, args.agentId, args.error);
@@ -226,7 +249,7 @@ export const updateProgress = internalMutation({
 export const updateActivity = internalMutation({
   args: {
     agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string(),
-    activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"))),
+    activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"), v.literal("using_computer"))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -237,10 +260,31 @@ export const updateActivity = internalMutation({
   },
 });
 
+export const updateComputerView = internalMutation({
+  args: {
+    agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string(),
+    liveViewUrl: v.optional(v.string()), interactiveLiveViewUrl: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return null;
+    await ctx.db.patch(job._id, {
+      activity: "using_computer",
+      computerLiveViewUrl: args.liveViewUrl,
+      computerInteractiveLiveViewUrl: args.interactiveLiveViewUrl,
+    });
+    return null;
+  },
+});
+
 export const saveGeneratedImage = internalMutation({
   args: {
     agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string(),
     storageId: v.id("_storage"), prompt: v.string(), model: v.string(), mediaType: v.string(),
+    kind: v.optional(imageKindValidator),
+    style: v.optional(imageStyleValidator),
+    language: v.optional(imageLanguageValidator),
   },
   returns: v.union(v.id("generatedImages"), v.null()),
   handler: async (ctx, args) => {
@@ -250,6 +294,7 @@ export const saveGeneratedImage = internalMutation({
     return ctx.db.insert("generatedImages", {
       spaceId: agent.spaceId, roomId: agent.roomId, requestedBy: job.requestedBy,
       storageId: args.storageId, prompt: args.prompt, model: args.model, mediaType: args.mediaType, createdAt: Date.now(),
+      kind: args.kind, style: args.style, language: args.language,
     });
   },
 });
@@ -260,7 +305,10 @@ export const fail = internalMutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return null;
-    await ctx.db.patch(job._id, { status: "failed", completedAt: Date.now(), error: args.error, leaseId: undefined, activity: undefined });
+    await ctx.db.patch(job._id, {
+      status: "failed", completedAt: Date.now(), error: args.error, leaseId: undefined, activity: undefined,
+      computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined,
+    });
     await scheduleNextOrIdle(ctx, args.agentId, args.error);
     return null;
   },
@@ -274,6 +322,7 @@ export const recover = internalMutation({
     if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return null;
     await ctx.db.patch(job._id, {
       status: "queued", startedAt: undefined, leaseId: undefined, activity: undefined,
+      computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined,
       error: "Recovered after the worker lease expired",
     });
     await ctx.scheduler.runAfter(0, internal.agentWorker.run, { agentId: args.agentId });
@@ -297,6 +346,26 @@ export const remember = internalMutation({
   },
 });
 
+export const computerJobContext = internalQuery({
+  args: { agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string() },
+  returns: v.union(v.object({
+    profileName: v.string(),
+    imageStyle: imageStyleValidator,
+    language: v.union(v.literal("en"), v.literal("hi"), v.literal("mr")),
+  }), v.null()),
+  handler: async (ctx, args) => {
+    const [agent, job] = await Promise.all([ctx.db.get(args.agentId), ctx.db.get(args.jobId)]);
+    if (!agent || !job || job.agentId !== agent._id || job.status !== "running" || job.leaseId !== args.leaseId) return null;
+    if (!(await stillCanPrompt(ctx, agent, job.requestedBy))) return null;
+    const requester = await ctx.db.get(job.requestedBy);
+    return {
+      profileName: profileNameForUser(job.requestedBy),
+      imageStyle: requester?.preferredImageStyle ?? "warm_family",
+      language: requester?.preferredLanguage ?? "en",
+    };
+  },
+});
+
 export const recall = internalQuery({
   args: { agentId: v.id("agents"), key: v.string() },
   returns: v.union(v.string(), v.null()),
@@ -316,7 +385,7 @@ async function scheduleNextOrIdle(ctx: MutationCtx, agentId: Id<"agents">, error
   if (next) await ctx.scheduler.runAfter(0, internal.agentWorker.run, { agentId });
 }
 
-async function stillCanPrompt(ctx: MutationCtx, agent: Doc<"agents">, userId: Id<"users">) {
+async function stillCanPrompt(ctx: QueryCtx | MutationCtx, agent: Doc<"agents">, userId: Id<"users">) {
   const [room, membership, roomMember] = await Promise.all([
     ctx.db.get(agent.roomId),
     ctx.db.query("memberships").withIndex("by_space_user", q =>
@@ -332,6 +401,24 @@ async function stillCanPrompt(ctx: MutationCtx, agent: Doc<"agents">, userId: Id
 
 function validateOperationId(value: string) {
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(value)) throw invalid("Invalid client operation ID");
+}
+
+async function seedRoomHistory(ctx: MutationCtx, roomId: Id<"rooms">) {
+  const rows = await ctx.db.query("messages").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(24);
+  const attachments = await ctx.db.query("attachments").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(12);
+  const byMessage = new Map(attachments.map(attachment => [String(attachment.messageId), attachment]));
+  return rows.reverse().map(message => {
+    const attachment = byMessage.get(String(message._id));
+    const fileNote = attachment
+      ? `\n[Shared file: ${attachment.fileName}${attachment.transcript ? ` — ${attachment.transcript.slice(0, 800)}` : ""}]`
+      : "";
+    const speaker = message.actorType === "assistant" ? "Saathi" : message.actorType === "email_guest" ? "Email" : "Family member";
+    return {
+      role: message.actorType === "assistant" ? "assistant" : "user",
+      content: `${speaker}: ${message.originalText}${fileNote}`.slice(0, 4_000),
+      timestamp: message.createdAt,
+    };
+  });
 }
 
 function invalid(message: string) {

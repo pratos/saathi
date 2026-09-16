@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { imageStyleValidator } from "./lib/imageSafety";
 
 const language = v.union(v.literal("en"), v.literal("hi"), v.literal("mr"));
 const visibility = v.union(v.literal("private"), v.literal("room"), v.literal("space"));
@@ -15,6 +16,7 @@ export default defineSchema({
     emailVerificationTime: v.optional(v.number()), phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()), isAnonymous: v.optional(v.boolean()),
     displayName: v.optional(v.string()), preferredLanguage: v.optional(language),
+    preferredImageStyle: v.optional(imageStyleValidator),
   }).index("email", ["email"]).index("phone", ["phone"]),
   spaces: defineTable({
     name: v.string(),
@@ -22,7 +24,16 @@ export default defineSchema({
     createdBy: v.id("users"),
     creationKey: v.string(),
     createdAt: v.number(),
+    modelTier: v.optional(v.union(v.literal("low"), v.literal("med"), v.literal("high"), v.literal("ultra"))),
   }).index("by_agentmail_inbox", ["agentmailInboxId"]).index("by_creator_key", ["createdBy", "creationKey"]),
+  providerKeys: defineTable({
+    spaceId: v.id("spaces"),
+    provider: v.union(v.literal("openai"), v.literal("openrouter"), v.literal("codex")),
+    sealedSecret: v.string(),
+    lastFour: v.string(),
+    updatedBy: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_space_provider", ["spaceId", "provider"]),
   memberships: defineTable({
     spaceId: v.id("spaces"), userId: v.id("users"),
     role: v.union(v.literal("owner"), v.literal("member")),
@@ -49,6 +60,15 @@ export default defineSchema({
     category: v.union(v.literal("bills"), v.literal("school"), v.literal("travel"), v.literal("subscriptions"), v.literal("home"), v.literal("receipts"), v.literal("bank"), v.literal("needs_review")),
     status: v.union(v.literal("received"), v.literal("processing"), v.literal("ready"), v.literal("failed")),
     extractedAmount: v.optional(v.string()), extractedDueAt: v.optional(v.number()),
+    extractedMerchant: v.optional(v.string()), extractedPeriod: v.optional(v.string()),
+    direction: v.optional(v.union(v.literal("incoming"), v.literal("outgoing"))),
+    processingNotes: v.optional(v.string()),
+    documentParseStatus: v.optional(v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed"))),
+    suggestedActions: v.optional(v.array(v.object({
+      kind: v.string(), label: v.string(), detail: v.optional(v.string()), url: v.optional(v.string()),
+    }))),
+    actionStatus: v.optional(v.union(v.literal("suggested"), v.literal("confirmed"), v.literal("dismissed"))),
+    heartbeatMessageId: v.optional(v.id("messages")),
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
     receivedAt: v.number(),
   }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]).index("by_space_category_received", ["spaceId", "category", "receivedAt"]),
@@ -107,10 +127,18 @@ export default defineSchema({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
     authorUserId: v.id("users"), storageId: v.id("_storage"), fileName: v.string(),
     mediaType: v.string(), sizeBytes: v.number(), createdAt: v.number(),
+    kind: v.optional(v.union(v.literal("photo"), v.literal("receipt"), v.literal("document"))),
+    transcriptStatus: v.optional(v.union(v.literal("pending"), v.literal("ready"), v.literal("failed"))),
+    transcript: v.optional(v.string()),
+    extractedAmount: v.optional(v.string()),
+    extractedMerchant: v.optional(v.string()),
   }).index("by_message", ["messageId"]).index("by_room_created", ["roomId", "createdAt"]),
   generatedImages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), requestedBy: v.id("users"),
     prompt: v.string(), model: v.string(), storageId: v.id("_storage"), mediaType: v.string(), createdAt: v.number(),
+    kind: v.optional(v.union(v.literal("scene"), v.literal("infographic"), v.literal("devotional"))),
+    style: v.optional(imageStyleValidator),
+    language: v.optional(language),
   }).index("by_room_created", ["roomId", "createdAt"]),
   translations: defineTable({
     messageId: v.optional(v.id("messages")), inboxItemId: v.optional(v.id("inboxItems")),
@@ -151,7 +179,9 @@ export default defineSchema({
     attempt: v.number(), leaseId: v.optional(v.string()), createdAt: v.number(),
     startedAt: v.optional(v.number()), completedAt: v.optional(v.number()), error: v.optional(v.string()),
     responseText: v.optional(v.string()), trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"), v.literal("automatic"))),
-    activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"))),
+    activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"), v.literal("using_computer"))),
+    computerLiveViewUrl: v.optional(v.string()),
+    computerInteractiveLiveViewUrl: v.optional(v.string()),
   }).index("by_agent_status_created", ["agentId", "status", "createdAt"])
     .index("by_agent_created", ["agentId", "createdAt"])
     .index("by_agent_client_operation", ["agentId", "clientOperationId"]),

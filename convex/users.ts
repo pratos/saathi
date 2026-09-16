@@ -1,12 +1,14 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/authz";
+import { imageStyleValidator } from "./lib/imageSafety";
 
 // Convex Auth creates the row; this provisions Saath-owned profile defaults.
 export const ensureCurrent = mutation({
   args: {
     displayName: v.optional(v.string()),
     preferredLanguage: v.optional(v.union(v.literal("en"), v.literal("hi"), v.literal("mr"))),
+    preferredImageStyle: v.optional(imageStyleValidator),
   },
   handler: async (ctx, args) => {
     const { userId, user } = await requireUser(ctx);
@@ -15,6 +17,7 @@ export const ensureCurrent = mutation({
     const patch = {
       displayName: displayName ?? user.displayName ?? user.name,
       preferredLanguage: args.preferredLanguage ?? user.preferredLanguage ?? ("en" as const),
+      preferredImageStyle: args.preferredImageStyle ?? user.preferredImageStyle ?? ("warm_family" as const),
     };
     await ctx.db.patch(userId, patch);
     return { ...user, ...patch };

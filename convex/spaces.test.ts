@@ -32,15 +32,19 @@ describe("family inbox configuration", () => {
       inboxId: "family-inbox-1",
     })).rejects.toThrow(/INBOX_ALREADY_CONNECTED/);
 
+    await owner.mutation(api.spaces.create, { name: "Third family", creationKey: "third-family-key" });
+    await expect(owner.mutation(api.spaces.create, { name: "Fourth family", creationKey: "fourth-family-key" }))
+      .rejects.toThrow(/FAMILY_LIMIT/);
+
     const auditEvents = await t.run((ctx) => ctx.db.query("auditEvents").collect());
-    expect(auditEvents).toEqual([
+    expect(auditEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({
         action: "space.inbox_configured",
         actorUserId: ownerId,
         resourceId: String(firstSpaceId),
         spaceId: firstSpaceId,
       }),
-    ]);
+    ]));
   });
 });
 

@@ -41,6 +41,31 @@ describe("chat attachments", () => {
     const messages = await owner.query(api.rooms.messages, { roomId });
     expect(messages).toHaveLength(1);
     expect(messages[0].originalText).toBe("[Attachment: folder_private.pdf]");
+    expect(visible[0].kind).toBe("document");
+    expect(visible[0].transcriptStatus).toBe("pending");
+  });
+
+  test("marks camera photos for small-model reading and receipts as receipts", async () => {
+    const t = convexTest(schema, modules);
+    const { roomId, ownerId } = await seedRoom(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const photoId = await t.run(ctx => ctx.storage.store(new Blob(["photo"], { type: "image/jpeg" })));
+    const receiptId = await t.run(ctx => ctx.storage.store(new Blob(["bill"], { type: "image/jpeg" })));
+
+    await owner.mutation(api.attachments.submit, {
+      roomId, storageId: photoId, fileName: "kitchen.jpg", mediaType: "image/jpeg",
+      clientOperationId: "photo-upload-001", capture: "camera",
+    });
+    await owner.mutation(api.attachments.submit, {
+      roomId, storageId: receiptId, fileName: "swiggy.jpg", mediaType: "image/jpeg",
+      clientOperationId: "receipt-upload-001", capture: "receipt",
+    });
+
+    const files = await owner.query(api.attachments.forRoom, { roomId });
+    expect(files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fileName: "kitchen.jpg", kind: "photo", transcriptStatus: "pending" }),
+      expect.objectContaining({ fileName: "swiggy.jpg", kind: "receipt", transcriptStatus: "pending" }),
+    ]));
   });
 
   test("rejects unsupported content without creating a message", async () => {
@@ -51,7 +76,7 @@ describe("chat attachments", () => {
 
     await expect(owner.mutation(api.attachments.submit, {
       roomId, storageId, fileName: "unsafe.bin", mediaType: "application/octet-stream", clientOperationId: "unsupported-upload-001",
-    })).rejects.toThrow(/supported image or document/i);
+    })).rejects.toThrow(/supported/i);
     expect(await owner.query(api.rooms.messages, { roomId })).toEqual([]);
   });
 });

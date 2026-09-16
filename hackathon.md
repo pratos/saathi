@@ -10,9 +10,9 @@
 - **Components:** @agentmail/convex, @convex-dev/rate-limiter, @convex-dev/static-hosting, @convex-dev/workflow, @firecrawl/firecrawl-convex
 - **Convex features:** schema, indexes, queries, mutations, actions, HTTP actions, file storage, realtime subscriptions, durable workflows, scheduled lease recovery
 - **Auth:** Convex Auth
-- **AI models:** deepseek/deepseek-v4.1-flash, meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
+- **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-15T07:53:25Z
+- **Last updated:** 2026-09-16T12:00:00Z
 
 ## Log
 
@@ -152,3 +152,46 @@ production Convex variables and deliberate external webhook registration.
 Money-related Gmail now stays in My Saathi until the owner shares it. Shared items
 become family-inbox entries. Food spend from approved Swiggy/Zomato receipts is
 tracked against an owner-set monthly budget. Swiggy MCP ordering is not connected.
+
+### 2026-09-15 - Family BYOK
+Owners can save an OpenAI, OpenRouter, or Codex API key for their family.
+Secrets are encrypted and never returned; only last-four is shown. ChatGPT
+subscription login is not an API and is not used. Deployment env keys remain
+the fallback.
+
+### 2026-09-15 - Family photos and collages
+Added collage, album-grid, scrapbook, and fridge-photo presets for household
+memory images. Chat now has Photos, Camera, and Receipt capture. Images go to
+Convex storage; a small vision model (`gpt-5-mini`) transcribes captions or
+receipt merchant/amount. Camera and library use the same authorized upload path.
+
+### 2026-09-15 - Family image presets
+Chat and GPT-Live can generate family-safe images. Named presets cover
+household scenes, language-specific infographics, modest devotional art, and
+craft styles. Sexual, nude, and graphic requests are refused before the image
+model runs. The selected preset is stored on the member profile.
+
+### 2026-09-15 - Firecrawl Interact computer use
+Explicit `@saathi` browse requests can open a public https page through Firecrawl
+Interact. The running job streams an embeddable live view so a person can watch
+and sign in in the hosted browser. Firecrawl persistent profiles save cookies and
+localStorage per Saathi user when the session stops; passwords, OTPs, and payment
+details are never stored in Convex and are never typed by the agent. Checkout,
+payments, and placing orders are refused. This uses the existing
+`FIRECRAWL_API_KEY` hackathon credential.
+
+### 2026-09-16 - Family inbox documents, actions, and model tiers
+Family inbox now classifies incoming vs outgoing mail, extracts merchant/amount/period,
+and uses Firecrawl Parse/scrape for public PDF URLs. Password-protected PDFs keep an
+email-body hint instead of a stored password. Processing posts a heartbeat in the
+shared family chat. Suggested actions such as unsubscribe require explicit confirmation
+and do not send mail. Owners can set Low/Med/High/Ultra chat models (default Med) and
+see token usage by model. Mobile Family inbox keeps Back and bottom navigation. Native
+overlapping family-switcher controls were replaced with button chips.
+
+### 2026-09-16 - Family admin, larger PDFs, and room memory
+Owners open Family admin from the rail avatar, mobile settings, or sidebar. They can
+create up to 3 owned families. Chat PDFs upload up to 50 MB (Convex URL uploads are not
+the 20 MB HTTP-action cap; images stay at 20 MB) and are parsed with Firecrawl.
+The mobile composer exposes Camera. Saathi jobs are seeded from recent room chat and
+shared-file notes so questions about a just-shared GIF or PDF can see it.

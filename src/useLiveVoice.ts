@@ -10,10 +10,12 @@ export type VoiceTurn = { role: 'user' | 'assistant'; text: string; startMs: num
 export function useLiveVoice(roomId: Id<'rooms'>) {
   const createSession = useAction(api.liveVoice.startSession)
   const finishSession = useAction(api.liveVoice.finishSession)
+  const createVoiceImage = useAction(api.images.createFromVoice)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
   const [voiceLevel, setVoiceLevel] = useState(0)
+  const [savingSummary, setSavingSummary] = useState(false)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<RTCDataChannel | null>(null)
   const microphoneRef = useRef<MediaStream | null>(null)
@@ -51,6 +53,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     if (!sessionId || persistedSessionRef.current === sessionId) return
     persistedSessionRef.current = sessionId
     const turns = groupVoiceFragments(fragmentsRef.current)
+    setSavingSummary(true)
     try {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
@@ -67,6 +70,8 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       persistedSessionRef.current = ''
       setError('The conversation ended, but its summary could not be saved.')
       setStatus('error')
+    } finally {
+      setSavingSummary(false)
     }
   }, [finishSession, roomId])
 
@@ -152,6 +157,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           setStatus('ended')
           void persistKnownTranscript()
           cleanup()
+        } else if (event.type === 'response.event') {
+          const call = liveImageCall(event.raw)
+          if (call) void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError)
         } else if (event.type === 'error') {
           setError(event.message || 'Saathi encountered a voice error.')
         }
@@ -185,7 +193,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')
     }
-  }, [cleanup, createSession, persistKnownTranscript, roomId, status])
+  }, [cleanup, createSession, createVoiceImage, persistKnownTranscript, roomId, status])
 
   const end = useCallback(() => {
     const channel = channelRef.current
@@ -220,6 +228,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     error,
     turns: useMemo(() => groupVoiceFragments(fragments), [fragments]),
     voiceLevel,
+    summarizing: savingSummary || status === 'ending',
     start,
     end,
     toggleMute,
@@ -260,7 +269,7 @@ async function waitForIce(peer: RTCPeerConnection) {
   })
 }
 
-function parseLiveEvent(value: unknown): null | { type: string; delta: string; start_ms: number; end_ms: number; message: string } {
+function parseLiveEvent(value: unknown): null | { type: string; delta: string; start_ms: number; end_ms: number; message: string; raw: Record<string, unknown> } {
   try {
     const parsed = JSON.parse(String(value)) as Record<string, unknown>
     if (typeof parsed.type !== 'string') return null
@@ -271,10 +280,66 @@ function parseLiveEvent(value: unknown): null | { type: string; delta: string; s
       start_ms: typeof parsed.start_ms === 'number' ? parsed.start_ms : 0,
       end_ms: typeof parsed.end_ms === 'number' ? parsed.end_ms : 0,
       message: typeof error?.message === 'string' ? error.message : '',
+      raw: parsed,
     }
   } catch {
     return null
   }
+}
+
+function liveImageCall(event: Record<string, unknown>) {
+  const nested = event.event && typeof event.event === 'object' ? event.event as Record<string, unknown> : event
+  if (nested.type !== 'response.output_item.done') return null
+  const item = nested.item && typeof nested.item === 'object' ? nested.item as Record<string, unknown> : nested
+  const name = typeof item.name === 'string' ? item.name : ''
+  if (name !== 'generate_image') return null
+  const callId = typeof item.call_id === 'string' ? item.call_id : typeof nested.call_id === 'string' ? nested.call_id : ''
+  if (!callId) return null
+  const args = parseToolArgs(item.arguments)
+  return { callId, prompt: args.prompt, kind: args.kind, style: args.style, language: args.language }
+}
+
+function parseToolArgs(value: unknown) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>
+    return {
+      prompt: typeof record.prompt === 'string' ? record.prompt : '',
+      kind: typeof record.kind === 'string' ? record.kind : undefined,
+      style: typeof record.style === 'string' ? record.style : undefined,
+      language: typeof record.language === 'string' ? record.language : undefined,
+    }
+  }
+  if (typeof value !== 'string') return { prompt: '' }
+  try {
+    return parseToolArgs(JSON.parse(value))
+  } catch {
+    return { prompt: '' }
+  }
+}
+
+async function fulfillVoiceImage(
+  channel: RTCDataChannel,
+  roomId: Id<'rooms'>,
+  call: { callId: string; prompt: string; kind?: string; style?: string; language?: string },
+  createVoiceImage: (args: { roomId: Id<'rooms'>; prompt: string; kind?: string; style?: string; language?: string }) => Promise<{ ok: boolean; message: string }>,
+  setError: (message: string) => void,
+) {
+  const result = call.prompt
+    ? await createVoiceImage({ roomId, prompt: call.prompt, kind: call.kind, style: call.style, language: call.language })
+    : { ok: false, message: 'Describe the family-safe image you want.' }
+  if (!result.ok) setError(result.message)
+  if (channel.readyState !== 'open') return
+  channel.send(JSON.stringify({
+    type: 'response.item.create',
+    event_id: crypto.randomUUID(),
+    item: { type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result) },
+  }))
+  channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
+}
+
+export function liveImageCallFromEvent(value: unknown) {
+  const event = parseLiveEvent(typeof value === 'string' ? value : JSON.stringify(value))
+  return event ? liveImageCall(event.raw) : null
 }
 
 function convexErrorCode(error: unknown) {

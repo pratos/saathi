@@ -10,25 +10,40 @@ import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
-import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
+import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
+import { generateFamilyImageBytes } from "./lib/imageGeneration";
+import { resolveOpenRouterKey } from "./lib/providerKeys";
+import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
+import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
+import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
 
 const firecrawl = new FirecrawlClient(components.firecrawl);
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
-const deepSeekModel: Model<"openai-completions"> = {
-  id: SAATHI_MODEL,
-  name: "DeepSeek: DeepSeek V4.1 Flash",
-  api: "openai-completions",
-  provider: "openrouter",
-  baseUrl: "https://openrouter.ai/api/v1",
-  reasoning: true,
-  thinkingLevelMap: { off: "none", minimal: null, low: "low", medium: null, high: "high", xhigh: null, max: "max" },
-  input: ["text"],
-  cost: { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0 },
-  contextWindow: 1_048_576,
-  maxTokens: 8_192,
-  compat: { supportsDeveloperRole: false, thinkingFormat: "openrouter", requiresReasoningContentOnAssistantMessages: true },
-};
+const thinkingLevelMap = { off: "none" as const, minimal: null, low: "low" as const, medium: "medium" as const, high: "high" as const, xhigh: null, max: "max" as const };
+
+function openRouterTextModel(id: string, name: string, cost: { input: number; output: number }): Model<"openai-completions"> {
+  return {
+    id,
+    name,
+    api: "openai-completions",
+    provider: "openrouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    reasoning: true,
+    thinkingLevelMap,
+    input: ["text"],
+    cost: { ...cost, cacheRead: 0.003, cacheWrite: 0 },
+    contextWindow: 1_048_576,
+    maxTokens: 8_192,
+    compat: { supportsDeveloperRole: false, thinkingFormat: "openrouter", requiresReasoningContentOnAssistantMessages: true },
+  };
+}
+
+const extraOpenRouterModels = [
+  openRouterTextModel(MODEL_TIERS.low.model, "DeepSeek V4.1 Flash", { input: 0.15, output: 0.6 }),
+  openRouterTextModel(MODEL_TIERS.med.model, "GPT-5.6 Luna", { input: 0.5, output: 2 }),
+  openRouterTextModel(MODEL_TIERS.high.model, "Grok 4.6", { input: 1.5, output: 6 }),
+  openRouterTextModel(MODEL_TIERS.ultra.model, "GPT-5.6 Sol", { input: 2, output: 8 }),
+];
 
 export const run = internalAction({
   args: { agentId: v.id("agents") },
@@ -38,10 +53,20 @@ export const run = internalAction({
     if (!work) return null;
 
     try {
+      const openRouterKey = await resolveOpenRouterKey(ctx, work.agent.spaceId);
+      const route = extraOpenRouterModels.some(item => item.id === work.agent.model)
+        ? extraOpenRouterModels.find(item => item.id === work.agent.model)!
+        : extraOpenRouterModels[1];
+      const thinkingLevel: SaathiThinkingLevel = resolveModelTier(
+        extraOpenRouterModels.find(item => item.id === work.agent.model)?.id === MODEL_TIERS.low.model ? "low"
+          : work.agent.model === MODEL_TIERS.high.model ? "high"
+            : work.agent.model === MODEL_TIERS.ultra.model ? "ultra"
+              : "med",
+      ).thinkingLevel;
       const models = createModels();
       const baseProvider = openrouterProvider();
-      models.setProvider({ ...baseProvider, getModels: () => [...baseProvider.getModels(), deepSeekModel] });
-      const model = models.getModel("openrouter", work.agent.model);
+      models.setProvider({ ...baseProvider, getModels: () => [...baseProvider.getModels(), ...extraOpenRouterModels] });
+      const model = models.getModel("openrouter", work.agent.model) ?? models.getModel("openrouter", route.id);
       if (!model) throw new Error(`Unsupported agent model: ${work.agent.model}`);
 
       let turns = 0;
@@ -49,12 +74,12 @@ export const run = internalAction({
         initialState: {
           systemPrompt: withWebAccessPrompt(work.agent.systemPrompt),
           model,
-          thinkingLevel: "high",
-          tools: createTools(ctx, agentId, work.job._id, work.leaseId),
+          thinkingLevel,
+          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey),
           messages: work.messages as AgentMessage[],
         },
         streamFn: models.streamSimple.bind(models),
-        getApiKey: () => env.OPENROUTER_API_KEY,
+        getApiKey: () => openRouterKey,
         onPayload: enableOpenRouterWebSearch,
         sessionId: String(agentId),
         shouldStopAfterTurn: () => ++turns >= 12,
@@ -64,7 +89,8 @@ export const run = internalAction({
       agent.subscribe(async (event) => {
         const toolActivity = event.type === "tool_execution_start" || event.type === "tool_execution_end"
           ? event.toolName === "search_public_web" ? "searching_web" as const
-            : event.toolName === "generate_image" ? "generating_image" as const : undefined
+            : event.toolName === "generate_image" ? "generating_image" as const
+            : event.toolName === "use_computer" ? "using_computer" as const : undefined
           : undefined;
         if (event.type === "tool_execution_start" && toolActivity) {
           await ctx.runMutation(internal.agents.updateActivity, {
@@ -90,9 +116,10 @@ export const run = internalAction({
 
       await agent.prompt(work.job.prompt);
       const messages = makeConvexSafe(agent.state.messages.slice(work.messages.length));
+      const usage = assistantUsage(agent.state.messages);
       await ctx.runMutation(internal.agents.finish, {
         agentId, jobId: work.job._id, leaseId: work.leaseId, nextSequence: work.nextSequence,
-        messages, error: agent.state.errorMessage,
+        messages, error: agent.state.errorMessage, inputTokens: usage.input, outputTokens: usage.output,
       });
     } catch (error) {
       await ctx.runMutation(internal.agents.fail, {
@@ -109,6 +136,7 @@ function createTools(
   agentId: Id<"agents">,
   jobId: Id<"agentJobs">,
   leaseId: string,
+  openRouterKey: string,
 ): AgentTool[] {
   return [
     {
@@ -129,16 +157,33 @@ function createTools(
     },
     {
       name: "generate_image", label: "Generate image",
-      description: "Generate one image for the family chat only when a person explicitly requests an image. The finished image is attached to the current room.",
-      parameters: Type.Object({ prompt: Type.String({ minLength: 3, maxLength: 2_000 }) }, { additionalProperties: false }),
+      description: "Generate one family-safe image for this room when a person explicitly requests an image, infographic, or respectful devotional artwork. Never create sexual, nude, or graphic violent images.",
+      parameters: Type.Object({
+        prompt: Type.String({ minLength: 3, maxLength: 2_000 }),
+        kind: Type.Optional(Type.Union([Type.Literal("scene"), Type.Literal("infographic"), Type.Literal("devotional")])),
+        style: Type.Optional(Type.Union([
+          Type.Literal("warm_family"), Type.Literal("kitchen_table"), Type.Literal("festival_home"), Type.Literal("storybook"),
+          Type.Literal("family_collage"), Type.Literal("memory_grid"), Type.Literal("scrapbook"), Type.Literal("fridge_photos"),
+          Type.Literal("infographic"), Type.Literal("step_cards"), Type.Literal("kids_chart"), Type.Literal("wall_poster"),
+          Type.Literal("devotional"), Type.Literal("diya_aarti"), Type.Literal("rangoli"), Type.Literal("festival_altar"),
+          Type.Literal("watercolor"), Type.Literal("flat"), Type.Literal("folk_art"), Type.Literal("block_print"),
+        ])),
+        language: Type.Optional(Type.Union([Type.Literal("en"), Type.Literal("hi"), Type.Literal("mr")])),
+      }, { additionalProperties: false }),
       execute: async (_callId, params) => {
-        const prompt = (params as { prompt: string }).prompt.trim();
-        const generated = await generateImage(prompt);
+        const requested = params as { prompt: string; kind?: string; style?: string; language?: string };
+        const preferences = await ctx.runQuery(internal.agents.computerJobContext, { agentId, jobId, leaseId });
+        const kind = isImageKind(requested.kind) ? requested.kind : "scene";
+        const style = isImageStyle(requested.style) ? requested.style : preferences?.imageStyle ?? "warm_family";
+        const language = isImageLanguage(requested.language) ? requested.language : preferences?.language ?? "en";
+        const prompt = composeFamilyImagePrompt({ prompt: requested.prompt, kind, style, language });
+        const generated = await generateFamilyImageBytes(prompt, openRouterKey);
         const storageId = await ctx.storage.store(new Blob([generated.bytes], { type: generated.mediaType }));
         let imageId: Id<"generatedImages"> | null;
         try {
           imageId = await ctx.runMutation(internal.agents.saveGeneratedImage, {
-            agentId, jobId, leaseId, storageId, prompt, model: SAATHI_IMAGE_MODEL, mediaType: generated.mediaType,
+            agentId, jobId, leaseId, storageId, prompt: requested.prompt.trim(), model: SAATHI_IMAGE_MODEL, mediaType: generated.mediaType,
+            kind, style, language,
           });
         } catch (error) {
           await ctx.storage.delete(storageId);
@@ -151,6 +196,36 @@ function createTools(
         return {
           content: [{ type: "text", text: "The requested image was generated and attached to the family chat." }],
           details: { provider: "openrouter", model: SAATHI_IMAGE_MODEL, imageId: String(imageId) },
+        };
+      },
+    },
+    {
+      name: "use_computer", label: "Use computer",
+      description: "Open a public https website in Firecrawl Interact so the family can watch and, if needed, sign in in the live browser. Use only when a person explicitly asks to browse, click through, log in, or operate a site. Never type passwords, OTPs, or payment details. Never checkout, pay, or place an order. Browser cookies stay in a Firecrawl profile for this person so later visits can continue without storing passwords in Saathi.",
+      parameters: Type.Object({
+        url: Type.String({ minLength: 8, maxLength: 2_000 }),
+        task: Type.String({ minLength: 3, maxLength: 4_000 }),
+      }, { additionalProperties: false }),
+      execute: async (_callId, params) => {
+        const { url, task } = params as { url: string; task: string };
+        const job = await ctx.runQuery(internal.agents.computerJobContext, { agentId, jobId, leaseId });
+        if (!job) throw new Error("Computer use was discarded because room access changed.");
+        const result = await runFirecrawlComputerTask({
+          apiKey: env.FIRECRAWL_API_KEY,
+          url,
+          task,
+          profileName: job.profileName,
+          onLiveView: async (view) => {
+            await ctx.runMutation(internal.agents.updateComputerView, {
+              agentId, jobId, leaseId,
+              liveViewUrl: view.liveViewUrl,
+              interactiveLiveViewUrl: view.interactiveLiveViewUrl,
+            });
+          },
+        });
+        return {
+          content: [{ type: "text", text: result.output }],
+          details: { provider: "firecrawl", scrapeId: result.scrapeId, liveViewUrl: result.liveViewUrl },
         };
       },
     },
@@ -173,30 +248,6 @@ function createTools(
       },
     },
   ];
-}
-
-async function generateImage(prompt: string) {
-  const response = await fetch("https://openrouter.ai/api/v1/images", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: SAATHI_IMAGE_MODEL, prompt, n: 1 }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!response.ok) {
-    const detail = (await response.text()).replace(/\s+/g, " ").slice(0, 500);
-    throw new Error(`Image generation failed (${response.status})${detail ? `: ${detail}` : ""}`);
-  }
-  const payload: unknown = await response.json();
-  const image = payload && typeof payload === "object" && "data" in payload && Array.isArray(payload.data)
-    ? payload.data[0] : undefined;
-  if (!image || typeof image !== "object" || !("b64_json" in image) || typeof image.b64_json !== "string") {
-    throw new Error("Image provider returned no image data.");
-  }
-  const mediaType = "media_type" in image && typeof image.media_type === "string" ? image.media_type : "image/png";
-  if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(mediaType)) throw new Error("Image provider returned an unsupported format.");
-  const bytes = Uint8Array.from(Buffer.from(image.b64_json, "base64"));
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) throw new Error("Generated image size is invalid.");
-  return { bytes, mediaType };
 }
 
 export function enableOpenRouterWebSearch(payload: unknown) {
@@ -242,6 +293,17 @@ function cleanText(value: unknown) {
 
 function makeConvexSafe(messages: AgentMessage[]): unknown[] {
   return JSON.parse(JSON.stringify(messages)) as unknown[];
+}
+
+function assistantUsage(messages: AgentMessage[]) {
+  let input = 0;
+  let output = 0;
+  for (const message of messages) {
+    if (message.role !== "assistant" || !message.usage) continue;
+    input += message.usage.input || 0;
+    output += message.usage.output || 0;
+  }
+  return { input, output };
 }
 
 function assistantText(message: AgentMessage) {

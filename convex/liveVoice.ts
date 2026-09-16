@@ -4,6 +4,8 @@ import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, env, internalMutation, internalQuery } from "./_generated/server";
 import { requireRoomPermission } from "./lib/authz";
+import { GENERATE_IMAGE_TOOL } from "./lib/imageSafety";
+import { resolveOpenAiKey } from "./lib/providerKeys";
 
 const liveVoiceLimits = new RateLimiter(components.rateLimiter, {
   startLiveVoice: { kind: "fixed window", rate: 8, period: HOUR },
@@ -16,9 +18,9 @@ export const startSession = action({
   returns: v.object({ sessionId: v.string(), sdp: v.string() }),
   handler: async (ctx, { roomId, sdp }): Promise<{ sessionId: string; sdp: string }> => {
     if (!sdp.trim() || sdp.length > 100_000) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice connection offer" });
-    const prepared: { userId: Id<"users">; history: Array<{ role: "user" | "assistant"; text: string }> } =
+    const prepared: { userId: Id<"users">; spaceId: Id<"spaces">; history: Array<{ role: "user" | "assistant"; text: string }> } =
       await ctx.runMutation(internal.liveVoice.prepare, { roomId });
-    const apiKey = env.OPENAI_API_KEY?.trim();
+    const apiKey = await resolveOpenAiKey(ctx, prepared.spaceId);
     if (!apiKey) throw new ConvexError({ code: "LIVE_VOICE_NOT_CONFIGURED", message: "Voice mode is not configured" });
     const safetyIdentifier = await sha256(String(prepared.userId));
     const response = await fetch("https://api.openai.com/v1/live/sessions", {
@@ -31,7 +33,7 @@ export const startSession = action({
       body: JSON.stringify({
         session: {
           model: "gpt-live-1",
-          instructions: "You are Saathi, a warm, concise family assistant. Speak naturally in the language the caller uses. Help clarify and coordinate, but never claim to send messages, spend money, change accounts, or complete consequential actions. Ask for confirmation when a request would require action outside this conversation. Use web search when current information is needed.",
+          instructions: "You are Saathi, a warm, concise family assistant. Speak naturally in the language the caller uses. Help clarify and coordinate, but never claim to send messages, spend money, change accounts, or complete consequential actions. Ask for confirmation when a request would require action outside this conversation. Use web search when current information is needed. If the caller explicitly asks for an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images; refuse those requests.",
           input: prepared.history.map(item => ({
             type: "message",
             role: item.role,
@@ -41,8 +43,8 @@ export const startSession = action({
             type: "responses",
             responses: {
               model: "gpt-5-mini",
-              instructions: "Use web search for current facts. Return concise, grounded results for a spoken family conversation.",
-              tools: [{ type: "web_search" }],
+              instructions: "Use web search for current facts. When the caller explicitly wants an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images. Return concise, grounded results for a spoken family conversation.",
+              tools: [{ type: "web_search" }, GENERATE_IMAGE_TOOL],
               tool_choice: "auto",
             },
           },
@@ -77,14 +79,15 @@ export const register = internalMutation({
 
 export const prepare = internalMutation({
   args: { roomId: v.id("rooms") },
-  returns: v.object({ userId: v.id("users"), history: v.array(historyItem) }),
+  returns: v.object({ userId: v.id("users"), spaceId: v.id("spaces"), history: v.array(historyItem) }),
   handler: async (ctx, { roomId }) => {
-    const { userId } = await requireRoomPermission(ctx, roomId, "post_message");
+    const { userId, room } = await requireRoomPermission(ctx, roomId, "post_message");
     const limit = await liveVoiceLimits.limit(ctx, "startLiveVoice", { key: String(userId) });
     if (!limit.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: limit.retryAfter });
     const messages = await ctx.db.query("messages").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(16);
     return {
       userId,
+      spaceId: room.spaceId,
       history: messages.reverse().filter(message => message.actorType !== "email_guest").map(message => ({
         role: message.actorType === "assistant" || (message.actorType === "voice_transcript" && message.voiceSpeaker === "assistant")
           ? "assistant" as const
@@ -117,10 +120,21 @@ export const finishSession = action({
     const prepared: { alreadyFinished: boolean } = await ctx.runQuery(internal.liveVoice.prepareFinish, { roomId, sessionId });
     if (prepared.alreadyFinished) return "already_saved";
     const transcript = cleanedTurns.map(turn => `${turn.role === "user" ? "Caller" : "Saathi"}: ${turn.text}`).join("\n");
+    const space: { spaceId: Id<"spaces"> } | null = await ctx.runQuery(internal.liveVoice.spaceForRoom, { roomId });
+    const apiKey = space ? await resolveOpenAiKey(ctx, space.spaceId) : env.OPENAI_API_KEY?.trim();
     const summary = transcript
-      ? await summarizeCall(transcript, env.OPENAI_API_KEY?.trim())
+      ? await summarizeCall(transcript, apiKey)
       : "Voice call completed with Saathi.";
     return await ctx.runMutation(internal.liveVoice.storeSummary, { roomId, sessionId, summary });
+  },
+});
+
+export const spaceForRoom = internalQuery({
+  args: { roomId: v.id("rooms") },
+  returns: v.union(v.object({ spaceId: v.id("spaces") }), v.null()),
+  handler: async (ctx, { roomId }) => {
+    const room = await ctx.db.get(roomId);
+    return room ? { spaceId: room.spaceId } : null;
   },
 });
 

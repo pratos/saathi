@@ -76,6 +76,17 @@ export const mineInternal = internalQuery({
   },
 });
 
+export const touchSynced = internalMutation({
+  args: { connectionId: v.id("gmailConnections") },
+  returns: v.null(),
+  handler: async (ctx, { connectionId }) => {
+    const connection = await ctx.db.get(connectionId);
+    if (!connection) return null;
+    await ctx.db.patch(connection._id, { lastSyncedAt: Date.now() });
+    return null;
+  },
+});
+
 export const connectionForProcessing = internalQuery({
   args: { connectionId: v.id("gmailConnections") },
   handler: async (ctx, { connectionId }) => ctx.db.get(connectionId),
@@ -96,7 +107,6 @@ export const saveClassification = internalMutation({
     ).unique();
     if (existing) return null;
     await ctx.db.insert("gmailProcessedMessages", { connectionId: args.connectionId, externalMessageId: args.externalMessageId, useful: args.useful, processedAt: Date.now() });
-    await ctx.db.patch(connection._id, { lastSyncedAt: Date.now() });
     if (!args.useful) return null;
     const roomId = await ensurePersonalRoomForUser(ctx, connection.spaceId, connection.userId);
     const inboxItemId = await ctx.db.insert("inboxItems", {

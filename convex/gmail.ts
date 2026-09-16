@@ -96,9 +96,10 @@ export const backfill = internalAction({
       if (result.error) throw new Error(result.error);
       const page = normalizeToolData(result.data);
       const messages = findArray(page, ["messages", "emails"]);
-      for (let index = 0; index < messages.length; index += 5) {
-        await Promise.all(messages.slice(index, index + 5).map(message => processCandidate(ctx, connection, message)));
+      for (const message of messages) {
+        await processCandidate(ctx, connection, message);
       }
+      await ctx.runMutation(internal.gmailData.touchSynced, { connectionId: connection._id });
       const nextPageToken = findString(page, ["nextPageToken", "next_page_token"]);
       if (nextPageToken) await ctx.scheduler.runAfter(500, internal.gmail.backfill, { connectionId: connection._id, pageToken: nextPageToken });
     } catch (error) {
@@ -121,6 +122,7 @@ export const processIncoming = internalAction({
     if (!connection || connection.status !== "active") return null;
     try {
       await processCandidate(ctx, connection, args.payload);
+      await ctx.runMutation(internal.gmailData.touchSynced, { connectionId: connection._id });
     } catch (error) {
       const attempt = args.attempt ?? 0;
       if (attempt < 2) {

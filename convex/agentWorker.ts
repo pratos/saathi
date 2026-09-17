@@ -87,6 +87,7 @@ export const run = internalAction({
       if (turnDecision) {
         await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, turnDecision);
       }
+      const selectedToolNames = toolNamesForTurnDecision(turnDecision);
       const ephemeralContext = [work.memoryContext, turnDecisionGuidance(turnDecision)].filter(Boolean).join("\n\n");
 
       let turns = 0;
@@ -95,13 +96,16 @@ export const run = internalAction({
           systemPrompt: withWebAccessPrompt(work.agent.systemPrompt),
           model,
           thinkingLevel,
-          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey),
+          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey, selectedToolNames),
           messages: work.messages as AgentMessage[],
         },
         transformContext: async messages => withEphemeralTurnContext(messages, ephemeralContext),
         streamFn: models.streamSimple.bind(models),
         getApiKey: () => openRouterKey,
-        onPayload: enableOpenRouterWebSearch,
+        onPayload: payload => enableOpenRouterWebSearch(
+          payload,
+          selectedToolNames === null || selectedToolNames.includes("search_public_web"),
+        ),
         beforeToolCall: typesafeKey ? async ({ toolCall, args }) => {
           const decision = await safeToolDecision(typesafeKey, {
             request: decisionInput,
@@ -173,8 +177,10 @@ function createTools(
   jobId: Id<"agentJobs">,
   leaseId: string,
   openRouterKey: string,
+  selectedToolNames: readonly ApplicationAssistantToolName[] | null,
 ): AgentTool[] {
-  return APPLICATION_ASSISTANT_TOOLS.map(tool => ({
+  const selected = selectedToolNames === null ? null : new Set(selectedToolNames);
+  return APPLICATION_ASSISTANT_TOOLS.filter(tool => selected === null || selected.has(tool.name)).map(tool => ({
     name: tool.name,
     label: tool.label,
     description: tool.description,
@@ -183,6 +189,26 @@ function createTools(
       ctx, agentId, jobId, leaseId, openRouterKey, tool.name, params,
     ),
   })) as AgentTool[];
+}
+
+const JEV_TOOL_SELECTION_CONFIDENCE = 0.85;
+
+const ROUTE_TOOL_BUNDLES: Record<JevTurnDecision["route"], readonly ApplicationAssistantToolName[]> = {
+  answer: [],
+  clarify: [],
+  search: ["search_public_web"],
+  computer: ["use_computer"],
+  image: ["generate_image"],
+  settings: ["set_reading_language", "set_image_style", "set_food_budget", "set_model_tier"],
+  memory: ["remember", "recall"],
+};
+
+export function toolNamesForTurnDecision(decision: JevTurnDecision | null): readonly ApplicationAssistantToolName[] | null {
+  if (!decision) return null;
+  if (decision.route === "clarify" || decision.needsClarification >= 0.72) return [];
+  if (decision.routeConfidence < JEV_TOOL_SELECTION_CONFIDENCE
+    || decision.routeProbabilities[decision.route] < JEV_TOOL_SELECTION_CONFIDENCE) return null;
+  return ROUTE_TOOL_BUNDLES[decision.route];
 }
 
 async function executeApplicationTool(
@@ -265,9 +291,10 @@ async function conversationAction(
   return { content: [{ type: "text" as const, text: result.message }], details: { applied: result.ok } };
 }
 
-export function enableOpenRouterWebSearch(payload: unknown) {
+export function enableOpenRouterWebSearch(payload: unknown, enabled = true) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
   const request = payload as Record<string, unknown>;
+  if (!enabled) return request;
   const tools = Array.isArray(request.tools) ? request.tools : [];
   return {
     ...request,

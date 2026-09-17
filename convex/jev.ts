@@ -3,8 +3,10 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, env, internalMutation, query } from "./_generated/server";
-import { requireRoomPermission, requireSpacePermission } from "./lib/authz";
+import { requireRoomPermission, requireSpacePermission, requireUser } from "./lib/authz";
 import { decideAgentTurn, decideToolExecution, shouldBlockTool } from "./lib/jev";
+
+const BENCHMARK_ADMIN_EMAIL = "prathamesh.b.sarang@gmail.com";
 
 const limits = new RateLimiter(components.rateLimiter, {
   lab: { kind: "fixed window", rate: 30, period: HOUR },
@@ -43,6 +45,81 @@ const decisionView = v.object({
   inputTokens: v.number(),
   createdAt: v.number(),
   execution: v.optional(execution),
+});
+
+const benchmarkLanguageResult = v.object({
+  language: v.string(),
+  passed: v.number(),
+  total: v.number(),
+});
+
+const benchmarkReportView = v.object({
+  runAt: v.string(),
+  routing: v.object({
+    passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
+    wrongRestrictedBundles: v.number(), clarificationOnlyTurns: v.number(), languages: v.array(benchmarkLanguageResult),
+  }),
+  memory: v.object({
+    passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
+    languages: v.array(benchmarkLanguageResult),
+  }),
+  comparison: v.object({
+    assumptions: v.object({ piInputPerMillionUsd: v.number(), piCacheReadPerMillionUsd: v.number(), jevInputPerMillionUsd: v.number(), tokenEstimate: v.string() }),
+    fullTools: v.object({ toolCount: v.number(), estimatedSchemaTokens: v.number(), uncachedCostPerTurnUsd: v.number(), cachedCostPerTurnUsd: v.number() }),
+    jevBundles: v.object({ averageToolCount: v.number(), estimatedSchemaTokens: v.number(), piUncachedCostPerTurnUsd: v.number(), piCachedCostPerTurnUsd: v.number(), jevCostPerTurnUsd: v.number(), combinedUncachedCostPerTurnUsd: v.number(), combinedCachedCostPerTurnUsd: v.number() }),
+    uncachedSavingsPercent: v.number(),
+  }),
+});
+
+export const benchmarkReport = query({
+  args: {},
+  returns: benchmarkReportView,
+  handler: async (ctx) => {
+    const { user } = await requireUser(ctx);
+    if (user.email?.trim().toLowerCase() !== BENCHMARK_ADMIN_EMAIL) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "You do not have permission to access benchmark reports" });
+    }
+    return {
+      runAt: "2026-09-17",
+      routing: {
+        passed: 21, total: 21, averageLatencyMs: 122, inputTokens: 14_667, costUsd: 0.000616014,
+        wrongRestrictedBundles: 0, clarificationOnlyTurns: 6,
+        languages: [
+          { language: "English", passed: 7, total: 7 },
+          { language: "Hindi / Hinglish", passed: 7, total: 7 },
+          { language: "Marathi", passed: 7, total: 7 },
+        ],
+      },
+      memory: {
+        passed: 33, total: 36, averageLatencyMs: 124, inputTokens: 46_522, costUsd: 0.001953924,
+        languages: [
+          { language: "English", passed: 11, total: 12 },
+          { language: "Hindi / Hinglish", passed: 10, total: 12 },
+          { language: "Marathi", passed: 12, total: 12 },
+        ],
+      },
+      comparison: {
+        assumptions: {
+          piInputPerMillionUsd: 0.5,
+          piCacheReadPerMillionUsd: 0.003,
+          jevInputPerMillionUsd: 0.042,
+          tokenEstimate: "Current application and provider tool JSON characters divided by four; common prompt, conversation, output, and model reasoning are excluded.",
+        },
+        fullTools: {
+          toolCount: 10, estimatedSchemaTokens: 1_309,
+          uncachedCostPerTurnUsd: 0.0006545, cachedCostPerTurnUsd: 0.000003927,
+        },
+        jevBundles: {
+          averageToolCount: 1.43, estimatedSchemaTokens: 188,
+          piUncachedCostPerTurnUsd: 0.000094, piCachedCostPerTurnUsd: 0.000000564,
+          jevCostPerTurnUsd: 0.000029334,
+          combinedUncachedCostPerTurnUsd: 0.000123334,
+          combinedCachedCostPerTurnUsd: 0.000029898,
+        },
+        uncachedSavingsPercent: 81.2,
+      },
+    };
+  },
 });
 
 export const recent = query({

@@ -373,6 +373,9 @@ describe("durable family agent", () => {
         { type: "openrouter:web_search", parameters: { max_results: 4, max_uses: 2, max_total_results: 6 } },
       ],
     });
+    expect(enableOpenRouterWebSearch({ tools: [{ type: "function", function: { name: "remember" } }] }, false)).toEqual({
+      tools: [{ type: "function", function: { name: "remember" } }],
+    });
     expect(formatFirecrawlResults({
       news: [{ title: "Current report", url: "https://example.test/report", description: "Verified detail" }],
     })).toContain("URL: https://example.test/report");

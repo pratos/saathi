@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { MULTILINGUAL_INTENT_GUIDANCE, shouldBlockTool, turnDecisionGuidance, type JevToolDecision, type JevTurnDecision } from "./jev.js";
 import { shouldIgnoreEmail } from "../gmail.js";
+import { toolNamesForTurnDecision } from "../agentWorker.js";
 
 const metadata = { model: "jev-latest", inputTokens: 20, latencyMs: 12 };
 
@@ -25,6 +26,45 @@ describe("Jev decision policy", () => {
       execute: 0.02, clarify: 0.03, block: 0.95,
     } }))).toBeNull();
     expect(shouldBlockTool(null)).toBeNull();
+  });
+
+  test("selects stable tool bundles only for confident Jev routes", () => {
+    const expected = {
+      answer: [],
+      clarify: [],
+      search: ["search_public_web"],
+      computer: ["use_computer"],
+      image: ["generate_image"],
+      settings: ["set_reading_language", "set_image_style", "set_food_budget", "set_model_tier"],
+      memory: ["remember", "recall"],
+    } satisfies Record<JevTurnDecision["route"], readonly string[]>;
+    for (const [route, tools] of Object.entries(expected)) {
+      expect(toolNamesForTurnDecision(turn({
+        route: route as JevTurnDecision["route"],
+        routeConfidence: 0.9,
+        routeProbabilities: probabilities(route as JevTurnDecision["route"], 0.9),
+      }))).toEqual(tools);
+    }
+  });
+
+  test("uses no tools for clarification and all tools when routing is uncertain", () => {
+    expect(toolNamesForTurnDecision(turn({
+      route: "computer",
+      routeConfidence: 0.99,
+      routeProbabilities: probabilities("computer", 0.99),
+      needsClarification: 0.72,
+    }))).toEqual([]);
+    expect(toolNamesForTurnDecision(turn({
+      route: "search",
+      routeConfidence: 0.84,
+      routeProbabilities: probabilities("search", 0.9),
+    }))).toBeNull();
+    expect(toolNamesForTurnDecision(turn({
+      route: "search",
+      routeConfidence: 0.9,
+      routeProbabilities: probabilities("search", 0.84),
+    }))).toBeNull();
+    expect(toolNamesForTurnDecision(null)).toBeNull();
   });
 
   test("skips extraction only for confident non-financial or login-code email", () => {
@@ -60,5 +100,19 @@ function tool(overrides: Partial<JevToolDecision>): JevToolDecision {
     probabilities: { execute: 0.8, clarify: 0.1, block: 0.1 },
     ...metadata,
     ...overrides,
+  };
+}
+
+function probabilities(route: JevTurnDecision["route"], selected: number): JevTurnDecision["routeProbabilities"] {
+  const remainder = (1 - selected) / 6;
+  return {
+    answer: remainder,
+    clarify: remainder,
+    search: remainder,
+    computer: remainder,
+    image: remainder,
+    settings: remainder,
+    memory: remainder,
+    [route]: selected,
   };
 }

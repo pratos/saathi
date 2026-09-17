@@ -14,13 +14,14 @@ describe("Jev decision records", () => {
       const now = Date.now();
       const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
       const memberId = await ctx.db.insert("users", { email: "member@example.test" });
+      const adminId = await ctx.db.insert("users", { email: "Prathamesh.B.Sarang@gmail.com" });
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "jev-family", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: now });
       const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now });
       await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt: now });
       await ctx.db.insert("roomMembers", { roomId, userId: memberId, role: "participant", createdAt: now });
-      return { ownerId, memberId, spaceId, roomId };
+      return { ownerId, memberId, adminId, spaceId, roomId };
     });
     await t.mutation(internal.jev.record, {
       spaceId: seeded.spaceId,
@@ -36,6 +37,7 @@ describe("Jev decision records", () => {
 
     const owner = t.withIdentity({ subject: String(seeded.ownerId) });
     const member = t.withIdentity({ subject: String(seeded.memberId) });
+    const admin = t.withIdentity({ subject: String(seeded.adminId) });
     const rows = await owner.query(api.jev.recent, { spaceId: seeded.spaceId });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ decision: "answer", source: "lab", confidence: 0.82 });
@@ -46,6 +48,13 @@ describe("Jev decision records", () => {
     await expect(member.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
     await expect(member.mutation(internal.jev.prepareVoiceTool, { roomId: seeded.roomId }))
       .resolves.toEqual({ spaceId: seeded.spaceId });
+    await expect(owner.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
+    await expect(member.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
+    await expect(admin.query(api.jev.benchmarkReport, {})).resolves.toMatchObject({
+      routing: { passed: 21, total: 21, wrongRestrictedBundles: 0 },
+      memory: { passed: 33, total: 36 },
+      comparison: { uncachedSavingsPercent: 81.2 },
+    });
   });
 
   test("links routing advice to the downstream Pi outcome", async () => {

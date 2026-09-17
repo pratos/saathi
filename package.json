@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "benchmark:jev-memory": "RUN_JEV_MEMORY_BENCHMARK=1 vitest run convex/lib/jev.memory.benchmark.test.ts --reporter=verbose",
+    "benchmark:jev-routing": "RUN_JEV_ROUTING_BENCHMARK=1 vitest run convex/lib/jev.routing.benchmark.test.ts --reporter=verbose",
     "preview": "vite preview",
     "deploy": "npx @convex-dev/static-hosting deploy"
   },

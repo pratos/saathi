@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useAction, useMutation, useQuery } from 'convex/react'
+import type { FunctionReturnType } from 'convex/server'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -10,8 +11,11 @@ import {
   Bell,
   Bot,
   Camera,
+  ChartBar,
   Check,
+  CircleDollarSign,
   Copy,
+  Database,
   FileText,
   Folder,
   Image as ImageIcon,
@@ -46,6 +50,7 @@ import { useLiveVoice, type VoiceStatus, type VoiceToolActivity, type VoiceTurn 
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
+type BenchmarkReport = FunctionReturnType<typeof api.jev.benchmarkReport>
 type MentionCandidate =
   | { kind: 'assistant'; username: 'saathi'; label: string }
   | { kind: 'person'; username: string; label: string; userId: Id<'users'> }
@@ -54,6 +59,7 @@ const ACCEPTED_ATTACHMENTS = 'image/jpeg,image/png,image/webp,image/gif,image/he
 const SUPPORTED_ATTACHMENT_TYPES = new Set(ACCEPTED_ATTACHMENTS.split(','))
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
+const BENCHMARK_ADMIN_EMAIL = 'prathamesh.b.sarang@gmail.com'
 
 export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
@@ -210,6 +216,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const [profileOpen, setProfileOpen] = useState(false)
   const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
   const [jevOpen, setJevOpen] = useState(false)
+  const [benchmarkAdminOpen, setBenchmarkAdminOpen] = useState(false)
   const createSpace = useMutation(api.spaces.create)
   const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
   const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
@@ -219,6 +226,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
   const selectedRoom = rooms?.flatMap(({ room }) => room ? [room] : []).find(room => room._id === selectedRoomId) ?? sharedRoom
   const initials = initialsFor(user?.displayName ?? user?.name ?? user?.email ?? 'Family member')
+  const isBenchmarkAdmin = user?.email?.trim().toLowerCase() === BENCHMARK_ADMIN_EMAIL
 
   useEffect(() => {
     if (rooms === undefined || personalRoom) return
@@ -285,7 +293,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       : 'home'
 
   return (
-    <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
+    <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}${isBenchmarkAdmin ? ' is-benchmark-admin' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Home</span></button>
@@ -293,6 +301,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
         <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
         {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Lab</span></button>}
+        {isBenchmarkAdmin && <button className={`rail-action ${benchmarkAdminOpen ? 'active' : ''}`} onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /><span>Benchmarks</span></button>}
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
           {profileOpen && <div className="session-menu" role="menu">
@@ -413,6 +422,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         </details>
         {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
         {family.membership.role === 'owner' && <section className="jev-settings-card"><span>Jev decision lab</span><p>Test how Saathi routes a request and inspect recent chat, voice, and Gmail decisions without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Lab</button></section>}
+        {isBenchmarkAdmin && <section className="jev-settings-card"><span>Private benchmark report</span><p>Review multilingual quality, routing safety, cost estimates, and prompt-cache tradeoffs.</p><button type="button" className="connect-gmail" onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /> Open benchmarks</button></section>}
         </div>
       </aside>
       <nav className="mobile-workspace-nav" aria-label="Workspace">
@@ -424,8 +434,90 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
       {jevOpen && <JevLabDrawer spaceId={family.space._id} onClose={() => setJevOpen(false)} />}
+      {benchmarkAdminOpen && isBenchmarkAdmin && <BenchmarkAdminPage onClose={() => setBenchmarkAdminOpen(false)} />}
     </main>
   )
+}
+
+function BenchmarkAdminPage({ onClose }: { onClose: () => void }) {
+  const report = useQuery(api.jev.benchmarkReport)
+
+  useEffect(() => {
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => event.key === 'Escape' && onClose()
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  if (report === undefined) {
+    return <div className="benchmark-admin-page"><div className="benchmark-admin-loading" role="status"><i />Loading private benchmark report…</div></div>
+  }
+  return <BenchmarkReportView report={report} onClose={onClose} />
+}
+
+export function BenchmarkReportView({ report, onClose }: { report: BenchmarkReport; onClose: () => void }) {
+  const combinedBenchmarkCost = report.routing.costUsd + report.memory.costUsd
+  const uncachedSavings = report.comparison.fullTools.uncachedCostPerTurnUsd - report.comparison.jevBundles.combinedUncachedCostPerTurnUsd
+  const cachedDifference = report.comparison.jevBundles.combinedCachedCostPerTurnUsd - report.comparison.fullTools.cachedCostPerTurnUsd
+
+  return <div className="benchmark-admin-page">
+    <header className="benchmark-admin-header">
+      <div><span><ChartBar /> Private admin report</span><h1>Jev benchmark results</h1><p>Checked-in results from {report.runAt}. Only the authorized benchmark account can query this report.</p></div>
+      <button type="button" onClick={onClose} aria-label="Close benchmark report" autoFocus><X /></button>
+    </header>
+    <div className="benchmark-admin-scroll">
+      <section className="benchmark-summary-grid" aria-label="Benchmark summary">
+        <article><ChartBar /><span>Tool routing</span><strong>{report.routing.passed}/{report.routing.total}</strong><small>{Math.round(report.routing.passed / report.routing.total * 100)}% correct · {report.routing.wrongRestrictedBundles} wrong bundles</small></article>
+        <article><Database /><span>Memory decisions</span><strong>{report.memory.passed}/{report.memory.total}</strong><small>{(report.memory.passed / report.memory.total * 100).toFixed(1)}% correct · Marathi 12/12</small></article>
+        <article><CircleDollarSign /><span>Benchmark cost</span><strong>{formatTinyUsd(combinedBenchmarkCost)}</strong><small>{report.routing.averageLatencyMs} ms routing · {report.memory.averageLatencyMs} ms memory</small></article>
+      </section>
+
+      <section className="benchmark-panel">
+        <div className="benchmark-panel-title"><div><span>Multilingual quality</span><h2>Latest live results</h2></div><small>{(report.routing.inputTokens + report.memory.inputTokens).toLocaleString()} Jev input tokens</small></div>
+        <div className="benchmark-language-grid">
+          <BenchmarkLanguageTable title="Tool routing" results={report.routing.languages} />
+          <BenchmarkLanguageTable title="Memory decisions" results={report.memory.languages} />
+        </div>
+        <div className="benchmark-safety-note"><ShieldCheck /><span><strong>No wrong restricted bundles.</strong> Six requests were conservatively routed to clarification-only, including portal tasks missing required access details.</span></div>
+      </section>
+
+      <section className="benchmark-panel">
+        <div className="benchmark-panel-title"><div><span>Per-turn estimate</span><h2>Full tools vs Jev-selected bundles</h2></div><small>Common prompt and output excluded</small></div>
+        <div className="benchmark-comparison">
+          <article>
+            <header><span>Pi with full list</span><strong>{report.comparison.fullTools.toolCount} tool definitions</strong></header>
+            <dl><div><dt>Tool-schema tokens</dt><dd>~{report.comparison.fullTools.estimatedSchemaTokens.toLocaleString()}</dd></div><div><dt>Uncached input cost</dt><dd>{formatTinyUsd(report.comparison.fullTools.uncachedCostPerTurnUsd)}</dd></div><div><dt>Warm cache-read cost</dt><dd>{formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)}</dd></div></dl>
+          </article>
+          <article className="recommended">
+            <header><span>Jev + routed bundle</span><strong>{report.comparison.jevBundles.averageToolCount} avg tools</strong></header>
+            <dl><div><dt>Tool-schema tokens</dt><dd>~{report.comparison.jevBundles.estimatedSchemaTokens}</dd></div><div><dt>Uncached Pi + Jev</dt><dd>{formatTinyUsd(report.comparison.jevBundles.combinedUncachedCostPerTurnUsd)}</dd></div><div><dt>Warm Pi bundle + Jev</dt><dd>{formatTinyUsd(report.comparison.jevBundles.combinedCachedCostPerTurnUsd)}</dd></div></dl>
+          </article>
+        </div>
+        <p className="benchmark-callout"><strong>Cold-cache result:</strong> about {report.comparison.uncachedSavingsPercent}% less routing/tool-schema input cost, saving {formatTinyUsd(uncachedSavings)} per turn or about ${(uncachedSavings * 1_000).toFixed(2)} per 1,000 turns.</p>
+      </section>
+
+      <section className="benchmark-panel cache-panel">
+        <div className="benchmark-panel-title"><div><span>Cache impact</span><h2>Cheaper when cold, less cache-friendly</h2></div></div>
+        <div className="cache-explanation">
+          <article><strong>Full tools</strong><p>One stable tool prefix gives the best chance of repeated cache hits. If the full schema is already cached, its estimated tool-schema read costs only {formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)}.</p></article>
+          <article><strong>Routed bundles</strong><p>Seven stable route variants reduce uncached tokens but fragment the prefix cache. Even with a warm bundle, Jev remains an uncached sidecar cost of {formatTinyUsd(report.comparison.jevBundles.jevCostPerTurnUsd)}.</p></article>
+        </div>
+        <p className="benchmark-cache-warning"><strong>Decision:</strong> routed bundles are economically better on cache misses and reduce context pressure. A reliably warm full-tool prefix is approximately {formatTinyUsd(cachedDifference)} cheaper per turn on schema-related input alone. Verify OpenRouter’s actual cached-token reporting and end-to-end Pi latency before declaring production savings.</p>
+      </section>
+
+      <footer className="benchmark-method">
+        <strong>Assumptions</strong>
+        <p>Luna input ${report.comparison.assumptions.piInputPerMillionUsd}/M · configured cache read ${report.comparison.assumptions.piCacheReadPerMillionUsd}/M · Jev input ${report.comparison.assumptions.jevInputPerMillionUsd}/M. {report.comparison.assumptions.tokenEstimate}</p>
+      </footer>
+    </div>
+  </div>
+}
+
+function BenchmarkLanguageTable({ title, results }: { title: string; results: BenchmarkReport['routing']['languages'] }) {
+  return <article><h3>{title}</h3>{results.map(result => <div key={result.language}><span>{result.language}</span><i><b style={{ width: `${result.passed / result.total * 100}%` }} /></i><strong>{result.passed}/{result.total}</strong></div>)}</article>
+}
+
+function formatTinyUsd(value: number) {
+  return `$${value.toFixed(6)}`
 }
 
 function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: () => void }) {

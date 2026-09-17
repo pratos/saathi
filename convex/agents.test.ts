@@ -1,4 +1,6 @@
 import rateLimiter from "@convex-dev/rate-limiter/test";
+import type { Message } from "@earendil-works/pi-ai";
+import { estimateContextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
@@ -61,6 +63,42 @@ describe("durable family agent", () => {
     const work = await t.run(ctx => ctx.runMutation(internal.agents.beginNext, { agentId: snapshot!.agent._id }));
     expect(JSON.stringify(work?.messages)).toContain("Aerial.gif");
     expect(JSON.stringify(work?.messages)).toContain("what's the above gif about?");
+  });
+
+  test("reconstructs prior Saathi replies as complete Pi assistant messages", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { roomId, ownerId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const agentId = await seedAgent(t, roomId, ownerId, "assistant-history-agent");
+    await t.run(async ctx => ctx.db.insert("messages", {
+      spaceId: (await ctx.db.get(roomId))!.spaceId,
+      roomId,
+      actorType: "assistant",
+      origin: "assistant",
+      originalText: "The electrician is available on Friday.",
+      language: "en",
+      idempotencyKey: "prior-assistant-reply",
+      createdAt: Date.now(),
+    }));
+    await owner.mutation(api.agents.send, {
+      agentId,
+      prompt: "What did Saathi say?",
+      clientOperationId: "assistant-history-job",
+    });
+
+    const work = await t.mutation(internal.agents.beginNext, { agentId });
+    const assistant = work?.messages.find((message: { role?: string }) => message.role === "assistant");
+    expect(assistant).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "Saathi: The electrician is available on Friday." }],
+      api: "openai-completions",
+      provider: "openrouter",
+      model: "openai/gpt-5.6-luna",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 },
+      stopReason: "stop",
+    });
+    expect(() => estimateContextTokens(work!.messages as Message[])).not.toThrow();
   });
 
   test("automatically injects explicit facts and relevant prior episodes into later turns", async () => {

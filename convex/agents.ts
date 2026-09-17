@@ -131,7 +131,7 @@ export const beginNext = internalMutation({
     ).order("desc").take(MAX_CONTEXT_MESSAGES);
     const nextSequence = (recentMessages[0]?.sequence ?? -1) + 1;
     const history = boundContext(recentMessages.reverse().map(entry => entry.message));
-    const roomHistory = await seedRoomHistory(ctx, agent.roomId);
+    const roomHistory = await seedRoomHistory(ctx, agent.roomId, agent.model);
     const seeded = roomHistory.length > 0 ? roomHistory : history;
     const memoryContext = await buildAgentMemoryContext(ctx, agentId, job.prompt);
     return {
@@ -349,7 +349,7 @@ function validateOperationId(value: string) {
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(value)) throw invalid("Invalid client operation ID");
 }
 
-async function seedRoomHistory(ctx: MutationCtx, roomId: Id<"rooms">) {
+async function seedRoomHistory(ctx: MutationCtx, roomId: Id<"rooms">, model: string) {
   const rows = await ctx.db.query("messages").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(24);
   const attachments = await ctx.db.query("attachments").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(12);
   const byMessage = new Map(attachments.map(attachment => [String(attachment.messageId), attachment]));
@@ -359,9 +359,19 @@ async function seedRoomHistory(ctx: MutationCtx, roomId: Id<"rooms">) {
       ? `\n[Shared file: ${attachment.fileName}${attachment.transcript ? ` — ${attachment.transcript.slice(0, 800)}` : ""}]`
       : "";
     const speaker = message.actorType === "assistant" ? "Saathi" : message.actorType === "email_guest" ? "Email" : "Family member";
+    const text = `${speaker}: ${message.originalText}${fileNote}`.slice(0, 4_000);
+    if (message.actorType !== "assistant") return { role: "user" as const, content: text, timestamp: message.createdAt };
     return {
-      role: message.actorType === "assistant" ? "assistant" : "user",
-      content: `${speaker}: ${message.originalText}${fileNote}`.slice(0, 4_000),
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text }],
+      api: "openai-completions" as const,
+      provider: "openrouter" as const,
+      model,
+      usage: {
+        input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop" as const,
       timestamp: message.createdAt,
     };
   });

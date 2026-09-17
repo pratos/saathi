@@ -88,7 +88,9 @@ describe("durable family agent", () => {
     });
 
     const work = await t.mutation(internal.agents.beginNext, { agentId });
-    const assistant = work?.messages.find((message: { role?: string }) => message.role === "assistant");
+    const assistant = work?.messages.find(message =>
+      typeof message === "object" && message !== null && "role" in message && message.role === "assistant",
+    );
     expect(assistant).toMatchObject({
       role: "assistant",
       content: [{ type: "text", text: "Saathi: The electrician is available on Friday." }],

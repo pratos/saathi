@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { groupVoiceFragments, liveImageCallFromEvent } from './useLiveVoice'
+import { groupVoiceFragments, liveToolCallFromEvent } from './useLiveVoice'
 
 describe('live voice caption grouping', () => {
   test('preserves exact deltas and splits turns when speakers overlap', () => {
@@ -18,13 +18,20 @@ describe('live voice caption grouping', () => {
   })
 
   test('reads generate_image calls from GPT-Live response envelopes', () => {
-    expect(liveImageCallFromEvent({
+    expect(liveToolCallFromEvent({
       type: 'response.event',
       event: {
         type: 'response.output_item.done',
         item: { type: 'function_call', name: 'generate_image', call_id: 'call_img_1', arguments: '{"prompt":"Hindi waste sorting chart","kind":"infographic","language":"hi"}' },
       },
-    })).toEqual({ callId: 'call_img_1', prompt: 'Hindi waste sorting chart', kind: 'infographic', style: undefined, language: 'hi' })
-    expect(liveImageCallFromEvent({ type: 'session.output_transcript.delta', delta: 'hello' })).toBeNull()
+    })).toEqual({ name: 'generate_image', callId: 'call_img_1', prompt: 'Hindi waste sorting chart', kind: 'infographic', style: undefined, language: 'hi' })
+    expect(liveToolCallFromEvent({
+      type: 'response.event',
+      event: {
+        type: 'response.output_item.done',
+        item: { type: 'function_call', name: 'set_food_budget', call_id: 'call_budget_1', arguments: '{"amount":15000,"currency":"INR"}' },
+      },
+    })).toEqual({ name: 'set_food_budget', callId: 'call_budget_1', arguments: { amount: 15000, currency: 'INR' } })
+    expect(liveToolCallFromEvent({ type: 'session.output_transcript.delta', delta: 'hello' })).toBeNull()
   })
 })

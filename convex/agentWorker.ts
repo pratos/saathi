@@ -13,7 +13,7 @@ import type { ActionCtx } from "./_generated/server";
 import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { generateFamilyImageBytes } from "./lib/imageGeneration";
 import { resolveOpenRouterKey } from "./lib/providerKeys";
-import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
+import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle, type ImageStyle } from "./lib/imageSafety";
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
 import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
 
@@ -230,6 +230,45 @@ function createTools(
       },
     },
     {
+      name: "set_reading_language", label: "Set reading language",
+      description: "Change this person's reading language only after they explicitly ask. Use en for English, hi for Hindi, or mr for Marathi.",
+      parameters: Type.Object({ language: Type.Union([Type.Literal("en"), Type.Literal("hi"), Type.Literal("mr")]) }, { additionalProperties: false }),
+      execute: async (_callId, params) => conversationAction(ctx, agentId, jobId, leaseId, {
+        type: "set_language", language: (params as { language: "en" | "hi" | "mr" }).language,
+      }),
+    },
+    {
+      name: "set_image_style", label: "Set image style",
+      description: "Change this person's default image style only after they explicitly ask.",
+      parameters: Type.Object({ style: Type.Union([
+        Type.Literal("warm_family"), Type.Literal("kitchen_table"), Type.Literal("festival_home"), Type.Literal("storybook"),
+        Type.Literal("family_collage"), Type.Literal("memory_grid"), Type.Literal("scrapbook"), Type.Literal("fridge_photos"),
+        Type.Literal("infographic"), Type.Literal("step_cards"), Type.Literal("kids_chart"), Type.Literal("wall_poster"),
+        Type.Literal("devotional"), Type.Literal("diya_aarti"), Type.Literal("rangoli"), Type.Literal("festival_altar"),
+        Type.Literal("watercolor"), Type.Literal("flat"), Type.Literal("folk_art"), Type.Literal("block_print"),
+      ]) }, { additionalProperties: false }),
+      execute: async (_callId, params) => conversationAction(ctx, agentId, jobId, leaseId, {
+        type: "set_image_style", style: (params as { style: ImageStyle }).style,
+      }),
+    },
+    {
+      name: "set_food_budget", label: "Set food budget",
+      description: "Set the monthly family food budget only after an owner explicitly gives an amount and currency.",
+      parameters: Type.Object({ amount: Type.Number(), currency: Type.Union([Type.Literal("INR"), Type.Literal("USD")]) }, { additionalProperties: false }),
+      execute: async (_callId, params) => {
+        const requested = params as { amount: number; currency: "INR" | "USD" };
+        return conversationAction(ctx, agentId, jobId, leaseId, { type: "set_food_budget", ...requested });
+      },
+    },
+    {
+      name: "set_model_tier", label: "Set thinking level",
+      description: "Change the family Saathi thinking level only after an owner explicitly asks. Medium is the normal default; high and ultra use more resources.",
+      parameters: Type.Object({ tier: Type.Union([Type.Literal("low"), Type.Literal("med"), Type.Literal("high"), Type.Literal("ultra")]) }, { additionalProperties: false }),
+      execute: async (_callId, params) => conversationAction(ctx, agentId, jobId, leaseId, {
+        type: "set_model_tier", tier: (params as { tier: "low" | "med" | "high" | "ultra" }).tier,
+      }),
+    },
+    {
       name: "remember", label: "Remember", description: "Store a short fact the family explicitly asked to retain.",
       parameters: Type.Object({ key: Type.String(), value: Type.String() }, { additionalProperties: false }),
       execute: async (_callId, params) => {
@@ -248,6 +287,20 @@ function createTools(
       },
     },
   ];
+}
+
+async function conversationAction(
+  ctx: ActionCtx,
+  agentId: Id<"agents">,
+  jobId: Id<"agentJobs">,
+  leaseId: string,
+  action: { type: "set_language"; language: "en" | "hi" | "mr" }
+    | { type: "set_image_style"; style: ImageStyle }
+    | { type: "set_food_budget"; amount: number; currency: "INR" | "USD" }
+    | { type: "set_model_tier"; tier: "low" | "med" | "high" | "ultra" },
+) {
+  const result = await ctx.runMutation(internal.conversationActions.executeForJob, { agentId, jobId, leaseId, action });
+  return { content: [{ type: "text" as const, text: result.message }], details: { applied: result.ok } };
 }
 
 export function enableOpenRouterWebSearch(payload: unknown) {

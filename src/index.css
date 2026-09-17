@@ -1,9 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Newsreader', ui-serif, Georgia, serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
 
 :root {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  color: #28252a;
-  background: #131716;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  color: #17233a;
+  background: #eeeae2;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -17,12 +36,24 @@
   --coral: #e36d4f;
   --coral-dark: #c9563b;
   --green: #3e715c;
+  --background: #f7f4ee;
+  --foreground: #17233a;
+  --card: #fffdf8;
+  --card-foreground: #17233a;
+  --primary: #233f72;
+  --primary-foreground: #fffdf8;
+  --secondary: #eee8de;
+  --secondary-foreground: #273246;
+  --muted-surface: #ebe7df;
+  --muted-foreground: #697283;
+  --border: #d8d2c8;
+  --ring: #233f72;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
 body { min-height: 100vh; }
-button, input, textarea { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
-button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(139, 211, 211, .4); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(35, 63, 114, .22); outline-offset: 2px; }
 button:disabled { cursor: not-allowed; opacity: .48; }

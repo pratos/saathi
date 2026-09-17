@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, env, internalMutation, internalQuery } from "./_generated/server";
+import { CONVERSATION_ACTION_TOOLS } from "./conversationActions";
 import { requireRoomPermission } from "./lib/authz";
 import { GENERATE_IMAGE_TOOL } from "./lib/imageSafety";
 import { resolveOpenAiKey } from "./lib/providerKeys";
@@ -33,7 +34,7 @@ export const startSession = action({
       body: JSON.stringify({
         session: {
           model: "gpt-live-1",
-          instructions: "You are Saathi, a warm, concise family assistant. Speak naturally in the language the caller uses. Help clarify and coordinate, but never claim to send messages, spend money, change accounts, or complete consequential actions. Ask for confirmation when a request would require action outside this conversation. Use web search when current information is needed. If the caller explicitly asks for an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images; refuse those requests.",
+          instructions: "You are Saathi, a warm, concise family assistant. Speak naturally in the language the caller uses. Help clarify and coordinate. Use the matching tool when the caller explicitly asks to change their reading language, default image style, family food budget, or family thinking level. Never claim an action succeeded until its tool confirms it. Ask for confirmation when a request is ambiguous or consequential. Use web search when current information is needed. If the caller explicitly asks for an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images; refuse those requests.",
           input: prepared.history.map(item => ({
             type: "message",
             role: item.role,
@@ -43,8 +44,8 @@ export const startSession = action({
             type: "responses",
             responses: {
               model: "gpt-5-mini",
-              instructions: "Use web search for current facts. When the caller explicitly wants an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images. Return concise, grounded results for a spoken family conversation.",
-              tools: [{ type: "web_search" }, GENERATE_IMAGE_TOOL],
+              instructions: "Use web search for current facts. Use a settings tool only when the caller explicitly requests that exact change. When the caller explicitly wants an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images. Return concise, grounded results for a spoken family conversation.",
+              tools: [{ type: "web_search" }, GENERATE_IMAGE_TOOL, ...CONVERSATION_ACTION_TOOLS],
               tool_choice: "auto",
             },
           },

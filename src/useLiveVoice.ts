@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAction } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
+import { isImageStyle, type ImageStyle } from '../convex/lib/imageSafety'
 
 export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
 export type VoiceTurn = { role: 'user' | 'assistant'; text: string; startMs: number }
+type VoiceConversationAction =
+  | { type: 'set_language'; language: 'en' | 'hi' | 'mr' }
+  | { type: 'set_image_style'; style: ImageStyle }
+  | { type: 'set_food_budget'; amount: number; currency: 'INR' | 'USD' }
+  | { type: 'set_model_tier'; tier: 'low' | 'med' | 'high' | 'ultra' }
 
 export function useLiveVoice(roomId: Id<'rooms'>) {
   const createSession = useAction(api.liveVoice.startSession)
   const finishSession = useAction(api.liveVoice.finishSession)
   const createVoiceImage = useAction(api.images.createFromVoice)
+  const executeConversationAction = useMutation(api.conversationActions.execute)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
@@ -158,8 +165,12 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           void persistKnownTranscript()
           cleanup()
         } else if (event.type === 'response.event') {
-          const call = liveImageCall(event.raw)
-          if (call) void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError)
+          const call = liveToolCall(event.raw)
+          if (call?.name === 'generate_image') {
+            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError)
+          } else if (call) {
+            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError)
+          }
         } else if (event.type === 'error') {
           setError(event.message || 'Saathi encountered a voice error.')
         }
@@ -193,7 +204,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')
     }
-  }, [cleanup, createSession, createVoiceImage, persistKnownTranscript, roomId, status])
+  }, [cleanup, createSession, createVoiceImage, executeConversationAction, persistKnownTranscript, roomId, status])
 
   const end = useCallback(() => {
     const channel = channelRef.current
@@ -287,34 +298,50 @@ function parseLiveEvent(value: unknown): null | { type: string; delta: string; s
   }
 }
 
-function liveImageCall(event: Record<string, unknown>) {
+type LiveToolCall = {
+  name: 'generate_image'
+  callId: string
+  prompt: string
+  kind?: string
+  style?: string
+  language?: string
+} | {
+  name: 'set_reading_language' | 'set_image_style' | 'set_food_budget' | 'set_model_tier'
+  callId: string
+  arguments: Record<string, unknown>
+}
+
+function liveToolCall(event: Record<string, unknown>): LiveToolCall | null {
   const nested = event.event && typeof event.event === 'object' ? event.event as Record<string, unknown> : event
   if (nested.type !== 'response.output_item.done') return null
   const item = nested.item && typeof nested.item === 'object' ? nested.item as Record<string, unknown> : nested
   const name = typeof item.name === 'string' ? item.name : ''
-  if (name !== 'generate_image') return null
   const callId = typeof item.call_id === 'string' ? item.call_id : typeof nested.call_id === 'string' ? nested.call_id : ''
   if (!callId) return null
   const args = parseToolArgs(item.arguments)
-  return { callId, prompt: args.prompt, kind: args.kind, style: args.style, language: args.language }
+  if (name === 'generate_image') return { name, callId, prompt: stringArg(args, 'prompt'), kind: optionalStringArg(args, 'kind'), style: optionalStringArg(args, 'style'), language: optionalStringArg(args, 'language') }
+  if (name === 'set_reading_language' || name === 'set_image_style' || name === 'set_food_budget' || name === 'set_model_tier') {
+    return { name, callId, arguments: args }
+  }
+  return null
 }
 
 function parseToolArgs(value: unknown) {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>
-    return {
-      prompt: typeof record.prompt === 'string' ? record.prompt : '',
-      kind: typeof record.kind === 'string' ? record.kind : undefined,
-      style: typeof record.style === 'string' ? record.style : undefined,
-      language: typeof record.language === 'string' ? record.language : undefined,
-    }
-  }
-  if (typeof value !== 'string') return { prompt: '' }
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value !== 'string') return {}
   try {
     return parseToolArgs(JSON.parse(value))
   } catch {
-    return { prompt: '' }
+    return {}
   }
+}
+
+function stringArg(args: Record<string, unknown>, key: string) {
+  return typeof args[key] === 'string' ? args[key] : ''
+}
+
+function optionalStringArg(args: Record<string, unknown>, key: string) {
+  return typeof args[key] === 'string' ? args[key] : undefined
 }
 
 async function fulfillVoiceImage(
@@ -337,9 +364,55 @@ async function fulfillVoiceImage(
   channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
 }
 
-export function liveImageCallFromEvent(value: unknown) {
+async function fulfillVoiceAction(
+  channel: RTCDataChannel,
+  roomId: Id<'rooms'>,
+  call: Exclude<LiveToolCall, { name: 'generate_image' }>,
+  execute: (args: {
+    roomId: Id<'rooms'>
+    action: VoiceConversationAction
+  }) => Promise<{ ok: boolean; message: string }>,
+  setError: (message: string) => void,
+) {
+  const action = voiceConversationAction(call)
+  let result = { ok: false, message: 'I could not understand that settings change.' }
+  if (action) {
+    try {
+      result = await execute({ roomId, action })
+    } catch {
+      result = { ok: false, message: 'That setting could not be changed. Check your family permissions and try again.' }
+    }
+  }
+  if (!result.ok) setError(result.message)
+  if (channel.readyState !== 'open') return
+  channel.send(JSON.stringify({
+    type: 'response.item.create',
+    event_id: crypto.randomUUID(),
+    item: { type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result) },
+  }))
+  channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
+}
+
+function voiceConversationAction(call: Exclude<LiveToolCall, { name: 'generate_image' }>): VoiceConversationAction | null {
+  const args = call.arguments
+  if (call.name === 'set_reading_language' && (args.language === 'en' || args.language === 'hi' || args.language === 'mr')) {
+    return { type: 'set_language' as const, language: args.language }
+  }
+  if (call.name === 'set_image_style' && typeof args.style === 'string' && isImageStyle(args.style)) {
+    return { type: 'set_image_style', style: args.style }
+  }
+  if (call.name === 'set_food_budget' && typeof args.amount === 'number' && (args.currency === 'INR' || args.currency === 'USD')) {
+    return { type: 'set_food_budget' as const, amount: args.amount, currency: args.currency }
+  }
+  if (call.name === 'set_model_tier' && (args.tier === 'low' || args.tier === 'med' || args.tier === 'high' || args.tier === 'ultra')) {
+    return { type: 'set_model_tier' as const, tier: args.tier }
+  }
+  return null
+}
+
+export function liveToolCallFromEvent(value: unknown) {
   const event = parseLiveEvent(typeof value === 'string' ? value : JSON.stringify(value))
-  return event ? liveImageCall(event.raw) : null
+  return event ? liveToolCall(event.raw) : null
 }
 
 function convexErrorCode(error: unknown) {

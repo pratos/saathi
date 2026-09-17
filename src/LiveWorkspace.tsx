@@ -6,7 +6,6 @@ import remarkGfm from 'remark-gfm'
 import {
   ArrowLeft,
   AudioLines,
-  AtSign,
   Bell,
   Bot,
   Camera,
@@ -14,6 +13,7 @@ import {
   Copy,
   FileText,
   Folder,
+  Image as ImageIcon,
   LockKeyhole,
   LogOut,
   Mail,
@@ -35,6 +35,10 @@ import {
 import { api } from '../convex/_generated/api'
 import type { Doc, Id } from '../convex/_generated/dataModel'
 import { IMAGE_PRESET_GROUPS, IMAGE_PRESETS } from '../convex/lib/imageSafety'
+import { Badge } from './components/ui/badge'
+import { Button } from './components/ui/button'
+import { Card } from './components/ui/card'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from './components/ui/select'
 import { VoiceBlob } from './VoiceBlob'
 import { useLiveVoice, type VoiceStatus, type VoiceTurn } from './useLiveVoice'
 
@@ -112,7 +116,7 @@ function CreateFirstFamily({ onExit }: { onExit: () => void }) {
     <main className="onboarding-page">
       <button className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</button>
       <section className="onboarding-card">
-        <span className="mode-badge live"><LockKeyhole size={15} /> Live workspace</span>
+        <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
         <h1>Create your first family space</h1>
         <p>Each family keeps its conversations, inbox, members, and Saathi context separate.</p>
         <form onSubmit={submit}>
@@ -159,7 +163,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const createSpace = useMutation(api.spaces.create)
   const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
   const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
-  const setPreferredLanguage = useMutation(api.users.ensureCurrent)
+  const saveProfile = useMutation(api.users.ensureCurrent)
   const gmailCallbackHandled = useRef(false)
   const sharedRoom = rooms?.find(({ room }) => room?.type === 'shared')?.room ?? rooms?.find(({ room }) => room)?.room ?? null
   const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
@@ -234,15 +238,15 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
     <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
-        <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
-        <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
+        <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Home</span></button>
+        <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Inbox</span></button>
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
-        <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Family admin"><Settings2 /><span>Admin</span></button>
+        <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
           {profileOpen && <div className="session-menu" role="menu">
             <p>{user?.email ?? user?.displayName ?? 'Signed in'}</p>
-            <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /> Family admin</button>
+            <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /> Settings</button>
             <button type="button" role="menuitem" onClick={() => void signOut()}><LogOut /> Sign out</button>
           </div>}
         </div>
@@ -250,8 +254,8 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
 
       <aside className="conversation-list live-conversation-list">
         <div className="mobile-home-header">
-          <h1>Chats</h1>
-          <button type="button" onClick={() => openPane('family')} aria-label="Family admin"><Settings2 /></button>
+          <h1>Home</h1>
+          <button type="button" onClick={() => openPane('family')} aria-label="Settings"><Settings2 /></button>
         </div>
         <span className="family-select-label" id="family-switcher-label">Current family</span>
         <div className="family-switcher" role="group" aria-labelledby="family-switcher-label">
@@ -261,7 +265,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
             </button>
           ))}
         </div>
-        <span className="list-heading">Personal</span>
+        <span className="list-heading">Private</span>
         {personalRoom
           ? <button className={`conversation-link personal-chat-link ${personalRoom._id === selectedRoom?._id ? 'selected' : ''}`} onClick={() => openRoom(personalRoom._id)}><Bot /><span>My Saathi<small>Only you</small></span></button>
           : <p className="dark-empty-copy">Preparing your private chat…</p>}
@@ -270,16 +274,8 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           <button className={`conversation-link ${room._id === selectedRoom?._id ? 'selected' : ''}`} key={room._id} onClick={() => openRoom(room._id)}><i /><span>{room.title}</span></button>
         ))}
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
-        <span className="list-heading section-gap">Updates</span>
+        <span className="list-heading section-gap">Family activity</span>
         <button className={`conversation-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => openPane('updates')}><i /><span>Family inbox</span><b>{inboxItems?.length ?? 0}</b></button>
-        <span className="list-heading section-gap">My reading language</span>
-        <div className="language-setting" role="radiogroup" aria-label="My reading language">
-          {(['en', 'hi', 'mr'] as const).map(code => (
-            <button type="button" key={code} role="radio" aria-checked={(user?.preferredLanguage ?? 'en') === code} className={(user?.preferredLanguage ?? 'en') === code ? 'selected' : ''} onClick={() => void setPreferredLanguage({ preferredLanguage: code })}>
-              {languageLabel(code)}
-            </button>
-          ))}
-        </div>
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
@@ -296,9 +292,32 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       <aside className="conversation-context live-context">
         <header className="conversation-header live-room-header mobile-family-header">
           <button className="mobile-chat-back" onClick={openHome} aria-label="Back to chats"><ArrowLeft /></button>
-          <div><div className="title-line"><h2>Family admin</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name}</p></div>
+          <div><div className="title-line"><h2>Settings</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name}</p></div>
         </header>
-        <div className="context-title"><h2>Family admin</h2><button onClick={onExit}>Switch mode</button></div>
+        <div className="context-title"><div><h2>Settings</h2><p>Change a control here, or ask Saathi in the conversation.</p></div><button onClick={onExit}>Switch mode</button></div>
+        <div className="settings-scroll">
+        <Card className="settings-intro">
+          <MessageSquareText />
+          <div><strong>You can just ask</strong><p>Try “Use Hindi for me” or “Set our food budget to ₹15,000.” Voice works the same way.</p></div>
+        </Card>
+        <section className="personal-settings"><span>Your preferences</span><p>These choices affect only you.</p>
+          <label>Reading language</label>
+          <div className="language-setting" role="radiogroup" aria-label="My reading language">
+            {(['en', 'hi', 'mr'] as const).map(code => (
+              <button type="button" key={code} role="radio" aria-checked={(user?.preferredLanguage ?? 'en') === code} className={(user?.preferredLanguage ?? 'en') === code ? 'selected' : ''} onClick={() => void saveProfile({ preferredLanguage: code })}>
+                {languageLabel(code)}
+              </button>
+            ))}
+          </div>
+          <label htmlFor="preferred-image-style">Default image style</label>
+          <Select value={user?.preferredImageStyle ?? 'warm_family'} onValueChange={value => void saveProfile({ preferredImageStyle: value as (typeof IMAGE_PRESETS)[number]['id'] })}>
+            <SelectTrigger id="preferred-image-style" aria-label="Default image style"><SelectValue /></SelectTrigger>
+            <SelectContent>{IMAGE_PRESET_GROUPS.map(group => <SelectGroup key={group}>
+              <SelectLabel>{imagePresetGroupLabel(group)}</SelectLabel>
+              {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => <SelectItem value={preset.id} key={preset.id}>{preset.label}</SelectItem>)}
+            </SelectGroup>)}</SelectContent>
+          </Select>
+        </section>
         <section>
           <span>Families</span>
           <p>{family.membership.role === 'owner' ? 'You can own up to 3 family spaces.' : 'Connect your Gmail here. Only owners can change family-wide settings.'}</p>
@@ -307,11 +326,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
             : <small className="gmail-status">You already own 3 families.</small>)}
         </section>
         <section><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
-        <section><span>Family inbox</span>{family.space.agentmailInboxId
-          ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy ID'}</button></div>
-          : family.membership.role === 'owner'
-            ? <ConnectInbox spaceId={family.space._id} />
-            : <p>Ask a family owner to connect AgentMail.</p>}</section>
         <section className="gmail-connections"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi. Other family members cannot see your connected accounts.</p>
           {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><Check /></div>)}
           <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
@@ -336,16 +350,24 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
             <input type="number" min={budgetCurrency === 'USD' ? 20 : 500} max={budgetCurrency === 'USD' ? 20000 : 1000000} placeholder={budgetCurrency === 'USD' ? 'Monthly limit in $' : 'Monthly limit in ₹'} value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} aria-label="Monthly food budget" /><button type="submit" disabled={budgetBusy || !budgetDraft}>{budgetBusy ? 'Saving…' : 'Set limit'}</button>
           </form>}
         </section>
-        {family.membership.role === 'owner' && <section><span>Family model</span><ModelTierControls spaceId={family.space._id} /></section>}
-        {family.membership.role === 'owner' && <section><span>Your keys</span><ByokKeys spaceId={family.space._id} /></section>}
-        {family.membership.role === 'owner' && <section><span>Family members</span><InviteMember spaceId={family.space._id} /></section>}
-        <section><span>Recent updates</span>{(inboxItems ?? []).slice(0, 3).map((item) => <div className="context-inbox-item" key={item._id}><strong>{item.subject}</strong><small>{displaySender(item.sender)} · {categoryLabel(item.category)}</small></div>)}{inboxItems?.length === 0 && <p>No family mail yet.</p>}</section>
+        <details className="settings-disclosure">
+          <summary><span>Advanced settings</span><small>Family inbox address, AI model, and provider keys</small></summary>
+          <section><span>Family inbox</span>{family.space.agentmailInboxId
+          ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy ID'}</button></div>
+          : family.membership.role === 'owner'
+            ? <ConnectInbox spaceId={family.space._id} />
+            : <p>Ask a family owner to connect AgentMail.</p>}</section>
+          {family.membership.role === 'owner' && <section><span>Family model</span><ModelTierControls spaceId={family.space._id} /></section>}
+          {family.membership.role === 'owner' && <section><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
+        </details>
+        {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
+        </div>
       </aside>
       <nav className="mobile-workspace-nav" aria-label="Workspace">
-        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}><MessageSquareText /><span>Chats</span></button>
-        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}><Bell /><span>Updates</span></button>
+        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}><MessageSquareText /><span>Home</span></button>
+        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}><Bell /><span>Inbox</span></button>
         <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
-        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-label="Family admin"><Settings2 /><span>Admin</span></button>
+        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
       </nav>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
@@ -408,7 +430,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
     setBusy(true)
     setError('')
     try {
-      await postMessage({ roomId: room._id, text, language: 'en', clientOperationId: crypto.randomUUID().replaceAll('-', '') })
+      await postMessage({ roomId: room._id, text, language: profile?.preferredLanguage ?? 'en', clientOperationId: crypto.randomUUID().replaceAll('-', '') })
       setMessage('')
     } catch {
       setError('Your message could not be shared. Please try again.')
@@ -421,11 +443,6 @@ function LiveRoom({ room, family, onBack, onInvite }: {
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
     event.preventDefault()
     event.currentTarget.form?.requestSubmit()
-  }
-
-  const addSaathiMention = () => {
-    setMessage((current) => /@saathi\b/i.test(current) ? current : `${current}${current && !current.endsWith(' ') ? ' ' : ''}@saathi `)
-    requestAnimationFrame(() => textareaRef.current?.focus())
   }
 
   const retryFailedResponse = async () => {
@@ -523,11 +540,16 @@ function LiveRoom({ room, family, onBack, onInvite }: {
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{room.type === 'private' ? 'Only you and Saathi can see this conversation' : `${family.space.name} · private family conversation`}</p></div>
-        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Mention @saathi to ask the assistant">S</span></div></div>
+        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Saathi can help in this conversation">S</span></div></div>
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
-        {messages && generatedImages && attachments && timeline.length === 0 && <div className="dark-empty-state compact"><Sparkles /><h2>{room.type === 'private' ? 'Your private space with Saathi' : 'Start with what your family needs to decide'}</h2><p>{room.type === 'private' ? 'Talk, type, or share a file. This room is not visible to other family members.' : <>Write to your family, share a file, or mention <strong>@saathi</strong> when you want help.</>}</p></div>}
+        {messages && generatedImages && attachments && timeline.length === 0 && !imageOpen && <div className="dark-empty-state compact conversation-starter"><MessageSquareText /><h2>{room.type === 'private' ? 'What can Saathi help with?' : 'Start with what your family needs'}</h2><p>{room.type === 'private' ? 'Talk or type naturally. Your settings, images, research, and plans all happen in this conversation.' : 'Write to your family or ask Saathi in the same conversation.'}</p><div className="starter-prompts">
+          {(room.type === 'private'
+            ? ['Use Hindi for me', 'Set our food budget to ₹15,000', 'Create a Diwali invitation image']
+            : ['Help us plan a family dinner', 'Summarize the file I share', 'Find current train options']
+          ).map(prompt => <Button type="button" variant="outline" size="sm" key={prompt} onClick={() => { setMessage(prompt); requestAnimationFrame(() => textareaRef.current?.focus()) }}>{prompt}</Button>)}
+        </div></div>}
         {timeline.map((entry) => entry.kind === 'image'
           ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
               <span className="message-avatar assistant"><Bot /></span>
@@ -599,14 +621,18 @@ function LiveRoom({ room, family, onBack, onInvite }: {
         {uploads.length > 0 && <div className="upload-queue" aria-live="polite">{uploads.map((upload) => <div className={upload.status} key={upload.id}>{upload.status === 'uploading' ? <span className="upload-spinner" /> : <FileText />}<span><strong>{upload.name}</strong><small>{upload.status === 'uploading' ? 'Uploading…' : upload.message}</small></span>{upload.status === 'error' && <button type="button" onClick={() => setUploads((current) => current.filter((item) => item.id !== upload.id))} aria-label={`Dismiss ${upload.name}`}><X /></button>}</div>)}</div>}
         <div className="composer-guidance">
           <div className="composer-guidance-actions">
-            <button type="button" onClick={addSaathiMention}><AtSign /> Ask Saathi</button>
-            <button type="button" onClick={() => { captureRef.current = 'library'; fileInputRef.current?.click() }}><Folder /> Photos</button>
-            <button type="button" onClick={() => cameraInputRef.current?.click()}><Camera /> Camera</button>
-            <button type="button" onClick={() => receiptInputRef.current?.click()}><FileText /> Receipt</button>
-            <button type="button" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</button>
-            <button type="button" onClick={() => setImageOpen(current => !current)}><Sparkles /> Create image</button>
+            <Button type="button" variant="ghost" size="sm" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</Button>
+            <Button type="button" variant="ghost" size="sm" className={imageOpen ? 'is-active' : ''} onClick={() => setImageOpen(current => !current)}><ImageIcon /> Create image</Button>
+            <details className="composer-more">
+              <summary><Plus /> Add</summary>
+              <div>
+                <button type="button" onClick={() => { captureRef.current = 'library'; fileInputRef.current?.click() }}><Folder /> Photos or files</button>
+                <button type="button" onClick={() => cameraInputRef.current?.click()}><Camera /> Take a photo</button>
+                <button type="button" onClick={() => receiptInputRef.current?.click()}><FileText /> Scan a receipt</button>
+              </div>
+            </details>
           </div>
-          <span>Enter to send · Drop photos or documents here</span>
+          <span>Ask naturally—Saathi can also change settings here.</span>
         </div>
         {imageOpen && <ImagePromptBox
           prompt={imageDraft}
@@ -628,11 +654,9 @@ function LiveRoom({ room, family, onBack, onInvite }: {
           <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files, 'library')} />
           <input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => chooseFiles(event.target.files, 'camera')} />
           <input ref={receiptInputRef} className="visually-hidden" type="file" accept="image/*,application/pdf" onChange={(event) => chooseFiles(event.target.files, 'receipt')} />
-          <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your family or type @saathi…" aria-label="Message for your family" rows={1} />
-          <button className="composer-attachment" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></button>
-          <button className="composer-camera" type="button" onClick={() => cameraInputRef.current?.click()} aria-label="Take a photo"><Camera /></button>
-          <button className="composer-mention" type="button" onClick={addSaathiMention} aria-label="Mention Saathi"><AtSign /></button>
-          <button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></button>
+          <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={room.type === 'private' ? 'Ask Saathi anything…' : 'Message your family or ask Saathi…'} aria-label="Message for your family" rows={1} />
+          <Button className="composer-attachment" variant="ghost" size="icon" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></Button>
+          <Button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></Button>
         </form>
         {error && <p className="dark-form-error" role="alert">{error}</p>}
         {voice.error && <p className="dark-form-error" role="alert">{voice.error}</p>}
@@ -720,29 +744,26 @@ function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove 
   onCancel: () => void
   onApprove: () => void
 }) {
-  return <div className="image-prompt-box" role="dialog" aria-label="Create an image">
+  const selected = IMAGE_PRESETS.find(preset => preset.id === style)
+  return <Card className="image-prompt-box" role="dialog" aria-label="Create an image">
     <label htmlFor="image-prompt">What should Saathi draw?</label>
     <textarea id="image-prompt" value={prompt} onChange={event => onPrompt(event.target.value)} rows={2} placeholder="A family rangoli by the door, in Hindi labels…" />
-    <div className="image-preset-picker compact" role="radiogroup" aria-label="Image style">
-      {IMAGE_PRESET_GROUPS.map(group => (
-        <section key={group}>
-          <span>{imagePresetGroupLabel(group)}</span>
-          <div>
-            {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => (
-              <button type="button" key={preset.id} role="radio" aria-checked={style === preset.id} className={style === preset.id ? 'selected' : ''} onClick={() => onStyle(preset.id)}>
-                <strong>{preset.label}</strong>
-                <small>{preset.hint}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
+    <details className="image-style-disclosure">
+      <summary>Style: {selected?.label ?? 'Warm household'} <small>Optional</small></summary>
+      <label id="image-style-label">Choose a style</label>
+      <Select value={style} onValueChange={value => onStyle(value as (typeof IMAGE_PRESETS)[number]['id'])}>
+        <SelectTrigger aria-labelledby="image-style-label"><SelectValue /></SelectTrigger>
+        <SelectContent>{IMAGE_PRESET_GROUPS.map(group => <SelectGroup key={group}>
+          <SelectLabel>{imagePresetGroupLabel(group)}</SelectLabel>
+          {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => <SelectItem value={preset.id} key={preset.id}>{preset.label} — {preset.hint}</SelectItem>)}
+        </SelectGroup>)}</SelectContent>
+      </Select>
+    </details>
     <div className="inbox-actions">
-      <button type="button" onClick={onApprove} disabled={!prompt.trim()}>Use this style</button>
-      <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
+      <Button type="button" size="sm" onClick={onApprove} disabled={!prompt.trim()}>Use this style</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={onCancel}>Cancel</Button>
     </div>
-  </div>
+  </Card>
 }
 
 function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {

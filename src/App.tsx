@@ -13,6 +13,9 @@ import {
 } from 'lucide-react'
 import { LiveWorkspace } from './LiveWorkspace'
 import { PreviewWorkspace } from './PreviewWorkspace'
+import { Badge } from './components/ui/badge'
+import { Button } from './components/ui/button'
+import { Card } from './components/ui/card'
 import './App.css'
 
 type ExperienceMode = 'choose' | 'preview' | 'live'
@@ -73,7 +76,7 @@ function ModeChooser({
           <h2 id="mode-title">Welcome to Saath</h2>
           <p className="mode-intro">Explore safely with sample information, or open your private family workspace.</p>
 
-          <button className="mode-card live-card" onClick={() => onChoose('live')} disabled={!backendAvailable}>
+          <Button variant="outline" className="mode-card live-card" onClick={() => onChoose('live')} disabled={!backendAvailable}>
             <span className="mode-icon"><LockKeyhole size={25} /></span>
             <span className="mode-card-copy">
               <strong>Open my family workspace</strong>
@@ -81,9 +84,9 @@ function ModeChooser({
               {!backendAvailable && <em>Live mode needs a connected Convex deployment.</em>}
             </span>
             <ArrowRight size={22} />
-          </button>
+          </Button>
 
-          <button className="mode-card preview-card" onClick={() => onChoose('preview')}>
+          <Button variant="outline" className="mode-card preview-card" onClick={() => onChoose('preview')}>
             <span className="mode-icon"><Eye size={25} /></span>
             <span className="mode-card-copy">
               <strong>Explore a guided preview</strong>
@@ -91,7 +94,7 @@ function ModeChooser({
               <em>Sample data · nothing is sent</em>
             </span>
             <ArrowRight size={22} />
-          </button>
+          </Button>
 
           <p className="privacy-note"><ShieldCheck size={17} /> Preview and live information never mix.</p>
         </div>
@@ -170,9 +173,9 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
   return (
     <main className="live-auth-page">
       <button className="back-link" onClick={onBack}><ArrowLeft size={19} /> Back</button>
-      <section className="live-auth-card">
+      <Card className="live-auth-card">
         <div className="auth-brand dark"><span className="brand-mark">स</span> Saath</div>
-        <span className="mode-badge live"><LockKeyhole size={15} /> Live workspace</span>
+        <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
         <h1>{step === 'email' ? 'Sign in with your email' : step === 'code' ? 'Enter your six-digit code' : 'Opening your family space'}</h1>
         <p>{step === 'email'
           ? 'We’ll email you a one-time code. There is no password to remember.'
@@ -184,7 +187,7 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
           <form onSubmit={requestCode}>
             <label htmlFor="live-email">Email address</label>
             <div className="field-with-icon"><Mail size={20} /><input id="live-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required autoFocus /></div>
-            <button className="primary large" type="submit" disabled={busy}>{busy ? 'Sending your code…' : 'Email me a code'} <ArrowRight size={20} /></button>
+            <Button className="primary large" type="submit" disabled={busy}>{busy ? 'Sending your code…' : 'Email me a code'} <ArrowRight size={20} /></Button>
           </form>
         )}
 
@@ -192,7 +195,7 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
           <form onSubmit={verifyCode}>
             <label htmlFor="live-code">One-time code</label>
             <div className="field-with-icon"><KeyRound size={20} /><input id="live-code" className="otp-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} placeholder="000000" required autoFocus /></div>
-            <button className="primary large" type="submit" disabled={busy || resending || code.length !== 6}>{busy ? 'Checking code…' : 'Verify and continue'} <ArrowRight size={20} /></button>
+            <Button className="primary large" type="submit" disabled={busy || resending || code.length !== 6}>{busy ? 'Checking code…' : 'Verify and continue'} <ArrowRight size={20} /></Button>
             <button className="text-button" type="button" onClick={() => void resendCode()} disabled={busy || resending}>{resending ? 'Sending a new code…' : 'Request a new code'}</button>
             <button className="text-button" type="button" onClick={() => { setStep('email'); setCode(''); setError(''); setNotice('') }} disabled={busy || resending}>Use a different email</button>
           </form>
@@ -202,7 +205,7 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
         {notice && !error && <p className="form-notice" role="status">{notice}</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="security-note"><ShieldCheck size={18} /><span><strong>Private by design</strong>Your code expires after 10 minutes and can only be used once.</span></div>
-      </section>
+      </Card>
     </main>
   )
 }

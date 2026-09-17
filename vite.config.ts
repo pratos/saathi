@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
@@ -21,6 +22,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      tailwindcss(),
       ...(portalBuild ? [portalLatencyOptimizations, viteSingleFile({ removeViteModuleLoader: true })] : []),
     ],
     server: {

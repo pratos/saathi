@@ -16,6 +16,7 @@ import {
   Play,
   RefreshCcw,
   Send,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Square,
@@ -31,11 +32,11 @@ const demoSteps = [
   { title: 'Email sign-in', caption: 'Enter a sample address safely. No email is sent.' },
   { title: 'One-time code', caption: 'Replay the six-digit verification used by live mode.' },
   { title: 'Create a family', caption: 'Start a separate space for each part of your family.' },
-  { title: 'Read together', caption: 'See one conversation in each person’s preferred language.' },
+  { title: 'Read together', caption: 'See family messages and Saathi in one conversation.' },
   { title: 'Send a message', caption: 'Share a seeded message without touching live family data.' },
   { title: 'Family inbox', caption: 'Connect sample mail and see an incoming family update.' },
   { title: 'Switch families', caption: 'Move between families without mixing their information.' },
-  { title: 'Decide with Saath', caption: 'Review sourced guidance and the decision still to make.' },
+  { title: 'Decide with Saathi', caption: 'Review sourced guidance and the decision still to make.' },
 ] as const
 
 export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
@@ -172,7 +173,15 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (demoStep < 3) return
     const frame = window.requestAnimationFrame(() => {
-      if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight
+      const feed = feedRef.current
+      if (!feed) return
+      feed.scrollTop = feed.scrollHeight
+      const feedTop = feed.getBoundingClientRect().top
+      const firstCutOff = Array.from(feed.children).find((child) => {
+        const bounds = child.getBoundingClientRect()
+        return bounds.top < feedTop && bounds.bottom > feedTop
+      }) as HTMLElement | undefined
+      if (firstCutOff) feed.scrollTop += firstCutOff.getBoundingClientRect().top - feedTop - 20
     })
     return () => window.cancelAnimationFrame(frame)
   }, [demoStep, selectedFamily, sentMessages, sharedVoice])
@@ -259,9 +268,10 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
       {demoStep >= 3 && <section className="saath-workspace seeded-workspace">
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
-        <button className="rail-action active"><MessageSquareText /><span>Chats</span></button>
-        <button className="rail-action"><Bell /><span>Updates</span></button>
+        <button className="rail-action active"><MessageSquareText /><span>Home</span></button>
+        <button className="rail-action"><Bell /><span>Inbox</span></button>
         <button className="rail-action"><Folder /><span>Files</span></button>
+        <button className="rail-action"><Settings2 /><span>Settings</span></button>
         <button className="rail-profile" onClick={onExit} aria-label="Exit preview">AS</button>
       </aside>
 
@@ -276,10 +286,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
         <button className="conversation-link selected"><i /><span>{selectedFamily === 'asha' ? 'Weekend in Mysuru' : 'Parents’ medicines'}</span><b>{selectedFamily === 'asha' ? 4 : 2}</b></button>
         <button className="conversation-link" onClick={() => setMessage('Is everything sorted at home?')}><i /><span>Home</span></button>
         <button className="conversation-link" onClick={() => setMessage('I read the school notice.')}><i /><span>School notice</span></button>
-        <span className="list-heading section-gap">Only me</span>
-        <button className="conversation-link"><i /><span>Ask Saathi</span></button>
-        <span className="list-heading section-gap">My reading language</span>
-        <div className="language-setting"><strong>English</strong><button>Change</button></div>
+        <p className="preview-saathi-note"><Sparkles /> Ask Saathi in any conversation. There is no separate assistant window.</p>
       </aside>
 
       <section className="conversation-pane">
@@ -289,7 +296,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
             <div className="title-line"><h2>{selectedFamily === 'asha' ? 'Weekend in Mysuru' : 'Parents’ medicines'}</h2><span className="preview-label"><Sparkles size={14} /> Seeded preview</span></div>
             <p>{selectedFamily === 'asha' ? '3 family members · translated for you' : '2 family members · separate family space'}</p>
           </div>
-          <div className="participant-stack" aria-label="Asha, Appa, and Riya"><span>AS</span><span>AP</span><span>RG</span></div>
+          <div className="participant-stack" aria-label="Asha, Appa, Riya, and Saathi"><span>AS</span><span>AP</span><span>RG</span><span className="saathi-participant">S</span></div>
         </header>
 
         <div className="conversation-feed" ref={feedRef}>
@@ -335,7 +342,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
           {voiceState === 'recording' && <div className="recording-strip"><span><i /> Recording · {formatDuration(voiceDuration)} / 0:30</span><button onClick={() => recorderRef.current?.stop()}><Square fill="currentColor" /> Stop</button></div>}
           {voiceState === 'ready' && <div className="recording-strip"><span>Voice note ready to share</span><div><button onClick={cancelVoice}><X /> Remove</button><button onClick={shareVoice}><Send /> Share</button></div></div>}
           <form onSubmit={sendMessage}>
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Write a message…" aria-label="Message" />
+            <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message your family or ask Saathi…" aria-label="Message" />
             <button className="composer-mic" type="button" onClick={voiceState === 'idle' ? startRecording : cancelVoice} aria-label={voiceState === 'idle' ? 'Record a voice note' : 'Cancel voice note'}><Mic /></button>
             <button className="composer-send" type="submit" disabled={!message.trim()}>Send <Send /></button>
           </form>

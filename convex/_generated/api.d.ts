@@ -15,6 +15,7 @@ import type * as attachments from "../attachments.js";
 import type * as auth from "../auth.js";
 import type * as budget from "../budget.js";
 import type * as composioWebhook from "../composioWebhook.js";
+import type * as conversationActions from "../conversationActions.js";
 import type * as email from "../email.js";
 import type * as gmail from "../gmail.js";
 import type * as gmailData from "../gmailData.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   budget: typeof budget;
   composioWebhook: typeof composioWebhook;
+  conversationActions: typeof conversationActions;
   email: typeof email;
   gmail: typeof gmail;
   gmailData: typeof gmailData;

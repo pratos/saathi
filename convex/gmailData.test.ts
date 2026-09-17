@@ -87,6 +87,11 @@ describe("private Gmail ingestion", () => {
     await expect(owner.query(api.rooms.messages, { roomId: personalRoom!._id })).rejects.toThrow(/permission/i);
 
     const pending = await member.query(api.gmailData.pendingForRoom, { roomId: personalRoom!._id });
+    await expect(member.query(internal.gmailData.attachmentSource, { inboxItemId: pending[0]._id })).resolves.toMatchObject({
+      connectedAccountId: "ca_member_primary",
+      messageId: "useful-1",
+      userId: memberId,
+    });
     await expect(owner.mutation(api.gmailData.shareWithFamily, { inboxItemId: pending[0]._id })).rejects.toThrow(/permission/i);
     await member.mutation(api.gmailData.shareWithFamily, { inboxItemId: pending[0]._id });
     expect(await owner.query(api.inbox.list, { spaceId })).toHaveLength(1);

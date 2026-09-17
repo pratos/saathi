@@ -88,6 +88,7 @@ export const itemForExtraction = internalQuery({
     originalHtml: v.union(v.string(), v.null()),
     sender: v.string(),
     familyInboxId: v.union(v.string(), v.null()),
+    agentmailMessageId: v.string(),
   }),
   handler: async (ctx, args) => {
     const item = await ctx.db.get(args.inboxItemId);
@@ -99,6 +100,7 @@ export const itemForExtraction = internalQuery({
       originalHtml: item.originalHtml ?? null,
       sender: item.sender,
       familyInboxId: space?.agentmailInboxId ?? null,
+      agentmailMessageId: item.agentmailMessageId,
     };
   },
 });
@@ -117,9 +119,18 @@ export const parseDocuments = internalAction({
       originalHtml: string | null;
       sender: string;
       familyInboxId: string | null;
+      agentmailMessageId: string;
     } = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
     const urls = findDocumentUrls(item.originalHtml ?? "", item.originalText);
     if (urls.length === 0) {
+      if (item.agentmailMessageId.startsWith("gmail:")) {
+        const gmailResult: {
+          markdown: string;
+          status: "none" | "parsed" | "password" | "failed";
+          notes: string;
+        } = await ctx.runAction(internal.gmail.readInboxAttachments, args);
+        if (gmailResult.status !== "none" || gmailResult.notes) return gmailResult;
+      }
       return {
         markdown: "",
         status: "none" as const,

@@ -5,6 +5,9 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, env, internalAction, type ActionCtx } from "./_generated/server";
+import { composioDownloadUrl, gmailAttachmentDescriptors, isPdfAttachment } from "./lib/gmailAttachments";
+import { extractPasswordHints } from "./lib/inboxExtract";
+import { parsePublicDocument } from "./lib/firecrawlParse";
 
 export const beginConnection = action({
   args: { spaceId: v.id("spaces") },
@@ -73,6 +76,93 @@ export const checkNow = action({
       }
     }
     return connections.filter(connection => connection.status === "active").length;
+  },
+});
+
+export const readInboxAttachments = internalAction({
+  args: { inboxItemId: v.id("inboxItems") },
+  returns: v.object({
+    markdown: v.string(),
+    status: v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed")),
+    notes: v.string(),
+  }),
+  handler: async (ctx, { inboxItemId }): Promise<{
+    markdown: string;
+    status: "none" | "parsed" | "password" | "failed";
+    notes: string;
+  }> => {
+    const source: {
+      connectedAccountId: string;
+      messageId: string;
+      userId: Id<"users">;
+      subject: string;
+      originalText: string;
+    } | null = await ctx.runQuery(internal.gmailData.attachmentSource, { inboxItemId });
+    if (!source) return { markdown: "", status: "none", notes: "" };
+
+    const session = await gmailSession(source.userId, source.connectedAccountId);
+    const message = await session.execute("GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID", {
+      message_id: source.messageId,
+      user_id: "me",
+      format: "full",
+    }, { account: source.connectedAccountId });
+    if (message.error) {
+      return { markdown: "", status: "failed", notes: "Saathi could not load this email's attachments from Gmail." };
+    }
+    const attachments = gmailAttachmentDescriptors(message.data);
+    const pdfs = attachments.filter(isPdfAttachment).slice(0, 2);
+    if (pdfs.length === 0) {
+      return {
+        markdown: "",
+        status: "none",
+        notes: attachments.length
+          ? "This email has attachments, but no readable PDF."
+          : "Gmail did not include a readable PDF attachment with this email.",
+      };
+    }
+    const apiKey = env.FIRECRAWL_API_KEY?.trim();
+    if (!apiKey) return { markdown: "", status: "failed", notes: "PDF reading is not configured." };
+
+    const parsed: string[] = [];
+    let passwordProtected = false;
+    let failed = false;
+    for (const attachment of pdfs) {
+      const download = await session.execute("GMAIL_GET_ATTACHMENT", {
+        attachment_id: attachment.attachmentId,
+        file_name: attachment.fileName,
+        message_id: source.messageId,
+        user_id: "me",
+      }, { account: source.connectedAccountId });
+      const downloadUrl = download.error ? "" : composioDownloadUrl(download.data);
+      if (!downloadUrl) {
+        failed = true;
+        continue;
+      }
+      const result = await parsePublicDocument(apiKey, downloadUrl);
+      if (result.markdown) parsed.push(`# ${attachment.fileName}\n\n${result.markdown}`);
+      else if (result.passwordProtected) passwordProtected = true;
+      else failed = true;
+    }
+    if (parsed.length) {
+      return {
+        markdown: parsed.join("\n\n").slice(0, 40_000),
+        status: "parsed",
+        notes: `Read ${parsed.length} attached PDF${parsed.length === 1 ? "" : "s"} from Gmail.`,
+      };
+    }
+    if (passwordProtected) {
+      return {
+        markdown: "",
+        status: "password",
+        notes: extractPasswordHints(source.subject, source.originalText)
+          ?? "The attached PDF is password-protected. Check the email for its password hint.",
+      };
+    }
+    return {
+      markdown: "",
+      status: failed ? "failed" : "none",
+      notes: failed ? "Saathi could not download or read the attached PDF from Gmail." : "",
+    };
   },
 });
 

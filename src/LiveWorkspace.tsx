@@ -1157,8 +1157,8 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
             {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
             {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
-            {item.status === 'processing' && <p>Reading attachments…</p>}
-            {item.documentParseStatus === 'parsed' && <p>Attached document read with Firecrawl Parse.</p>}
+            {item.status === 'processing' && <p>Analyzing the email and its attachments…</p>}
+            {item.documentParseStatus === 'parsed' && <p>Attached PDF read successfully.</p>}
             {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
             {(item.suggestedActions ?? []).map(action => <p key={`${item._id}-${action.kind}`}>{action.label}{action.detail ? ` — ${action.detail}` : ''}</p>)}
@@ -1166,8 +1166,11 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
               <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Confirm action</button>
               <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Not now</button>
             </div>}
-            {item.actionStatus !== 'suggested' && <div className="inbox-actions">
-              <button type="button" className="secondary" disabled={item.status === 'processing'} onClick={() => void reprocess({ inboxItemId: item._id })}>{item.status === 'processing' ? 'Reading…' : 'Read attachments'}</button>
+            {canReadGmailPdf(item) && <div className="inbox-actions">
+              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read Gmail PDF</button>
+            </div>}
+            {(item.status === 'failed' || item.documentParseStatus === 'failed') && <div className="inbox-actions">
+              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Retry PDF reading</button>
             </div>}
             {item.actionStatus === 'confirmed' && <small>Action confirmed for the family.</small>}
           </div>
@@ -1294,6 +1297,12 @@ function attachmentMediaType(file: File) {
     png: 'image/png', ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     txt: 'text/plain', webp: 'image/webp', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   } as Record<string, string>)[extension ?? ''] ?? ''
+}
+
+function canReadGmailPdf(item: Doc<'inboxItems'>) {
+  if (item.status === 'processing' || item.status === 'failed' || !item.agentmailMessageId.startsWith('gmail:')) return false
+  if (item.documentParseStatus === undefined) return true
+  return item.documentParseStatus === 'none' && Boolean(item.processingNotes?.includes('no public document link'))
 }
 
 function convexErrorCode(error: unknown) {

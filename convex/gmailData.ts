@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireInboxItemPermission, requireRoomPermission, requireSpacePermission } from "./lib/authz";
+import { parseGmailSourceKey } from "./lib/gmailAttachments";
 import { ensurePersonalRoomForUser } from "./rooms";
 
 const category = v.union(
@@ -37,6 +38,34 @@ export const connectionForAccount = internalQuery({
   args: { connectedAccountId: v.string() },
   handler: async (ctx, { connectedAccountId }) => ctx.db.query("gmailConnections")
     .withIndex("by_connected_account", q => q.eq("connectedAccountId", connectedAccountId)).unique(),
+});
+
+export const attachmentSource = internalQuery({
+  args: { inboxItemId: v.id("inboxItems") },
+  returns: v.union(v.object({
+    connectedAccountId: v.string(),
+    messageId: v.string(),
+    userId: v.id("users"),
+    subject: v.string(),
+    originalText: v.string(),
+  }), v.null()),
+  handler: async (ctx, { inboxItemId }) => {
+    const item = await ctx.db.get(inboxItemId);
+    if (!item) return null;
+    const source = parseGmailSourceKey(item.agentmailMessageId);
+    if (!source) return null;
+    const connection = await ctx.db.query("gmailConnections")
+      .withIndex("by_connected_account", q => q.eq("connectedAccountId", source.connectedAccountId))
+      .unique();
+    if (!connection || connection.status !== "active" || connection.spaceId !== item.spaceId
+      || (item.privateOwnerId && connection.userId !== item.privateOwnerId)) return null;
+    return {
+      ...source,
+      userId: connection.userId,
+      subject: item.subject,
+      originalText: item.originalText,
+    };
+  },
 });
 
 export const register = internalMutation({

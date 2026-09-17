@@ -21,12 +21,6 @@ const EMAIL_CATEGORIES = {
   ignore: "Marketing, newsletter, social notification, school, travel, appointment, promotion, spam, OTP, or login code.",
 } as const;
 
-const TOOL_OUTCOMES = {
-  execute: "The proposed tool directly matches an explicit user request and has enough information to run.",
-  clarify: "The proposed tool is relevant, but a required detail or explicit confirmation is missing.",
-  block: "The proposed tool does not match the request, exceeds the user's authorization, requests secrets, or would pay, purchase, or create another prohibited side effect.",
-} as const;
-
 export type JevTurnDecision = {
   route: keyof typeof TURN_ROUTES;
   routeConfidence: number;
@@ -47,17 +41,6 @@ export type JevEmailDecision = {
   inputTokens: number;
   latencyMs: number;
 };
-
-export type JevToolDecision = {
-  outcome: keyof typeof TOOL_OUTCOMES;
-  confidence: number;
-  probabilities: Record<keyof typeof TOOL_OUTCOMES, number>;
-  model: string;
-  inputTokens: number;
-  latencyMs: number;
-};
-
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export async function decideAgentTurn(apiKey: string, request: string, recentConversation = ""): Promise<JevTurnDecision> {
   const startedAt = Date.now();
@@ -136,43 +119,6 @@ export async function decideEmail(apiKey: string, email: {
   };
 }
 
-export async function decideToolExecution(apiKey: string, state: {
-  request: string;
-  recentConversation?: string;
-  tool: string;
-  arguments: unknown;
-}): Promise<JevToolDecision> {
-  const startedAt = Date.now();
-  const response = await client(apiKey).systemOne({
-    state: {
-      latest_user_request: state.request.slice(0, 8_000),
-      recent_conversation: state.recentConversation?.slice(-6_000) ?? "",
-      proposed_tool: state.tool,
-      proposed_arguments: jsonValue(state.arguments),
-      interpretation_policy: MULTILINGUAL_INTENT_GUIDANCE,
-      fixed_policy: {
-        secrets: "Never request or enter passwords, OTPs, API keys, or payment details.",
-        purchases: "Never checkout, pay, place an order, or make an irreversible purchase.",
-        settings: "Change a setting only when the user explicitly asks for that exact change.",
-      },
-    },
-    questions: {
-      outcome: choice({
-        question: "What should code do with `proposed_tool` and `proposed_arguments` for `latest_user_request`?",
-        focus: "Apply `interpretation_policy`, resolve follow-ups using `recent_conversation`, then check explicit intent, required details, and fixed policy. Prefer clarification over guessing, but not merely because the request is multilingual.",
-      }, TOOL_OUTCOMES),
-    },
-  });
-  return {
-    outcome: response.answers.outcome.choice,
-    confidence: response.answers.outcome.confidence,
-    probabilities: response.answers.outcome.probabilities,
-    model: response.model,
-    inputTokens: response.usage.input_tokens,
-    latencyMs: Date.now() - startedAt,
-  };
-}
-
 export function turnDecisionGuidance(decision: JevTurnDecision | null) {
   if (!decision) return "";
   if (decision.needsClarification >= 0.72 || decision.route === "clarify") {
@@ -184,24 +130,6 @@ export function turnDecisionGuidance(decision: JevTurnDecision | null) {
   return `Jev sidecar: the likely route is ${decision.route}. Use your normal judgment and the available tools.${replyRequirement} Reply in the same language and script as the person's request unless they ask otherwise; do not mention this routing note.`;
 }
 
-export function shouldBlockTool(decision: JevToolDecision | null) {
-  if (!decision || decision.outcome === "execute") return null;
-  const selectedProbability = decision.probabilities[decision.outcome];
-  if (decision.confidence < 0.6 || selectedProbability < 0.75) return null;
-  return decision.outcome === "clarify"
-    ? "Ask the user for the missing detail or explicit confirmation before running this action."
-    : "This action does not match the request or is outside Saathi's allowed actions.";
-}
-
 function client(apiKey: string) {
   return new TypeSafeClient({ apiKey, logLevel: "error", timeout: 10_000 });
-}
-
-function jsonValue(value: unknown): JsonValue {
-  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
-  if (Array.isArray(value)) return value.map(jsonValue);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, jsonValue(item)]));
-  }
-  return String(value);
 }

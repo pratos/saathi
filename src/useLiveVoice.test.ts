@@ -4,7 +4,6 @@ import {
   addVoiceToolActivity,
   finishVoiceToolActivity,
   groupVoiceFragments,
-  latestVoiceUserText,
   liveToolCallFromEvent,
   voiceConversationAction,
 } from './useLiveVoice'
@@ -23,15 +22,6 @@ describe('live voice caption grouping', () => {
       { role: 'user', text: 'Yes', startMs: 1_250 },
       { role: 'assistant', text: ', how can I help?', startMs: 1_410 },
     ])
-  })
-
-  test('gates a voice tool against the latest complete caller turn', () => {
-    expect(latestVoiceUserText([
-      { role: 'user', text: 'Search for ', startMs: 100, endMs: 300, order: 0 },
-      { role: 'user', text: 'school closures', startMs: 310, endMs: 600, order: 1 },
-      { role: 'assistant', text: 'I can do that.', startMs: 800, endMs: 1_000, order: 2 },
-      { role: 'user', text: 'Actually, open the school site', startMs: 1_200, endMs: 1_600, order: 3 },
-    ])).toBe('Actually, open the school site')
   })
 
   test('reads generate_image calls from GPT-Live response envelopes', () => {

@@ -21,10 +21,7 @@ import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } 
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
 import {
   decideAgentTurn,
-  decideToolExecution,
-  shouldBlockTool,
   turnDecisionGuidance,
-  type JevToolDecision,
   type JevTurnDecision,
 } from "./lib/jev";
 import { searchPublicWeb } from "./lib/publicWeb";
@@ -88,7 +85,6 @@ export const run = internalAction({
       if (turnDecision) {
         await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, turnDecision);
       }
-      const selectedToolNames = toolNamesForTurnDecision(turnDecision);
       const ephemeralContext = [work.memoryContext, turnDecisionGuidance(turnDecision)].filter(Boolean).join("\n\n");
 
       let turns = 0;
@@ -97,32 +93,13 @@ export const run = internalAction({
           systemPrompt: withWebAccessPrompt(work.agent.systemPrompt),
           model,
           thinkingLevel,
-          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey, selectedToolNames),
+          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey),
           messages: work.messages as AgentMessage[],
         },
         transformContext: async messages => withEphemeralTurnContext(messages, ephemeralContext),
         streamFn: models.streamSimple.bind(models),
         getApiKey: () => openRouterKey,
-        onPayload: payload => enableOpenRouterWebSearch(
-          payload,
-          selectedToolNames === null || selectedToolNames.includes("search_public_web"),
-        ),
-        beforeToolCall: typesafeKey ? async ({ toolCall, args }) => {
-          const decision = await safeToolDecision(typesafeKey, {
-            request: decisionInput,
-            recentConversation: decisionContext,
-            tool: toolCall.name,
-            arguments: args,
-          });
-          if (decision) {
-            await recordJevDecision(ctx, work, "chat_tool", decisionInput, decision.outcome, decision.confidence, {
-              ...decision,
-              tool: toolCall.name,
-            });
-          }
-          const reason = shouldBlockTool(decision);
-          return reason ? { block: true, reason } : undefined;
-        } : undefined,
+        onPayload: payload => enableOpenRouterWebSearch(payload),
         sessionId: String(agentId),
         shouldStopAfterTurn: () => ++turns >= 12,
       });
@@ -179,10 +156,8 @@ function createTools(
   jobId: Id<"agentJobs">,
   leaseId: string,
   openRouterKey: string,
-  selectedToolNames: readonly ApplicationAssistantToolName[] | null,
 ): AgentTool[] {
-  const selected = selectedToolNames === null ? null : new Set(selectedToolNames);
-  return APPLICATION_ASSISTANT_TOOLS.filter(tool => selected === null || selected.has(tool.name)).map(tool => ({
+  return APPLICATION_ASSISTANT_TOOLS.map(tool => ({
     name: tool.name,
     label: tool.label,
     description: tool.description,
@@ -191,37 +166,6 @@ function createTools(
       ctx, agentId, jobId, leaseId, openRouterKey, tool.name, params,
     ),
   })) as AgentTool[];
-}
-
-const JEV_TOOL_SELECTION_CONFIDENCE = 0.85;
-
-const ROUTE_TOOL_BUNDLES: Record<Exclude<JevTurnDecision["route"], "multi_tool">, readonly ApplicationAssistantToolName[]> = {
-  answer: [],
-  clarify: [],
-  search: ["search_public_web"],
-  computer: ["use_computer"],
-  image: ["generate_image"],
-  settings: ["set_reading_language", "set_image_style", "set_food_budget", "set_model_tier"],
-  memory: ["remember", "recall", "forget_memory", "list_memories"],
-  family_data: ["get_food_budget", "find_room_files", "search_family_inbox"],
-};
-
-const ACTIONABLE_TOOL_ROUTES = ["search", "computer", "image", "settings", "memory", "family_data"] as const;
-
-export function toolNamesForTurnDecision(decision: JevTurnDecision | null): readonly ApplicationAssistantToolName[] | null {
-  if (!decision) return null;
-  if (decision.route === "clarify" || decision.needsClarification >= 0.72) return [];
-  if (decision.routeConfidence < JEV_TOOL_SELECTION_CONFIDENCE
-    || decision.routeProbabilities[decision.route] < JEV_TOOL_SELECTION_CONFIDENCE) return null;
-  if (decision.route === "multi_tool") {
-    const likelyRoutes = ACTIONABLE_TOOL_ROUTES
-      .filter(route => decision.routeProbabilities[route] > 0)
-      .sort((left, right) => decision.routeProbabilities[right] - decision.routeProbabilities[left])
-      .slice(0, 2);
-    if (likelyRoutes.length < 2) return null;
-    return [...new Set(likelyRoutes.flatMap(route => ROUTE_TOOL_BUNDLES[route]))];
-  }
-  return ROUTE_TOOL_BUNDLES[decision.route];
 }
 
 async function executeApplicationTool(
@@ -370,25 +314,13 @@ async function safeTurnDecision(apiKey: string, request: string, recentConversat
   }
 }
 
-async function safeToolDecision(
-  apiKey: string,
-  state: { request: string; recentConversation: string; tool: string; arguments: unknown },
-): Promise<JevToolDecision | null> {
-  try {
-    return await decideToolExecution(apiKey, state);
-  } catch (error) {
-    console.warn("JEV_TOOL_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
-    return null;
-  }
-}
-
 async function recordJevDecision(
   ctx: ActionCtx,
   work: {
     agent: { spaceId: Id<"spaces">; roomId: Id<"rooms"> };
     job: { _id: Id<"agentJobs"> };
   },
-  source: "chat_turn" | "chat_tool",
+  source: "chat_turn",
   inputPreview: string,
   decision: string,
   confidence: number,

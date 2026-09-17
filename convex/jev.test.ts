@@ -46,20 +46,20 @@ describe("Jev decision records", () => {
     await expect(member.query(api.jev.recent, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
     await expect(owner.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).resolves.toBeNull();
     await expect(member.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
-    await expect(member.mutation(internal.jev.prepareVoiceTool, { roomId: seeded.roomId }))
-      .resolves.toEqual({ spaceId: seeded.spaceId });
     await expect(owner.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
     await expect(member.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
     await expect(admin.query(api.jev.benchmarkReport, {})).resolves.toMatchObject({
-      routing: { passed: 39, total: 39, wrongRestrictedBundles: 0, fullToolFallbacks: 8 },
+      commit: "5af76abe20241ac7dfa6309083fb1a6ff363a482",
+      repetitions: 3,
       memory: { passed: 33, total: 36 },
-      toolSelection: {
-        model: "openai/gpt-5.6-luna",
-        currentCatalog: { passed: 30, total: 39, wrongCalls: 7 },
-        expandedCatalog: { passed: 32, total: 39, wrongCalls: 2 },
-      },
-      comparison: { uncachedSavingsPercent: 66.8 },
-      scale: { fullToolCount: 200, selectedToolCount: 10, schemaReductionPercent: 95, routedUncachedCostPerTurnUsd: 0.00059403 },
+      conditions: [
+        { id: "A", passed: 106, total: 117, wrongCalls: 0 },
+        { id: "B", passed: 107, total: 117, wrongCalls: 0 },
+        { id: "C", passed: 100, total: 117, wrongCalls: 2 },
+        { id: "D", passed: 107, total: 117, wrongCalls: 0 },
+      ],
+      promotionGates: { accuracyPassed: false, safetyPassed: true, latencyPassed: false, costPassed: false },
+      projectedFromPostPiGateRun: true,
     });
   });
 

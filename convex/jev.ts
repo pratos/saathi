@@ -1,16 +1,14 @@
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { action, env, internalMutation, query } from "./_generated/server";
-import { requireRoomPermission, requireSpacePermission, requireUser } from "./lib/authz";
-import { decideAgentTurn, decideToolExecution, shouldBlockTool } from "./lib/jev";
+import { requireSpacePermission, requireUser } from "./lib/authz";
+import { decideAgentTurn } from "./lib/jev";
 
 const BENCHMARK_ADMIN_EMAIL = "prathamesh.b.sarang@gmail.com";
 
 const limits = new RateLimiter(components.rateLimiter, {
   lab: { kind: "fixed window", rate: 30, period: HOUR },
-  voiceTool: { kind: "fixed window", rate: 60, period: HOUR },
 });
 
 const source = v.union(
@@ -53,39 +51,34 @@ const benchmarkLanguageResult = v.object({
   total: v.number(),
 });
 
-const toolSelectionResult = v.object({
-  toolCount: v.number(), passed: v.number(), total: v.number(), wrongCalls: v.number(), safetySignificantCalls: v.number(),
-  medianLatencyMs: v.number(), p95LatencyMs: v.number(), promptTokens: v.number(), completionTokens: v.number(),
-  cacheTokens: v.number(), totalCostUsd: v.number(), averageCostPerTurnUsd: v.number(),
+const benchmarkLatency = v.object({
+  medianMs: v.number(),
+  p95Ms: v.number(),
+});
+
+const benchmarkConditionResult = v.object({
+  id: v.string(), label: v.string(), catalogTools: v.number(), passed: v.number(), total: v.number(),
+  wrongCalls: v.number(), safetySignificantCalls: v.number(),
+  averageExposedTools: v.number(), narrowingRate: v.optional(v.number()), fallbackRate: v.optional(v.number()),
+  routeLatency: v.optional(benchmarkLatency), piLatency: benchmarkLatency,
+  endToEndLatency: benchmarkLatency,
+  routeCostUsd: v.number(), piCostUsd: v.number(), combinedCostUsd: v.number(),
+  promptTokens: v.number(), cacheTokens: v.number(),
 });
 
 const benchmarkReportView = v.object({
-  runAt: v.string(),
-  routing: v.object({
-    passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
-    wrongRestrictedBundles: v.number(), clarificationOnlyTurns: v.number(), fullToolFallbacks: v.number(),
-    multiTurnPassed: v.number(), multiTurnTotal: v.number(), multiToolPassed: v.number(), multiToolTotal: v.number(),
-    languages: v.array(benchmarkLanguageResult),
-  }),
+  runAt: v.string(), commit: v.string(), model: v.string(), repetitions: v.number(), casesPerCondition: v.number(),
   memory: v.object({
     passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
     languages: v.array(benchmarkLanguageResult),
   }),
-  toolSelection: v.object({
-    model: v.string(), repetitions: v.number(), currentCatalog: toolSelectionResult, expandedCatalog: toolSelectionResult,
+  conditions: v.array(benchmarkConditionResult),
+  promotionGates: v.object({
+    currentAccuracyDeltaPoints: v.number(), expandedAccuracyDeltaPoints: v.number(),
+    noSafetyRegression: v.boolean(), expandedP95ReductionPercent: v.number(), expandedCostReductionPercent: v.number(),
+    accuracyPassed: v.boolean(), safetyPassed: v.boolean(), latencyPassed: v.boolean(), costPassed: v.boolean(),
   }),
-  comparison: v.object({
-    assumptions: v.object({ piInputPerMillionUsd: v.number(), piCacheReadPerMillionUsd: v.number(), jevInputPerMillionUsd: v.number(), tokenEstimate: v.string() }),
-    fullTools: v.object({ toolCount: v.number(), estimatedSchemaTokens: v.number(), uncachedCostPerTurnUsd: v.number(), cachedCostPerTurnUsd: v.number() }),
-    jevBundles: v.object({ averageToolCount: v.number(), estimatedSchemaTokens: v.number(), piUncachedCostPerTurnUsd: v.number(), piCachedCostPerTurnUsd: v.number(), jevCostPerTurnUsd: v.number(), combinedUncachedCostPerTurnUsd: v.number(), combinedCachedCostPerTurnUsd: v.number() }),
-    uncachedSavingsPercent: v.number(),
-  }),
-  scale: v.object({
-    fullToolCount: v.number(), selectedToolCount: v.number(), bundleCount: v.number(),
-    fullSchemaTokens: v.number(), selectedSchemaTokens: v.number(), schemaReductionPercent: v.number(),
-    fullUncachedCostPerTurnUsd: v.number(), routedUncachedCostPerTurnUsd: v.number(),
-    fullCachedCostPerTurnUsd: v.number(), routedCachedCostPerTurnUsd: v.number(),
-  }),
+  recommendation: v.string(), projectedFromPostPiGateRun: v.boolean(),
 });
 
 export const benchmarkReport = query({
@@ -98,16 +91,10 @@ export const benchmarkReport = query({
     }
     return {
       runAt: "2026-09-17",
-      routing: {
-        passed: 39, total: 39, averageLatencyMs: 124, inputTokens: 31_135, costUsd: 0.00130767,
-        wrongRestrictedBundles: 0, clarificationOnlyTurns: 7, fullToolFallbacks: 8,
-        multiTurnPassed: 12, multiTurnTotal: 12, multiToolPassed: 3, multiToolTotal: 3,
-        languages: [
-          { language: "English", passed: 13, total: 13 },
-          { language: "Hindi / Hinglish", passed: 13, total: 13 },
-          { language: "Marathi", passed: 13, total: 13 },
-        ],
-      },
+      commit: "5af76abe20241ac7dfa6309083fb1a6ff363a482",
+      model: "openai/gpt-5.6-luna",
+      repetitions: 3,
+      casesPerCondition: 117,
       memory: {
         passed: 33, total: 36, averageLatencyMs: 146, inputTokens: 46_522, costUsd: 0.001953924,
         languages: [
@@ -116,46 +103,19 @@ export const benchmarkReport = query({
           { language: "Marathi", passed: 12, total: 12 },
         ],
       },
-      toolSelection: {
-        model: "openai/gpt-5.6-luna",
-        repetitions: 1,
-        currentCatalog: {
-          toolCount: 15, passed: 30, total: 39, wrongCalls: 7, safetySignificantCalls: 4,
-          medianLatencyMs: 548, p95LatencyMs: 1_013, promptTokens: 228_051, completionTokens: 4_941,
-          cacheTokens: 218_234, totalCostUsd: 0.01261553, averageCostPerTurnUsd: 0.000323475,
-        },
-        expandedCatalog: {
-          toolCount: 200, passed: 32, total: 39, wrongCalls: 2, safetySignificantCalls: 2,
-          medianLatencyMs: 1_497, p95LatencyMs: 3_430, promptTokens: 873_930, completionTokens: 4_787,
-          cacheTokens: 847_552, totalCostUsd: 0.02915734, averageCostPerTurnUsd: 0.000747624,
-        },
+      conditions: [
+        { id: "A", label: "Direct Pi · 15 tools", catalogTools: 15, passed: 106, total: 117, wrongCalls: 0, safetySignificantCalls: 0, averageExposedTools: 15, piLatency: { medianMs: 640, p95Ms: 1_451 }, endToEndLatency: { medianMs: 640, p95Ms: 1_451 }, routeCostUsd: 0, piCostUsd: 0.0351011, combinedCostUsd: 0.0351011, promptTokens: 704_163, cacheTokens: 681_935 },
+        { id: "B", label: "Direct Pi · 200 tools", catalogTools: 200, passed: 107, total: 117, wrongCalls: 0, safetySignificantCalls: 0, averageExposedTools: 200, piLatency: { medianMs: 1_542, p95Ms: 2_434 }, endToEndLatency: { medianMs: 1_542, p95Ms: 2_434 }, routeCostUsd: 0, piCostUsd: 0.09588498, combinedCostUsd: 0.09588498, promptTokens: 2_543_095, cacheTokens: 2_510_189 },
+        { id: "C", label: "Jev pre-turn · full 15 tools", catalogTools: 15, passed: 100, total: 117, wrongCalls: 2, safetySignificantCalls: 0, averageExposedTools: 15, routeLatency: { medianMs: 180, p95Ms: 300 }, piLatency: { medianMs: 588, p95Ms: 1_525 }, endToEndLatency: { medianMs: 807, p95Ms: 1_677 }, routeCostUsd: 0.003929436, piCostUsd: 0.08467525, combinedCostUsd: 0.088604686, promptTokens: 714_583, cacheTokens: 697_545 },
+        { id: "D", label: "Jev pre-turn · full 200 tools", catalogTools: 200, passed: 107, total: 117, wrongCalls: 0, safetySignificantCalls: 0, averageExposedTools: 200, routeLatency: { medianMs: 180, p95Ms: 300 }, piLatency: { medianMs: 1_531, p95Ms: 2_494 }, endToEndLatency: { medianMs: 1_740, p95Ms: 2_683 }, routeCostUsd: 0.003929436, piCostUsd: 0.08648722, combinedCostUsd: 0.090416656, promptTokens: 2_551_186, cacheTokens: 2_514_076 },
+      ],
+      promotionGates: {
+        currentAccuracyDeltaPoints: -5.1282, expandedAccuracyDeltaPoints: 0,
+        noSafetyRegression: true, expandedP95ReductionPercent: -10.2301, expandedCostReductionPercent: 5.703,
+        accuracyPassed: false, safetyPassed: true, latencyPassed: false, costPassed: false,
       },
-      comparison: {
-        assumptions: {
-          piInputPerMillionUsd: 0.5,
-          piCacheReadPerMillionUsd: 0.003,
-          jevInputPerMillionUsd: 0.042,
-          tokenEstimate: "Current application and provider tool JSON characters divided by four; common prompt, conversation, output, and model reasoning are excluded.",
-        },
-        fullTools: {
-          toolCount: 15, estimatedSchemaTokens: 1_683,
-          uncachedCostPerTurnUsd: 0.0008415, cachedCostPerTurnUsd: 0.000005049,
-        },
-        jevBundles: {
-          averageToolCount: 4.49, estimatedSchemaTokens: 491,
-          piUncachedCostPerTurnUsd: 0.0002455, piCachedCostPerTurnUsd: 0.000001473,
-          jevCostPerTurnUsd: 0.00003353,
-          combinedUncachedCostPerTurnUsd: 0.00027903,
-          combinedCachedCostPerTurnUsd: 0.000035003,
-        },
-        uncachedSavingsPercent: 66.8,
-      },
-      scale: {
-        fullToolCount: 200, selectedToolCount: 10, bundleCount: 20,
-        fullSchemaTokens: 22_502, selectedSchemaTokens: 1_121, schemaReductionPercent: 95,
-        fullUncachedCostPerTurnUsd: 0.011251, routedUncachedCostPerTurnUsd: 0.00059403,
-        fullCachedCostPerTurnUsd: 0.000067506, routedCachedCostPerTurnUsd: 0.000036893,
-      },
+      recommendation: "Keep direct Pi as the default. Jev pre-turn guidance preserved 200-tool accuracy, but it did not improve safety in this corpus and failed the p95 latency and cost gates.",
+      projectedFromPostPiGateRun: true,
     };
   },
 });
@@ -223,48 +183,6 @@ export const evaluate = action({
   },
 });
 
-export const authorizeVoiceTool = action({
-  args: {
-    roomId: v.id("rooms"),
-    requestText: v.string(),
-    tool: v.string(),
-    arguments: v.any(),
-  },
-  returns: v.object({ ok: v.boolean(), message: v.string() }),
-  handler: async (ctx, args): Promise<{ ok: boolean; message: string }> => {
-    const prepared: { spaceId: Id<"spaces"> } = await ctx.runMutation(internal.jev.prepareVoiceTool, {
-      roomId: args.roomId,
-    });
-    const request = args.requestText.trim().slice(0, 8_000);
-    const apiKey = env.TYPESAFE_API_KEY?.trim();
-    if (!apiKey || !request) return { ok: true, message: "Allowed" };
-    try {
-      const decision = await decideToolExecution(apiKey, {
-        request,
-        tool: args.tool.slice(0, 100),
-        arguments: args.arguments,
-      });
-      await ctx.runMutation(internal.jev.record, {
-        spaceId: prepared.spaceId,
-        roomId: args.roomId,
-        source: "voice_tool",
-        inputPreview: request,
-        decision: decision.outcome,
-        confidence: decision.confidence,
-        details: { ...decision, tool: args.tool },
-        model: decision.model,
-        latencyMs: decision.latencyMs,
-        inputTokens: decision.inputTokens,
-      });
-      const reason = shouldBlockTool(decision);
-      return reason ? { ok: false, message: reason } : { ok: true, message: "Allowed" };
-    } catch (error) {
-      console.warn("JEV_VOICE_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
-      return { ok: true, message: "Allowed" };
-    }
-  },
-});
-
 export const prepareLab = internalMutation({
   args: { spaceId: v.id("spaces") },
   returns: v.null(),
@@ -273,17 +191,6 @@ export const prepareLab = internalMutation({
     const rate = await limits.limit(ctx, "lab", { key: String(userId) });
     if (!rate.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: rate.retryAfter });
     return null;
-  },
-});
-
-export const prepareVoiceTool = internalMutation({
-  args: { roomId: v.id("rooms") },
-  returns: v.object({ spaceId: v.id("spaces") }),
-  handler: async (ctx, { roomId }) => {
-    const { room, userId } = await requireRoomPermission(ctx, roomId, "post_message");
-    const rate = await limits.limit(ctx, "voiceTool", { key: String(userId) });
-    if (!rate.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: rate.retryAfter });
-    return { spaceId: room.spaceId };
   },
 });
 

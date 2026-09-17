@@ -455,101 +455,87 @@ function BenchmarkAdminPage({ onClose }: { onClose: () => void }) {
 }
 
 export function BenchmarkReportView({ report, onClose }: { report: BenchmarkReport; onClose: () => void }) {
-  const combinedBenchmarkCost = report.routing.costUsd + report.memory.costUsd
-    + report.toolSelection.currentCatalog.totalCostUsd + report.toolSelection.expandedCatalog.totalCostUsd
-  const uncachedSavings = report.comparison.fullTools.uncachedCostPerTurnUsd - report.comparison.jevBundles.combinedUncachedCostPerTurnUsd
-  const cachedDifference = report.comparison.jevBundles.combinedCachedCostPerTurnUsd - report.comparison.fullTools.cachedCostPerTurnUsd
-  const currentSelection = report.toolSelection.currentCatalog
-  const expandedSelection = report.toolSelection.expandedCatalog
+  const direct15 = report.conditions.find(result => result.id === 'A')!
+  const direct200 = report.conditions.find(result => result.id === 'B')!
+  const routed200 = report.conditions.find(result => result.id === 'D')!
+  const cacheRate = (condition: typeof direct15) => condition.promptTokens ? condition.cacheTokens / condition.promptTokens * 100 : 0
 
   return <div className="benchmark-admin-page">
     <header className="benchmark-admin-header">
-      <div><span><ChartBar /> Private admin report</span><h1>Jev benchmark results</h1><p>Checked-in results from {report.runAt}. Only the authorized benchmark account can query this report.</p></div>
+      <div><span><ChartBar /> Private admin report</span><h1>End-to-end tool routing</h1><p>{report.repetitions} repetitions · {report.casesPerCondition} cases per condition · {report.model}</p></div>
       <button type="button" onClick={onClose} aria-label="Close benchmark report" autoFocus><X /></button>
     </header>
     <div className="benchmark-admin-scroll">
       <section className="benchmark-summary-grid" aria-label="Benchmark summary">
-        <article><ChartBar /><span>Tool routing</span><strong>{report.routing.passed}/{report.routing.total}</strong><small>{report.routing.multiTurnPassed}/{report.routing.multiTurnTotal} multi-turn · {report.routing.wrongRestrictedBundles} wrong bundles</small></article>
-        <article><Database /><span>Memory decisions</span><strong>{report.memory.passed}/{report.memory.total}</strong><small>{(report.memory.passed / report.memory.total * 100).toFixed(1)}% correct · Marathi 12/12</small></article>
-        <article><CircleDollarSign /><span>Benchmark cost</span><strong>{formatTinyUsd(combinedBenchmarkCost)}</strong><small>{report.routing.averageLatencyMs} ms routing · {report.memory.averageLatencyMs} ms memory</small></article>
+        <article><ChartBar /><span>Best production choice</span><strong>{(direct15.passed / direct15.total * 100).toFixed(1)}%</strong><small>Direct Pi · 15 tools · {direct15.endToEndLatency.p95Ms.toLocaleString()} ms p95</small></article>
+        <article><CircleDollarSign /><span>Jev scale saving</span><strong>{report.promotionGates.expandedCostReductionPercent.toFixed(1)}%</strong><small>Lower cost than direct 200 · latency gate failed</small></article>
+        <article><ShieldCheck /><span>Safety regression</span><strong>None</strong><small>0 unsafe · 2 duplicate calls in C</small></article>
       </section>
 
       <section className="benchmark-recommendation" aria-label="Benchmark recommendation">
-        <header><span>Decision now</span><h2>Keep the full 15-tool list in production. Use Jev as the scale path.</h2></header>
+        <header><span>Decision now</span><h2>Keep direct Pi as the default. Do not enable Jev pre-turn guidance globally yet.</h2></header>
         <div className="benchmark-recommendation-grid">
-          <article className="selected"><small>Saathi today · 15 tools</small><strong>Full list</strong><p>It is the only option with measured end-to-end exact-tool behavior. Run Jev in shadow mode until routed Pi is measured.</p></article>
-          <article><small>Hundreds of tools</small><strong>Jev → bundle → Pi</strong><p>Promote after it matches full-list accuracy within 3 points, adds no safety regression, and cuts full-200 p95 latency by at least 30% and cost by at least 40%.</p></article>
-          <article className="rejected"><small>Do not select</small><strong>Full 200-tool list</strong><p>It was 2.7× slower at median and 2.3× more expensive, with no established accuracy benefit.</p></article>
+          <article className="selected"><small>Use now</small><strong>Direct Pi · 15</strong><p>{direct15.passed}/{direct15.total} exact, lowest end-to-end cost, and no sidecar latency.</p></article>
+          <article className="rejected"><small>Current Jev pre-turn path</small><strong>Fails 3 of 4 gates</strong><p>At 200 tools accuracy was unchanged, but p95 became {Math.abs(report.promotionGates.expandedP95ReductionPercent).toFixed(1)}% slower and cost fell only {report.promotionGates.expandedCostReductionPercent.toFixed(1)}%.</p></article>
+          <article><small>What worked</small><strong>Accuracy + safety at 200</strong><p>Pre-turn guidance matched direct Pi at 107/117 exact with no unsafe calls.</p></article>
         </div>
-        <p><strong>Why this is conditional:</strong> Jev’s 39/39 score is route accuracy, while Luna’s 30/39 and 32/39 scores are exact-tool accuracy. The running Jev→Pi benchmark is required for an apples-to-apples final decision.</p>
-      </section>
-
-      <section className="benchmark-panel">
-        <div className="benchmark-panel-title"><div><span>Multilingual quality</span><h2>Latest live results</h2></div><small>{(report.routing.inputTokens + report.memory.inputTokens).toLocaleString()} Jev input tokens</small></div>
-        <div className="benchmark-language-grid">
-          <BenchmarkLanguageTable title="Tool routing" results={report.routing.languages} />
-          <BenchmarkLanguageTable title="Memory decisions" results={report.memory.languages} />
-        </div>
-        <div className="benchmark-safety-note"><ShieldCheck /><span><strong>No wrong restricted bundles.</strong> Multi-turn requests passed {report.routing.multiTurnPassed}/{report.routing.multiTurnTotal}, multi-tool requests passed {report.routing.multiToolPassed}/{report.routing.multiToolTotal}, and {report.routing.clarificationOnlyTurns} requests were conservatively routed to clarification-only.</span></div>
+        <p><strong>Recommendation:</strong> {report.recommendation}</p>
       </section>
 
       <section className="benchmark-panel benchmark-decision-panel">
         <div className="benchmark-report-heading">
-          <div><span>Luna tool-selection benchmark</span><h2>Cost, latency, accuracy, and tradeoffs</h2></div>
-          <small>{currentSelection.total} live cases<br />{report.toolSelection.repetitions} ordered repetition<br />Exact tool-set scoring</small>
+          <div><span>Comparable end-to-end benchmark</span><h2>Same cases, settings, and scoring</h2></div>
+          <small>{report.conditions.length * report.casesPerCondition} Pi responses<br />Exact effective-call scoring<br />No selected tools executed</small>
         </div>
         <div className="benchmark-table-wrap">
           <table className="benchmark-decision-table">
-            <thead><tr><th>Candidate</th><th>Accuracy</th><th>Wrong / safety</th><th>Median</th><th>P95</th><th>Cost</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Candidate</th><th>Accuracy</th><th>Wrong / safety</th><th>Avg tools</th><th>E2E p50</th><th>E2E p95</th><th>Cost</th></tr></thead>
             <tbody>
-              <tr><th>Pi full list · {currentSelection.toolCount} tools</th><td><strong>{(currentSelection.passed / currentSelection.total * 100).toFixed(1)}%</strong><br /><small>{currentSelection.passed}/{currentSelection.total} exact</small></td><td>{currentSelection.wrongCalls} wrong<br /><small>{currentSelection.safetySignificantCalls} safety-significant</small></td><td><strong>{currentSelection.medianLatencyMs.toLocaleString()} ms</strong></td><td><strong>{currentSelection.p95LatencyMs.toLocaleString()} ms</strong></td><td><strong>{formatTinyUsd(currentSelection.totalCostUsd)}</strong><br /><small>{formatTinyUsd(currentSelection.averageCostPerTurnUsd)} / turn</small></td><td>Measured with the current catalog and warm provider cache behavior.</td></tr>
-              <tr><th>Pi full list · {expandedSelection.toolCount} tools</th><td><strong>{(expandedSelection.passed / expandedSelection.total * 100).toFixed(1)}%</strong><br /><small>{expandedSelection.passed}/{expandedSelection.total} exact</small></td><td>{expandedSelection.wrongCalls} wrong<br /><small>{expandedSelection.safetySignificantCalls} safety-significant</small></td><td><strong>{expandedSelection.medianLatencyMs.toLocaleString()} ms</strong></td><td><strong>{expandedSelection.p95LatencyMs.toLocaleString()} ms</strong></td><td><strong>{formatTinyUsd(expandedSelection.totalCostUsd)}</strong><br /><small>{formatTinyUsd(expandedSelection.averageCostPerTurnUsd)} / turn</small></td><td>Measured with 185 realistic distractors; one run is insufficient for an accuracy comparison.</td></tr>
-              <tr className="recommended"><th><span>Jev / SystemOne</span><b>Route only</b></th><td><strong>{(report.routing.passed / report.routing.total * 100).toFixed(1)}%</strong><br /><small>{report.routing.passed}/{report.routing.total} routes</small></td><td>0 wrong<br /><small>restricted bundles</small></td><td><strong>{report.routing.averageLatencyMs} ms avg</strong></td><td>Not captured</td><td><strong>{formatTinyUsd(report.routing.costUsd)}</strong><br /><small>{formatTinyUsd(report.routing.costUsd / report.routing.total)} / turn</small></td><td>Route accuracy only; routed Pi exact-tool accuracy and end-to-end latency remain unmeasured.</td></tr>
+              {report.conditions.map(condition => <tr key={condition.id} className={condition.id === 'A' ? 'recommended' : condition.id === 'D' ? 'rejected' : undefined}>
+                <th><span>{condition.id}</span>{condition.label}</th>
+                <td><strong>{(condition.passed / condition.total * 100).toFixed(1)}%</strong><br /><small>{condition.passed}/{condition.total} exact</small></td>
+                <td>{condition.wrongCalls} wrong<br /><small>{condition.safetySignificantCalls} unsafe</small></td>
+                <td><strong>{condition.averageExposedTools.toFixed(1)}</strong></td>
+                <td><strong>{condition.endToEndLatency.medianMs.toLocaleString()} ms</strong></td>
+                <td><strong>{condition.endToEndLatency.p95Ms.toLocaleString()} ms</strong></td>
+                <td><strong>{formatTinyUsd(condition.combinedCostUsd)}</strong><br /><small>{formatTinyUsd(condition.combinedCostUsd / condition.total)} / turn</small></td>
+              </tr>)}
             </tbody>
           </table>
         </div>
         <div className="benchmark-verdicts">
-          <article><strong>2.7× slower</strong><span>Median latency grew from {currentSelection.medianLatencyMs} to {expandedSelection.medianLatencyMs.toLocaleString()} ms; p95 grew 3.4×.</span></article>
-          <article><strong>2.3× cost</strong><span>Total provider cost grew from {formatTinyUsd(currentSelection.totalCostUsd)} to {formatTinyUsd(expandedSelection.totalCostUsd)}.</span></article>
-          <article><strong>No accuracy win yet</strong><span>32/39 versus 30/39 is a single-run difference; the 200-tool run still made {expandedSelection.safetySignificantCalls} safety-significant calls.</span></article>
+          <article><strong className={report.promotionGates.accuracyPassed ? '' : 'benchmark-gate-fail'}>Accuracy · fail</strong><span>C vs A {report.promotionGates.currentAccuracyDeltaPoints.toFixed(2)} points; D vs B {report.promotionGates.expandedAccuracyDeltaPoints.toFixed(2)}. Required: no worse than −3.</span></article>
+          <article><strong>Safety · pass</strong><span>No unsafe calls. C produced two extra duplicate calls.</span></article>
+          <article><strong className={report.promotionGates.latencyPassed ? '' : 'benchmark-gate-fail'}>P95 latency · fail</strong><span>D was {Math.abs(report.promotionGates.expandedP95ReductionPercent).toFixed(1)}% slower than B. Required: at least 30% faster.</span></article>
+          <article><strong className={report.promotionGates.costPassed ? '' : 'benchmark-gate-fail'}>Cost · fail</strong><span>D cost {report.promotionGates.expandedCostReductionPercent.toFixed(1)}% less than B. Required: at least 40% less.</span></article>
         </div>
-        <p className="benchmark-evidence-note">OpenRouter reported {report.toolSelection.model} from OpenAI for every response. Tool calls were inspected but never executed. The computer omissions may reflect the missing portal URL, so exact-set accuracy should be rerun with adjudicated expectations and at least three repetitions before making a quality claim.</p>
-      </section>
-
-      <section className="benchmark-panel">
-        <div className="benchmark-panel-title"><div><span>Per-turn estimate</span><h2>Full tools vs Jev-selected bundles</h2></div><small>Common prompt and output excluded</small></div>
-        <div className="benchmark-comparison">
-          <article>
-            <header><span>Pi with full list</span><strong>{report.comparison.fullTools.toolCount} tool definitions</strong></header>
-            <dl><div><dt>Tool-schema tokens</dt><dd>~{report.comparison.fullTools.estimatedSchemaTokens.toLocaleString()}</dd></div><div><dt>Uncached input cost</dt><dd>{formatTinyUsd(report.comparison.fullTools.uncachedCostPerTurnUsd)}</dd></div><div><dt>Warm cache-read cost</dt><dd>{formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)}</dd></div></dl>
-          </article>
-          <article className="recommended">
-            <header><span>Jev + routed bundle</span><strong>{report.comparison.jevBundles.averageToolCount} avg tools</strong></header>
-            <dl><div><dt>Tool-schema tokens</dt><dd>~{report.comparison.jevBundles.estimatedSchemaTokens}</dd></div><div><dt>Uncached Pi + Jev</dt><dd>{formatTinyUsd(report.comparison.jevBundles.combinedUncachedCostPerTurnUsd)}</dd></div><div><dt>Warm Pi bundle + Jev</dt><dd>{formatTinyUsd(report.comparison.jevBundles.combinedCachedCostPerTurnUsd)}</dd></div></dl>
-          </article>
-        </div>
-        <p className="benchmark-callout"><strong>Cold-cache result:</strong> about {report.comparison.uncachedSavingsPercent}% less routing/tool-schema input cost, saving {formatTinyUsd(uncachedSavings)} per turn or about ${(uncachedSavings * 1_000).toFixed(2)} per 1,000 turns.</p>
-        <p className="benchmark-callout"><strong>200-tool scale simulation:</strong> one domain bundle exposed {report.scale.selectedToolCount} of {report.scale.fullToolCount} tools and reduced estimated schema size from ~{report.scale.fullSchemaTokens.toLocaleString()} to ~{report.scale.selectedSchemaTokens.toLocaleString()} tokens ({report.scale.schemaReductionPercent}%). At the same prices, full vs routed input is {formatTinyUsd(report.scale.fullUncachedCostPerTurnUsd)} vs {formatTinyUsd(report.scale.routedUncachedCostPerTurnUsd)} cold, and {formatTinyUsd(report.scale.fullCachedCostPerTurnUsd)} vs {formatTinyUsd(report.scale.routedCachedCostPerTurnUsd)} with warm tool-schema cache reads.</p>
+        <p className="benchmark-evidence-note">C and D include only Jev pre-turn route guidance and the same complete 15/200-tool registry as their direct baseline. No Jev tool-list narrowing or per-tool execution gate was used.</p>
       </section>
 
       <section className="benchmark-panel cache-panel">
-        <div className="benchmark-panel-title"><div><span>Cache impact</span><h2>Cheaper when cold, less cache-friendly</h2></div></div>
+        <div className="benchmark-panel-title"><div><span>Measured cache impact</span><h2>Stable prefixes, one pre-turn call</h2></div></div>
         <div className="cache-explanation">
-          <article><strong>Full tools</strong><p>One stable tool prefix gives the best chance of repeated cache hits. If the full schema is already cached, its estimated tool-schema read costs only {formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)}.</p></article>
-          <article><strong>Routed bundles</strong><p>Stable domain bundles and bounded two-domain unions reduce uncached tokens but fragment the prefix cache. Even with a warm bundle, Jev remains an uncached sidecar cost of {formatTinyUsd(report.comparison.jevBundles.jevCostPerTurnUsd)}.</p></article>
+          <article><strong>Direct 200</strong><p>{cacheRate(direct200).toFixed(1)}% of prompt tokens were reported cached, but the fixed 200-tool prefix still produced {direct200.promptTokens.toLocaleString()} prompt tokens.</p></article>
+          <article><strong>Jev pre-turn 200</strong><p>{cacheRate(routed200).toFixed(1)}% were cached with the same stable full registry; prompt tokens were {routed200.promptTokens.toLocaleString()}.</p></article>
         </div>
-        <p className="benchmark-cache-warning"><strong>Decision:</strong> routed bundles are economically better on cache misses and reduce context pressure. A reliably warm full-tool prefix is approximately {formatTinyUsd(cachedDifference)} cheaper per turn on schema-related input alone. Verify OpenRouter’s actual cached-token reporting and end-to-end Pi latency before declaring production savings.</p>
+        <p className="benchmark-cache-warning"><strong>Interpretation:</strong> pre-turn guidance preserves the stable tool prefix and cache behavior. It does not reduce context pressure, while the route call adds end-to-end latency.</p>
+      </section>
+
+      <section className="benchmark-panel">
+        <div className="benchmark-panel-title"><div><span>Separate benchmark</span><h2>Memory decisions</h2></div><small>{report.memory.inputTokens.toLocaleString()} Jev input tokens · {formatTinyUsd(report.memory.costUsd)}</small></div>
+        <div className="benchmark-language-grid"><BenchmarkLanguageTable title="Recall / store / lifecycle" results={report.memory.languages} /></div>
+        <div className="benchmark-safety-note"><Database /><span><strong>{report.memory.passed}/{report.memory.total} correct.</strong> This memory benchmark remains separate from the tool-selection promotion decision.</span></div>
       </section>
 
       <footer className="benchmark-method">
-        <strong>Assumptions</strong>
-        <p>Luna input ${report.comparison.assumptions.piInputPerMillionUsd}/M · configured cache read ${report.comparison.assumptions.piCacheReadPerMillionUsd}/M · Jev input ${report.comparison.assumptions.jevInputPerMillionUsd}/M. {report.comparison.assumptions.tokenEstimate}</p>
+        <strong>Method and billing note</strong>
+        <p>Commit {report.commit.slice(0, 7)} with Jev retained only before the Pi turn. The same 39 English, Hindi/Hinglish, and Marathi cases were counterbalanced across three repetitions. Results are a deterministic replay of the captured route and Pi responses because the removed gate ran only after Pi returned; no selected function tool was executed.</p>
       </footer>
     </div>
   </div>
 }
 
-function BenchmarkLanguageTable({ title, results }: { title: string; results: BenchmarkReport['routing']['languages'] }) {
+function BenchmarkLanguageTable({ title, results }: { title: string; results: BenchmarkReport['memory']['languages'] }) {
   return <article><h3>{title}</h3>{results.map(result => <div key={result.language}><span>{result.language}</span><i><b style={{ width: `${result.passed / result.total * 100}%` }} /></i><strong>{result.passed}/{result.total}</strong></div>)}</article>
 }
 

@@ -11,8 +11,8 @@
     "lint": "oxlint",
     "test": "vitest run",
     "benchmark:jev-memory": "RUN_JEV_MEMORY_BENCHMARK=1 vitest run convex/lib/jev.memory.benchmark.test.ts --reporter=verbose",
-    "benchmark:jev-routing": "RUN_JEV_ROUTING_BENCHMARK=1 vitest run convex/lib/jev.routing.benchmark.test.ts --reporter=verbose",
-    "benchmark:tool-scale": "vitest run convex/lib/toolScale.benchmark.test.ts --reporter=verbose",
+    "benchmark:jev-e2e:dry": "JEV_E2E_DRY_RUN=1 bun scripts/jev-pi-e2e-benchmark.mjs",
+    "benchmark:jev-e2e": "bun scripts/jev-pi-e2e-benchmark.mjs",
     "preview": "vite preview",
     "deploy": "npx @convex-dev/static-hosting deploy"
   },

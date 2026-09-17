@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { shouldBlockTool, turnDecisionGuidance, type JevToolDecision, type JevTurnDecision } from "./jev.js";
+import { MULTILINGUAL_INTENT_GUIDANCE, shouldBlockTool, turnDecisionGuidance, type JevToolDecision, type JevTurnDecision } from "./jev.js";
 import { shouldIgnoreEmail } from "../gmail.js";
 
 const metadata = { model: "jev-latest", inputTokens: 20, latencyMs: 12 };
@@ -8,8 +8,13 @@ describe("Jev decision policy", () => {
   test("asks for clarification only when routing evidence crosses the policy boundary", () => {
     const answer = turn({ route: "answer", needsClarification: 0.71 });
     const clarify = turn({ route: "answer", needsClarification: 0.72 });
+    const computer = turn({ route: "computer", needsClarification: 0.1 });
     expect(turnDecisionGuidance(answer)).toContain("likely route is answer");
+    expect(turnDecisionGuidance(answer)).toContain("same language and script");
     expect(turnDecisionGuidance(clarify)).toContain("ask one focused clarification");
+    expect(turnDecisionGuidance(clarify)).toContain("do not return [NO_REPLY]");
+    expect(turnDecisionGuidance(computer)).toContain("concrete request that needs a reply");
+    expect(MULTILINGUAL_INTENT_GUIDANCE).toMatch(/Marathi.*code-switching.*Hinglish/i);
   });
 
   test("blocks only a confident selected tool outcome and otherwise fails open", () => {

@@ -3,7 +3,13 @@ import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
-import { enableOpenRouterWebSearch, formatFirecrawlResults, withEphemeralTurnContext, withWebAccessPrompt } from "./agentWorker.js";
+import {
+  decisionInputForAgentJob,
+  enableOpenRouterWebSearch,
+  formatFirecrawlResults,
+  withEphemeralTurnContext,
+  withWebAccessPrompt,
+} from "./agentWorker.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
@@ -122,6 +128,22 @@ describe("durable family agent", () => {
       content: expect.stringContaining("departure city: Pune"),
     });
     expect(JSON.stringify(projected[2])).toContain("Latest request");
+  });
+
+  test("sends the person's request to Jev instead of the internal agent-job wrapper", () => {
+    expect(decisionInputForAgentJob(
+      "You were explicitly mentioned. Respond helpfully to: Find a plumber",
+    )).toBe("Find a plumber");
+    expect(decisionInputForAgentJob(
+      "Respond helpfully to this message in the private automatic-assistant conversation: Make an invitation",
+    )).toBe("Make an invitation");
+    expect(decisionInputForAgentJob(
+      "Ambiently assess this family message. Respond only if your input is useful; otherwise output exactly [NO_REPLY]. Message: Book a table tomorrow",
+    )).toBe("Book a table tomorrow");
+    expect(decisionInputForAgentJob(
+      "You were explicitly mentioned. Respond helpfully to: @saathi उद्यासाठी पुण्यात plumber शोध आणि सकाळी call karna",
+    )).toBe("@saathi उद्यासाठी पुण्यात plumber शोध आणि सकाळी call karna");
+    expect(decisionInputForAgentJob("  Keep this ordinary prompt intact  ")).toBe("Keep this ordinary prompt intact");
   });
 
   test("creates Saathi lazily and distinguishes ambient checks from explicit mentions", async () => {

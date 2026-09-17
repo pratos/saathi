@@ -19,11 +19,20 @@ const source = v.union(
   v.literal("lab"),
 );
 
+const execution = v.object({
+  status: v.union(v.literal("queued"), v.literal("running"), v.literal("complete"), v.literal("failed")),
+  trigger: v.optional(v.union(v.literal("mention"), v.literal("ambient"), v.literal("automatic"))),
+  activity: v.optional(v.union(v.literal("searching_web"), v.literal("generating_image"), v.literal("using_computer"))),
+  responsePreview: v.optional(v.string()),
+  error: v.optional(v.string()),
+});
+
 const decisionView = v.object({
   _id: v.id("jevDecisions"),
   _creationTime: v.number(),
   spaceId: v.id("spaces"),
   roomId: v.optional(v.id("rooms")),
+  jobId: v.optional(v.id("agentJobs")),
   source,
   inputPreview: v.string(),
   decision: v.string(),
@@ -33,6 +42,7 @@ const decisionView = v.object({
   latencyMs: v.number(),
   inputTokens: v.number(),
   createdAt: v.number(),
+  execution: v.optional(execution),
 });
 
 export const recent = query({
@@ -40,9 +50,26 @@ export const recent = query({
   returns: v.array(decisionView),
   handler: async (ctx, { spaceId, limit }) => {
     await requireSpacePermission(ctx, spaceId, "configure_inbox");
-    return ctx.db.query("jevDecisions").withIndex("by_space_created", q =>
+    const decisions = await ctx.db.query("jevDecisions").withIndex("by_space_created", q =>
       q.eq("spaceId", spaceId),
     ).order("desc").take(Math.min(Math.max(limit ?? 30, 1), 100));
+    return Promise.all(decisions.map(async decision => {
+      if (!decision.jobId) return { ...decision, execution: undefined };
+      const job = await ctx.db.get(decision.jobId);
+      if (!job) return { ...decision, execution: undefined };
+      const agent = await ctx.db.get(job.agentId);
+      if (!agent || agent.spaceId !== spaceId) return { ...decision, execution: undefined };
+      return {
+        ...decision,
+        execution: {
+          status: job.status,
+          trigger: job.trigger,
+          activity: job.activity,
+          responsePreview: job.responseText?.replace(/\s+/g, " ").trim().slice(0, 500),
+          error: job.error?.replace(/\s+/g, " ").trim().slice(0, 500),
+        },
+      };
+    }));
   },
 });
 
@@ -149,6 +176,7 @@ export const record = internalMutation({
   args: {
     spaceId: v.id("spaces"),
     roomId: v.optional(v.id("rooms")),
+    jobId: v.optional(v.id("agentJobs")),
     source,
     inputPreview: v.string(),
     decision: v.string(),

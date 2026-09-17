@@ -472,34 +472,108 @@ function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: ()
 
   return <div className="jev-lab-backdrop" role="presentation" onMouseDown={onClose}>
     <aside className="jev-lab-drawer" role="dialog" aria-modal="true" aria-labelledby="jev-lab-title" onMouseDown={event => event.stopPropagation()}>
-      <header><div><span><Sparkles /> Decision sidecar</span><h2 id="jev-lab-title">Jev Lab</h2><p>Typed decisions stay outside Pi’s chat history.</p></div><button type="button" onClick={onClose} aria-label="Close Jev Lab" autoFocus><X /></button></header>
+      <header><div><span><Sparkles /> Decision inspector</span><h2 id="jev-lab-title">How Saathi decided</h2><p>Jev recommends the next step. Pi or Voice then responds and uses tools.</p></div><button type="button" onClick={onClose} aria-label="Close decision inspector" autoFocus><X /></button></header>
+      <div className="jev-flow" aria-label="How a request is handled">
+        <span><b>1</b>Your request</span><i aria-hidden="true" />
+        <span><b>2</b>Jev recommends</span><i aria-hidden="true" />
+        <span><b>3</b>Pi or Voice acts</span>
+      </div>
       <form className="jev-test-form" onSubmit={submit}>
-        <label htmlFor="jev-test-input">Try a request</label>
+        <label htmlFor="jev-test-input">Preview a routing decision</label>
         <textarea id="jev-test-input" value={text} onChange={event => setText(event.target.value)} rows={4} maxLength={12_000} />
-        <button type="submit" disabled={busy || !text.trim()}>{busy ? 'Evaluating…' : 'Evaluate with Jev'}</button>
+        <div className="jev-examples" aria-label="Example languages"><span>Try:</span>{[
+          ['English', 'Book a table for dinner tomorrow'],
+          ['Hinglish', 'Kal raat ke liye Pune mein family dinner table book karo'],
+          ['मराठी', 'उद्या रात्री पुण्यात कुटुंबासाठी टेबल बुक करा'],
+        ].map(([label, example]) => <button type="button" key={label} data-active={text === example || undefined} onClick={() => { setText(example); setResult(null); setError('') }}>{label}</button>)}</div>
+        <p>This preview asks Jev for advice only. It does not run Pi, Voice, or a tool.</p>
+        <button type="submit" disabled={busy || !text.trim()}>{busy ? 'Inspecting…' : 'Inspect routing'}</button>
       </form>
       {error && <p className="jev-lab-error" role="alert">{error}</p>}
       {result && <section className="jev-result" aria-live="polite">
-        <div className="jev-result-heading"><span>Route</span><strong>{result.route.replaceAll('_', ' ')}</strong><small>{Math.round(result.routeConfidence * 100)}% confidence · {result.latencyMs} ms</small></div>
-        <div className="jev-clarify"><span>Clarification signal</span><strong>{Math.round(result.needsClarification * 100)}%</strong></div>
-        <div className="jev-probabilities">{probabilities.map(([label, probability]) => <div key={label}><span>{label.replaceAll('_', ' ')}</span><i><b style={{ width: `${Math.max(2, probability * 100)}%` }} /></i><strong>{Math.round(probability * 100)}%</strong></div>)}</div>
+        <div className="jev-result-heading"><span>Recommended next step</span><strong>{jevDecisionLabel('lab', result.route)}</strong><small>{Math.round(result.routeConfidence * 100)}% confidence · {result.latencyMs} ms</small></div>
+        <div className="jev-recommendation-note"><b>Preview only</b><span>No action was run from this test.</span></div>
+        <div className="jev-clarify"><span>Needs a follow-up question</span><strong>{Math.round(result.needsClarification * 100)}%</strong></div>
+        <div className="jev-probability-title">How Jev weighed the options</div>
+        <div className="jev-probabilities">{probabilities.map(([label, probability]) => <div key={label}><span>{jevDecisionLabel('lab', label)}</span><i><b style={{ width: `${Math.max(2, probability * 100)}%` }} /></i><strong>{Math.round(probability * 100)}%</strong></div>)}</div>
         <small>{result.model} · {result.inputTokens} input tokens</small>
       </section>}
-      <section className="jev-history"><div className="jev-section-title"><h3>Recent decisions</h3><span>{recent?.length ?? 0}</span></div>
+      <section className="jev-history"><div className="jev-section-title"><div><h3>Recent decisions and outcomes</h3><p>Chat decisions show what Pi did next. Older records may not have an outcome.</p></div><span>{recent?.length ?? 0}</span></div>
         {recent === undefined && <p>Loading decisions…</p>}
-        {recent?.length === 0 && <p>No decisions yet. Run the test above or ask Saathi something.</p>}
-        {recent?.map(item => <article key={item._id}><div><span>{jevSourceLabel(item.source)}</span><time>{formatRelativeTime(item.createdAt)}</time></div><strong>{item.decision.replaceAll('_', ' ')}</strong><p>{item.inputPreview}</p><small>{item.confidence === undefined ? '' : `${Math.round(item.confidence * 100)}% · `}{item.latencyMs} ms · {item.inputTokens} tokens</small></article>)}
+        {recent?.length === 0 && <p>No decisions yet. Inspect a route above or ask Saathi something.</p>}
+        {recent?.map(item => {
+          const outcome = jevExecutionSummary(item.source, item.execution)
+          return <article key={item._id}>
+            <div><span>{jevSourceLabel(item.source)}</span><time>{formatRelativeTime(item.createdAt)}</time></div>
+            <strong>{jevDecisionLabel(item.source, item.decision)}</strong>
+            <p className="jev-history-input">“{item.inputPreview}”</p>
+            <div className="jev-outcome" data-tone={outcome.tone}><b>{outcome.label}</b>{outcome.detail && <span>{outcome.detail}</span>}</div>
+            <small>{item.confidence === undefined ? '' : `${Math.round(item.confidence * 100)}% confidence · `}{item.latencyMs} ms · {item.inputTokens} tokens</small>
+          </article>
+        })}
       </section>
     </aside>
   </div>
 }
 
 function jevSourceLabel(source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab') {
-  if (source === 'chat_turn') return 'Pi route'
-  if (source === 'chat_tool') return 'Pi tool'
-  if (source === 'voice_tool') return 'Voice tool'
-  if (source === 'gmail') return 'Gmail'
-  return 'Lab test'
+  if (source === 'chat_turn') return 'Chat recommendation'
+  if (source === 'chat_tool') return 'Chat action check'
+  if (source === 'voice_tool') return 'Voice action check'
+  if (source === 'gmail') return 'Email classification'
+  return 'Routing preview'
+}
+
+const jevRouteLabels: Record<string, string> = {
+  answer: 'Answer normally',
+  clarify: 'Ask a follow-up question',
+  search: 'Search the web',
+  computer: 'Use the browser',
+  image: 'Create an image',
+  settings: 'Change a setting',
+  memory: 'Use memory',
+  execute: 'Allow the action',
+  block: 'Stop the action',
+  bills: 'Keep as a bill',
+  receipts: 'Keep as a receipt',
+  bank: 'Keep as a bank notice',
+  ignore: 'Ignore this email',
+}
+
+function jevDecisionLabel(_source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab', decision: string) {
+  return jevRouteLabels[decision] ?? decision.replaceAll('_', ' ')
+}
+
+function jevExecutionSummary(
+  source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab',
+  execution?: {
+    status: 'queued' | 'running' | 'complete' | 'failed'
+    trigger?: 'mention' | 'ambient' | 'automatic'
+    activity?: 'searching_web' | 'generating_image' | 'using_computer'
+    responsePreview?: string
+    error?: string
+  },
+) {
+  if (!execution) {
+    if (source === 'lab') return { tone: 'neutral', label: 'Preview only', detail: 'This did not start Pi or a tool.' }
+    if (source === 'gmail') return { tone: 'neutral', label: 'Classification recorded', detail: 'Email processing continues separately.' }
+    if (source === 'voice_tool') return { tone: 'neutral', label: 'Recommendation sent to Voice', detail: 'Completion is not linked to this record yet.' }
+    return { tone: 'neutral', label: 'Outcome not available', detail: 'This record was created before outcome tracking was added.' }
+  }
+  if (execution.status === 'queued') return { tone: 'working', label: 'Waiting for Pi', detail: 'The request is queued.' }
+  if (execution.status === 'running') {
+    const activity = execution.activity === 'searching_web' ? 'Pi is searching the web.'
+      : execution.activity === 'generating_image' ? 'Pi is creating the image.'
+        : execution.activity === 'using_computer' ? 'Pi is using the browser.'
+          : 'Pi is working on the request.'
+    return { tone: 'working', label: 'In progress', detail: activity }
+  }
+  if (execution.status === 'failed') return { tone: 'error', label: 'Pi failed', detail: execution.error || 'The request did not complete.' }
+  if (execution.responsePreview) return { tone: 'success', label: 'Pi replied', detail: execution.responsePreview }
+  if (execution.trigger === 'ambient') {
+    return { tone: 'neutral', label: 'Pi stayed silent', detail: 'This was an ambient family message, so silence may be intentional. Tag @Saathi when you need a reply.' }
+  }
+  return { tone: 'warning', label: 'Finished without a reply', detail: 'Pi completed the run but produced no visible answer.' }
 }
 
 function LiveRoom({ room, family, onBack, onInvite }: {

@@ -82,9 +82,10 @@ export const run = internalAction({
       const model = models.getModel("openrouter", work.agent.model) ?? models.getModel("openrouter", route.id);
       if (!model) throw new Error(`Unsupported agent model: ${work.agent.model}`);
       const typesafeKey = env.TYPESAFE_API_KEY?.trim();
-      const turnDecision = typesafeKey ? await safeTurnDecision(typesafeKey, work.job.prompt) : null;
+      const decisionInput = decisionInputForAgentJob(work.job.prompt);
+      const turnDecision = typesafeKey ? await safeTurnDecision(typesafeKey, decisionInput) : null;
       if (turnDecision) {
-        await recordJevDecision(ctx, work, "chat_turn", work.job.prompt, turnDecision.route, turnDecision.routeConfidence, turnDecision);
+        await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, turnDecision);
       }
       const ephemeralContext = [work.memoryContext, turnDecisionGuidance(turnDecision)].filter(Boolean).join("\n\n");
 
@@ -103,12 +104,12 @@ export const run = internalAction({
         onPayload: enableOpenRouterWebSearch,
         beforeToolCall: typesafeKey ? async ({ toolCall, args }) => {
           const decision = await safeToolDecision(typesafeKey, {
-            request: work.job.prompt,
+            request: decisionInput,
             tool: toolCall.name,
             arguments: args,
           });
           if (decision) {
-            await recordJevDecision(ctx, work, "chat_tool", work.job.prompt, decision.outcome, decision.confidence, {
+            await recordJevDecision(ctx, work, "chat_tool", decisionInput, decision.outcome, decision.confidence, {
               ...decision,
               tool: toolCall.name,
             });
@@ -297,6 +298,17 @@ export function withEphemeralTurnContext(messages: AgentMessage[], context: stri
   return [...messages.slice(0, index), { ...message, content }, ...messages.slice(index + 1)];
 }
 
+const AGENT_JOB_PROMPT_PREFIXES = [
+  "You were explicitly mentioned. Respond helpfully to: ",
+  "Respond helpfully to this message in the private automatic-assistant conversation: ",
+  "Ambiently assess this family message. Respond only if your input is useful; otherwise output exactly [NO_REPLY]. Message: ",
+] as const;
+
+export function decisionInputForAgentJob(prompt: string) {
+  const prefix = AGENT_JOB_PROMPT_PREFIXES.find(item => prompt.startsWith(item));
+  return prefix ? prompt.slice(prefix.length).trim() : prompt.trim();
+}
+
 async function safeTurnDecision(apiKey: string, request: string): Promise<JevTurnDecision | null> {
   try {
     return await decideAgentTurn(apiKey, request);
@@ -322,6 +334,7 @@ async function recordJevDecision(
   ctx: ActionCtx,
   work: {
     agent: { spaceId: Id<"spaces">; roomId: Id<"rooms"> };
+    job: { _id: Id<"agentJobs"> };
   },
   source: "chat_turn" | "chat_tool",
   inputPreview: string,
@@ -333,6 +346,7 @@ async function recordJevDecision(
   await ctx.runMutation(internal.jev.record, {
     spaceId: work.agent.spaceId,
     roomId: work.agent.roomId,
+    jobId: work.job._id,
     source,
     inputPreview,
     decision,

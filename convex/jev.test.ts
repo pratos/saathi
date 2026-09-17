@@ -47,4 +47,57 @@ describe("Jev decision records", () => {
     await expect(member.mutation(internal.jev.prepareVoiceTool, { roomId: seeded.roomId }))
       .resolves.toEqual({ spaceId: seeded.spaceId });
   });
+
+  test("links routing advice to the downstream Pi outcome", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const seeded = await t.run(async ctx => {
+      const now = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "jev-outcomes", createdAt: now });
+      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
+      const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now });
+      const agentId = await ctx.db.insert("agents", {
+        spaceId, roomId, createdBy: ownerId, creationKey: "jev-outcome-agent", name: "Saathi",
+        systemPrompt: "Help the family.", provider: "openrouter", model: "test-model",
+        status: "idle", createdAt: now, updatedAt: now,
+      });
+      const repliedJobId = await ctx.db.insert("agentJobs", {
+        agentId, requestedBy: ownerId, prompt: "Help me", clientOperationId: "jev-replied",
+        status: "complete", attempt: 1, responseText: "I can help with that.", trigger: "automatic", createdAt: now,
+      });
+      const silentJobId = await ctx.db.insert("agentJobs", {
+        agentId, requestedBy: ownerId, prompt: "Family chat", clientOperationId: "jev-silent",
+        status: "complete", attempt: 1, trigger: "ambient", createdAt: now + 1,
+      });
+      const failedJobId = await ctx.db.insert("agentJobs", {
+        agentId, requestedBy: ownerId, prompt: "Search for me", clientOperationId: "jev-failed",
+        status: "failed", attempt: 1, error: "Provider unavailable", trigger: "mention", createdAt: now + 2,
+      });
+      return { ownerId, spaceId, roomId, repliedJobId, silentJobId, failedJobId };
+    });
+    for (const [jobId, input] of [
+      [seeded.repliedJobId, "Help me"],
+      [seeded.silentJobId, "Family chat"],
+      [seeded.failedJobId, "Search for me"],
+    ] as const) {
+      await t.mutation(internal.jev.record, {
+        spaceId: seeded.spaceId, roomId: seeded.roomId, jobId, source: "chat_turn",
+        inputPreview: input, decision: "answer", confidence: 0.9, details: {},
+        model: "jev-latest", latencyMs: 20, inputTokens: 10,
+      });
+    }
+
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+    const rows = await owner.query(api.jev.recent, { spaceId: seeded.spaceId });
+    const byJob = new Map(rows.map(row => [row.jobId, row]));
+    expect(byJob.get(seeded.repliedJobId)?.execution).toMatchObject({
+      status: "complete", trigger: "automatic", responsePreview: "I can help with that.",
+    });
+    expect(byJob.get(seeded.silentJobId)?.execution).toMatchObject({ status: "complete", trigger: "ambient" });
+    expect(byJob.get(seeded.silentJobId)?.execution?.responsePreview).toBeUndefined();
+    expect(byJob.get(seeded.failedJobId)?.execution).toMatchObject({
+      status: "failed", trigger: "mention", error: "Provider unavailable",
+    });
+  });
 });

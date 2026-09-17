@@ -474,6 +474,16 @@ export function BenchmarkReportView({ report, onClose }: { report: BenchmarkRepo
         <article><CircleDollarSign /><span>Benchmark cost</span><strong>{formatTinyUsd(combinedBenchmarkCost)}</strong><small>{report.routing.averageLatencyMs} ms routing · {report.memory.averageLatencyMs} ms memory</small></article>
       </section>
 
+      <section className="benchmark-recommendation" aria-label="Benchmark recommendation">
+        <header><span>Decision now</span><h2>Keep the full 15-tool list in production. Use Jev as the scale path.</h2></header>
+        <div className="benchmark-recommendation-grid">
+          <article className="selected"><small>Saathi today · 15 tools</small><strong>Full list</strong><p>It is the only option with measured end-to-end exact-tool behavior. Run Jev in shadow mode until routed Pi is measured.</p></article>
+          <article><small>Hundreds of tools</small><strong>Jev → bundle → Pi</strong><p>Promote after it matches full-list accuracy within 3 points, adds no safety regression, and cuts full-200 p95 latency by at least 30% and cost by at least 40%.</p></article>
+          <article className="rejected"><small>Do not select</small><strong>Full 200-tool list</strong><p>It was 2.7× slower at median and 2.3× more expensive, with no established accuracy benefit.</p></article>
+        </div>
+        <p><strong>Why this is conditional:</strong> Jev’s 39/39 score is route accuracy, while Luna’s 30/39 and 32/39 scores are exact-tool accuracy. The running Jev→Pi benchmark is required for an apples-to-apples final decision.</p>
+      </section>
+
       <section className="benchmark-panel">
         <div className="benchmark-panel-title"><div><span>Multilingual quality</span><h2>Latest live results</h2></div><small>{(report.routing.inputTokens + report.memory.inputTokens).toLocaleString()} Jev input tokens</small></div>
         <div className="benchmark-language-grid">

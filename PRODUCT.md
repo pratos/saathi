@@ -50,7 +50,7 @@ The visual system is warm and dignified: deep green-black surfaces, restrained t
 
 - Keep household email and conversations in one understandable place.
 - Understand mixed-language family communication without relying on one person as translator.
-- Turn bills, notices, bookings, and subscription emails into dates, amounts, decisions, and assigned tasks.
+- Turn bills, notices, bookings, and subscription emails into dates, amounts, decisions, and clear next steps.
 - Include an outside participant by email without requiring a Saath account.
 - Ask Saathi for help within the authorized conversation and source material.
 - Research current public information with visible URLs and retrieval times.
@@ -60,7 +60,7 @@ The visual system is warm and dignified: deep green-black surfaces, restrained t
 
 One account can create or join multiple family spaces—for example, a household, a parent’s household, and a resident group. The user chooses an active space from a switcher; switching changes the complete authorization and data scope rather than applying a client-side filter.
 
-Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, tasks, model context, and email routing are forbidden. Email addresses must resolve to one space before content is processed.
+Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, follow-ups, model context, and email routing are forbidden. Email addresses must resolve to one space before content is processed.
 
 ## Family inbox
 
@@ -114,12 +114,6 @@ Launch languages are English, Hindi, and Marathi.
 - Create one canonical assistant response and derive reader-language views from it.
 - Ordinary human conversation does not invoke Saathi unless mentioned or explicitly requested.
 
-## Voice notes
-
-Members with permission to post in a room can record and share a voice note with that room. The browser captures a maximum of 30 seconds with `MediaRecorder`; the audio is uploaded directly to authorized Convex file storage and remains the canonical source. A server-side Convex action sends the stored audio to Sarvam Saaras v3 in code-mixed mode, then stores the transcript and detected language beside the original audio. Hindi, Marathi, English, and natural mixed-language speech are supported without asking the member to choose a language first.
-
-The Sarvam credential never enters the browser. Upload URL creation and transcription are rate limited, submission re-checks room permissions and stored-file metadata, and playback URLs are returned only after a room read check. A failed transcript never removes the playable original recording. Desert Ant Ear is not part of the MVP: it identifies a spoken language but does not transcribe, while Sarvam already detects the launch languages during transcription.
-
 ## Saathi
 
 Saathi participates automatically in a private AI room and only when mentioned or explicitly invoked in shared rooms and cases.
@@ -128,7 +122,7 @@ Saathi can:
 
 - translate and explain a message or email;
 - summarize unread activity;
-- extract dates, amounts, renewal terms, decisions, and tasks;
+- extract dates, amounts, renewal terms, decisions, and next actions;
 - compare a subscription price with prior messages;
 - research current public information through Firecrawl;
 - draft a reply, reminder, or unsubscribe request;
@@ -243,7 +237,7 @@ Drafting and executing are separate operations. Sending email, unsubscribing, de
 
 ## Convex
 
-Convex owns users, spaces, memberships, room grants, inbox items, messages, translations, attachments, tasks, invitations, agent runs, sources, audit events, idempotency, and usage. Queries power realtime authorized views. Mutations validate and write atomically. Actions call external services and write results through internal mutations.
+Convex owns users, spaces, memberships, room grants, inbox items, messages, attachments, invitations, durable agent state, audit events, idempotency, and usage. Queries power realtime authorized views. Mutations validate and write atomically. Actions call external services and write results through internal mutations.
 
 Selected components:
 
@@ -253,9 +247,7 @@ Selected components:
 - `@convex-dev/rate-limiter` for OTP, AI, crawl, and outbound-send abuse controls;
 - `@convex-dev/workflow` for the durable email → classify → extract → publish pipeline;
 - `@firecrawl/firecrawl-convex` for current public web retrieval;
-- optionally `@convex-dev/action-cache` for space-scoped translation and classification caching.
-
-Convex file storage holds room voice notes. An internal action transcribes short recordings with Sarvam Saaras v3; the app-owned `voiceNotes` table tracks the audio, duration, processing status, language, and transcript while preserving room authorization.
+- optionally `@convex-dev/action-cache` for space-scoped classification caching.
 
 Keep family RBAC, messages, usage, and audit records in app-owned tables. Do not stack Workflow, Workpool, and Action Retrier for the same job. Early component versions must be pinned and covered by integration tests; appearance in the component directory is not a maintenance guarantee.
 
@@ -283,7 +275,7 @@ The web client never receives the OpenAI API credential. Managed API usage is ca
 
 ## Firecrawl
 
-Firecrawl is used only when a request requires current public information. The action sends a public search question—not private household content—stores URLs and retrieval timestamps, and gives bounded evidence to the selected text model for synthesis. The resulting answer visibly cites its sources.
+Firecrawl is used only when a request requires current public information. The action sends a public search question—not private household content—and gives bounded evidence to the selected text model for synthesis. The resulting answer visibly cites its sources.
 
 ## AgentMail
 
@@ -315,7 +307,6 @@ All secrets live in Convex deployment environment variables or the deployment pl
 | Firecrawl API key | Yes | Current public web search and retrieval |
 | OpenRouter API key | Yes | DeepSeek V4.1 Flash and optional Nano Banana requests |
 | OpenAI API key | Yes for hackathon | Direct extraction/reply role and optional Luna/Terra/Sol/Astra profiles |
-| `SARVAM_API_KEY` | Yes for voice notes | Server-side Saaras v3 transcription for short family recordings |
 | Photon/Spectrum project ID and secret | Later only | SMS, RCS, or iMessage transport, including a possible Auth OTP adapter |
 
 AgentMail delivers login OTP emails, avoiding a separate transactional-email provider. No Gemini key is needed when Nano Banana is accessed through OpenRouter. SMS login later adds the selected transport’s server-side credentials: Photon/Spectrum project credentials if its delivery model is selected, or Twilio credentials and a Verify Service SID if Twilio Verify is selected. Development and production use separate webhook endpoints, signing keys, inboxes, and provider secrets.
@@ -330,23 +321,17 @@ AgentMail delivers login OTP emails, avoiding a separate transactional-email pro
 | `rooms` | Private/shared/case conversation | space ID, type, title, assistant mode |
 | `roomMembers` | Fine-grained room access | room ID, principal ID/type, room role |
 | `inboxItems` | Canonical incoming household email | space ID, sender, subject, original body, visibility, category, status |
-| `emailThreads` | AgentMail routing | space ID, room ID, inbox ID, thread ID, allowed senders |
 | `messages` | Ordered conversation log | room ID, actor, origin, original text, language, idempotency key |
-| `voiceNotes` | Authorized room audio and transcription lifecycle | message ID, storage ID, duration, status, detected language, transcript |
-| `translations` | Reader-language cache | message/inbox item ID, target language, text, model, confidence |
 | `attachments` | Stored files and extraction state | parent ID, storage ID, media type, status, visibility |
-| `tasks` | Household follow-ups | source ID, title, assignee, due date, status, confidence |
 | `invitations` | Hashed, expiring membership grants | token hash, target, role, expiry, accepted/revoked time |
-| `agentRuns` | AI lifecycle and audit record | scope, trigger, status, capability, model, usage, idempotency key |
 | `agents` | Durable room-scoped Saathi configuration | space, room, creator, provider/model, status |
 | `agentJobs` | Serialized prompt mailbox and worker leases | requester, prompt, operation ID, attempt, lease, status |
 | `agentMessages` | Bounded persisted Pi transcript | agent, sequence, message |
 | `agentMemory` | Explicit retained family facts | agent, key, value, updated time |
-| `webSources` | Firecrawl evidence | run ID, URL, title, retrieval time, excerpt hash |
 | `auditEvents` | Security-relevant history | actor, action, resource, safe metadata, timestamp |
-| `usageLedger` | Provider metering | space ID, run ID, provider, units, cost class, timestamp |
+| `usageLedger` | Provider metering | space ID, provider, units, cost class, timestamp |
 
-Indexes must support identity lookup, active space membership, room membership, room message ordering, inbox/category ordering, AgentMail message deduplication, translation caching, invitation hash lookup, and agent-run idempotency.
+Indexes support identity lookup, active space membership, room membership, room message ordering, AgentMail message deduplication, invitation lookup, agent job ordering, and agent memory retrieval.
 
 # Canonical Event and Execution Model
 
@@ -356,17 +341,16 @@ Every inbound item records an origin, actor, space or room, original content, vi
 | --- | --- | --- |
 | Native app | Client operation ID | Authenticated principal can perform the capability |
 | AgentMail | AgentMail message ID | Verified webhook, mapped inbox/thread, permitted sender |
-| Assistant | Run ID plus output sequence | Authorized trigger and active run |
+| Assistant | Job ID plus output sequence | Authorized trigger and active lease |
 
 ## Native message and assistant reply
 
 1. The client calls a mutation with a client operation ID.
 2. The mutation verifies room access and inserts the original message once.
 3. Reactive queries update authorized clients immediately.
-4. The mutation schedules translation and, when invoked, creates an agent run.
+4. When invoked, the mutation creates an agent job.
 5. The action loads only authorized bounded context, calls the required provider, validates output, and records usage.
-6. An internal mutation inserts one canonical assistant response using the run idempotency key.
-7. Reader-language translations update reactively.
+6. An internal mutation inserts one canonical assistant response under the active job lease.
 
 ## Email to family inbox
 
@@ -375,8 +359,8 @@ Every inbound item records an origin, actor, space or room, original content, vi
 3. Convex verifies and acknowledges the event, then schedules processing.
 4. Processing resolves space, visibility, thread, and sender policy.
 5. A mutation inserts the inbox item exactly once.
-6. OpenAI classifies and extracts structured fields; translations are generated only for required languages.
-7. Members see the item live and can open a discussion or create a task.
+6. OpenAI classifies the item and extracts validated structured fields.
+7. Members see the item live and can open a discussion or act on its suggested next step.
 
 ## Confirmed reply
 
@@ -395,7 +379,7 @@ Every inbound item records an origin, actor, space or room, original content, vi
 - Do not log message bodies, credentials, invitation tokens, OTPs, or attachment contents.
 - Store provider credentials only in server-side environment variables.
 - Scan or reject unsupported attachments before extraction; enforce type and size limits.
-- Store source URLs and retrieval timestamps for web-grounded answers.
+- Keep source URLs visible in web-grounded answers.
 - Apply daily and monthly AI caps before expensive work.
 - Rate-limit login, OTP, invitation, webhook, AI, and outbound-email paths.
 - Provide retention and deletion controls before real households upload sensitive documents.
@@ -432,7 +416,6 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 - A case email guest and one confirmed app-to-email reply.
 - Mention-based Saathi summaries and drafts.
 - Room-authorized durable Pi agents with FIFO prompts, persisted memory, exact-lease recovery, and OpenRouter DeepSeek V4.1 Flash.
-- Up to 30-second family voice notes with authorized playback and Sarvam transcripts.
 - One current-information request with Firecrawl citations.
 - Explicitly requested room image generation with OpenRouter Muse Image and Convex file storage.
 - Usage ledger, hard demo limits, audit events, and visible failure states.
@@ -461,12 +444,11 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 | Extraction | A bill or renewal produces independently verifiable amount/date fields with confidence |
 | Assistant | An `@Saathi` request creates one canonical answer and localized views |
 | Durable agent | Concurrent prompts run FIFO, retry safely after a lease timeout, and reject stale worker completion |
-| Voice notes | An authorized member can record, review, and share a ≤30-second room recording; unauthorized playback is denied and Sarvam produces a persisted transcript |
 | Web research | The answer includes at least one retrievable Firecrawl URL and retrieval time |
 | Email bridge | An allowed reply appears once and a confirmed app reply remains in the same thread |
 | Privacy | A private item is absent from another member’s queries, summaries, and AI context |
 | External action | A draft cannot be sent without an authorized confirmation operation |
-| Usage | Every AI run records owning space, provider, model, and available token counts |
+| Usage | Every metered AI request records owning space, provider, model, and available token counts |
 | Submission | Public app, public repository, build log, social post, and video are complete |
 
 # Three-Minute Demo
@@ -478,7 +460,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 5. A travel agent replies to a scoped case by email. The reply appears once in both authorized browser sessions.
 6. Saathi drafts a response; Asha reviews the exact recipient and body before confirming the AgentMail send.
 7. A second browser demonstrates Marathi display and is denied access to Asha’s private forwarded item.
-8. The final view shows original sources, translations, email provenance, run status, and household usage.
+8. The final view shows original sources, translations, email provenance, Saathi status, and household usage.
 
 # Success Measures
 

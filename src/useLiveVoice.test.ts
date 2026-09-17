@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from '../convex/lib/assistantCapabilities'
-import { groupVoiceFragments, liveToolCallFromEvent, voiceConversationAction } from './useLiveVoice'
+import {
+  addVoiceToolActivity,
+  finishVoiceToolActivity,
+  groupVoiceFragments,
+  liveToolCallFromEvent,
+  voiceConversationAction,
+} from './useLiveVoice'
 
 describe('live voice caption grouping', () => {
   test('preserves exact deltas and splits turns when speakers overlap', () => {
@@ -64,5 +70,37 @@ describe('live voice caption grouping', () => {
       name: 'use_computer', callId: 'call_browser_1',
       arguments: { url: 'https://example.com', task: 'Find the admissions page' },
     })
+  })
+
+  test('keeps rich voice activities keyed to the matching tool call', () => {
+    const search = liveToolCallFromEvent({
+      type: 'response.event',
+      event: {
+        type: 'response.output_item.done',
+        item: { type: 'function_call', name: 'search_public_web', call_id: 'call_search_1', arguments: '{"query":"Pune school closure today"}' },
+      },
+    })
+    const browser = liveToolCallFromEvent({
+      type: 'response.event',
+      event: {
+        type: 'response.output_item.done',
+        item: { type: 'function_call', name: 'use_computer', call_id: 'call_browser_2', arguments: '{"url":"https://example.com","task":"Open the parent login page"}' },
+      },
+    })
+    if (!search || !browser) throw new Error('Expected voice tool calls')
+
+    const running = addVoiceToolActivity(addVoiceToolActivity([], search), browser)
+    expect(running).toEqual([
+      expect.objectContaining({ id: 'call_search_1', title: 'Search public web', detail: 'Pune school closure today', status: 'running' }),
+      expect.objectContaining({ id: 'call_browser_2', title: 'Use computer', detail: 'Open the parent login page', status: 'running' }),
+    ])
+
+    expect(finishVoiceToolActivity(running, 'call_search_1', {
+      ok: true,
+      message: 'Schools remain open. [Source](https://example.com/news)',
+    })).toEqual([
+      expect.objectContaining({ id: 'call_search_1', status: 'complete', result: expect.stringContaining('Source') }),
+      expect.objectContaining({ id: 'call_browser_2', status: 'running' }),
+    ])
   })
 })

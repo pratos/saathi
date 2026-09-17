@@ -16,22 +16,11 @@ describe("durable family agent", () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
     const { ownerId, participantId, outsiderId, roomId } = await seedFamily(t);
-    const owner = t.withIdentity({ subject: String(ownerId) });
     const participant = t.withIdentity({ subject: String(participantId) });
     const outsider = t.withIdentity({ subject: String(outsiderId) });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-owner-001");
 
-    await expect(participant.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-participant",
-    })).rejects.toThrow(/permission/i);
-
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-owner-001",
-    });
-    expect(await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-owner-001",
-    })).toBe(agentId);
-
-    await expect(outsider.query(api.agents.get, { agentId })).rejects.toThrow(/permission/i);
+    await expect(outsider.query(api.agents.forRoom, { roomId })).rejects.toThrow(/permission/i);
     await expect(outsider.mutation(api.agents.send, {
       agentId, prompt: "private request", clientOperationId: "outsider-request",
     })).rejects.toThrow(/permission/i);
@@ -42,7 +31,7 @@ describe("durable family agent", () => {
     expect(await participant.mutation(api.agents.send, {
       agentId, prompt: "Summarize the electricity bill", clientOperationId: "participant-request-001",
     })).toBe(jobId);
-    const snapshot = await owner.query(api.agents.get, { agentId });
+    const snapshot = await agentSnapshot(t, agentId);
     expect(snapshot?.agent).toMatchObject({
       roomId, provider: "openrouter", model: "openai/gpt-5.6-luna", status: "running",
     });
@@ -73,9 +62,7 @@ describe("durable family agent", () => {
     rateLimiter.register(t);
     const { roomId, ownerId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-memory-agent",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-memory-agent");
     await owner.mutation(api.conversationActions.execute, {
       roomId,
       action: { type: "remember", key: "departure city", value: "Pune" },
@@ -169,9 +156,7 @@ describe("durable family agent", () => {
     rateLimiter.register(t);
     const { ownerId, roomId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-owner-002",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-owner-002");
     const firstJobId = await owner.mutation(api.agents.send, {
       agentId, prompt: "first", clientOperationId: "first-operation",
     });
@@ -184,7 +169,7 @@ describe("durable family agent", () => {
     expect(await t.mutation(internal.agents.beginNext, { agentId })).toBeNull();
 
     await t.mutation(internal.agents.recover, { agentId, jobId: firstJobId, leaseId: "wrong-lease" });
-    expect((await owner.query(api.agents.get, { agentId }))?.jobs.find(job => job._id === firstJobId)?.status).toBe("running");
+    expect((await agentSnapshot(t, agentId))?.jobs.find(job => job._id === firstJobId)?.status).toBe("running");
 
     await t.mutation(internal.agents.recover, {
       agentId, jobId: firstJobId, leaseId: firstLease!.leaseId,
@@ -203,7 +188,7 @@ describe("durable family agent", () => {
       agentId, jobId: firstJobId, leaseId: firstLease!.leaseId,
       nextSequence: 0, messages: [{ role: "assistant", content: "stale" }],
     });
-    let snapshot = await owner.query(api.agents.get, { agentId });
+    let snapshot = await agentSnapshot(t, agentId);
     expect(snapshot?.messages).toEqual([]);
     expect(snapshot?.jobs.find(job => job._id === firstJobId)?.status).toBe("running");
 
@@ -211,7 +196,7 @@ describe("durable family agent", () => {
       agentId, jobId: firstJobId, leaseId: retryLease!.leaseId,
       nextSequence: retryLease!.nextSequence, messages: [{ role: "assistant", content: "fresh" }],
     });
-    snapshot = await owner.query(api.agents.get, { agentId });
+    snapshot = await agentSnapshot(t, agentId);
     expect(snapshot?.messages).toEqual([{ role: "assistant", content: "fresh" }]);
     expect(snapshot?.jobs.find(job => job._id === firstJobId)?.status).toBe("complete");
     expect(snapshot?.jobs.find(job => job._id === secondJobId)?.status).toBe("queued");
@@ -229,9 +214,7 @@ describe("durable family agent", () => {
     rateLimiter.register(t);
     const { ownerId, roomId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-retry-agent",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-retry-agent");
     const jobId = await owner.mutation(api.agents.send, {
       agentId, prompt: "A request that keeps timing out", clientOperationId: "retry-limit-job",
     });
@@ -242,7 +225,7 @@ describe("durable family agent", () => {
       await t.mutation(internal.agents.recover, { agentId, jobId, leaseId: lease!.leaseId });
     }
 
-    expect((await owner.query(api.agents.get, { agentId }))?.jobs.find(job => job._id === jobId)).toMatchObject({
+    expect((await agentSnapshot(t, agentId))?.jobs.find(job => job._id === jobId)).toMatchObject({
       status: "failed",
       error: "Agent worker lease expired after 3 attempts",
     });
@@ -252,11 +235,8 @@ describe("durable family agent", () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
     const { ownerId, participantId, roomId } = await seedFamily(t);
-    const owner = t.withIdentity({ subject: String(ownerId) });
     const participant = t.withIdentity({ subject: String(participantId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-owner-003",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-owner-003");
     const jobId = await participant.mutation(api.agents.send, {
       agentId, prompt: "private family context", clientOperationId: "revoked-operation",
     });
@@ -273,7 +253,7 @@ describe("durable family agent", () => {
       messages: [{ role: "assistant", content: "must not persist" }],
     });
 
-    const snapshot = await owner.query(api.agents.get, { agentId });
+    const snapshot = await agentSnapshot(t, agentId);
     expect(snapshot?.messages).toEqual([]);
     expect(snapshot?.jobs.find(job => job._id === jobId)).toMatchObject({
       status: "failed", error: "Authorization expired before agent result commit",
@@ -285,9 +265,7 @@ describe("durable family agent", () => {
     rateLimiter.register(t);
     const { ownerId, roomId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-owner-004",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-owner-004");
     const jobId = await owner.mutation(api.agents.send, {
       agentId, prompt: "Ambient greeting", clientOperationId: "ambient-no-reply",
     });
@@ -299,7 +277,7 @@ describe("durable family agent", () => {
     });
 
     expect(await owner.query(api.rooms.messages, { roomId })).toEqual([]);
-    expect((await owner.query(api.agents.get, { agentId }))?.jobs.find(job => job._id === jobId))
+    expect((await agentSnapshot(t, agentId))?.jobs.find(job => job._id === jobId))
       .toMatchObject({ status: "complete" });
   });
 
@@ -323,9 +301,7 @@ describe("durable family agent", () => {
     rateLimiter.register(t);
     const { ownerId, roomId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-image-agent",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-image-agent");
     const jobId = await owner.mutation(api.agents.send, {
       agentId, prompt: "Generate a family card", clientOperationId: "generate-image-job",
     });
@@ -350,9 +326,7 @@ describe("durable family agent", () => {
     rateLimiter.register(t);
     const { ownerId, roomId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
-    const agentId = await owner.mutation(api.agents.create, {
-      roomId, name: "Saathi", clientOperationId: "create-computer-agent",
-    });
+    const agentId = await seedAgent(t, roomId, ownerId, "create-computer-agent");
     const jobId = await owner.mutation(api.agents.send, {
       agentId, prompt: "Open Swiggy and show my orders", clientOperationId: "use-computer-job",
     });
@@ -386,6 +360,43 @@ describe("durable family agent", () => {
     });
   });
 });
+
+async function seedAgent(
+  t: TestConvex<typeof schema>,
+  roomId: Id<"rooms">,
+  ownerId: Id<"users">,
+  creationKey: string,
+) {
+  return t.run(async ctx => {
+    const room = await ctx.db.get(roomId);
+    const now = Date.now();
+    return ctx.db.insert("agents", {
+      spaceId: room!.spaceId,
+      roomId,
+      createdBy: ownerId,
+      creationKey,
+      name: "Saathi",
+      systemPrompt: "Test Saathi prompt",
+      provider: "openrouter",
+      model: "openai/gpt-5.6-luna",
+      status: "idle",
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+}
+
+async function agentSnapshot(t: TestConvex<typeof schema>, agentId: Id<"agents">) {
+  return t.run(async ctx => {
+    const agent = await ctx.db.get(agentId);
+    if (!agent) return null;
+    const [messages, jobs] = await Promise.all([
+      ctx.db.query("agentMessages").withIndex("by_agent_sequence", q => q.eq("agentId", agentId)).collect(),
+      ctx.db.query("agentJobs").withIndex("by_agent_created", q => q.eq("agentId", agentId)).order("desc").collect(),
+    ]);
+    return { agent, messages: messages.map(row => row.message), jobs };
+  });
+}
 
 async function seedFamily(t: TestConvex<typeof schema>) {
   return t.run(async ctx => {

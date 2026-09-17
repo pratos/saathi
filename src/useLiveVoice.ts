@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAction, useMutation } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import {
@@ -12,6 +12,15 @@ import {
 export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
 export type VoiceTurn = { role: 'user' | 'assistant'; text: string; startMs: number }
+export type VoiceToolActivity = {
+  id: string
+  name: ApplicationAssistantToolName
+  title: string
+  detail: string
+  status: 'running' | 'complete' | 'error'
+  result?: string
+  imageUrl?: string
+}
 
 export function useLiveVoice(roomId: Id<'rooms'>) {
   const createSession = useAction(api.liveVoice.startSession)
@@ -23,6 +32,8 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
+  const [sessionId, setSessionId] = useState('')
+  const [activities, setActivities] = useState<VoiceToolActivity[]>([])
   const [voiceLevel, setVoiceLevel] = useState(0)
   const [savingSummary, setSavingSummary] = useState(false)
   const peerRef = useRef<RTCPeerConnection | null>(null)
@@ -37,6 +48,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const generationRef = useRef(0)
+  const computerTool = useQuery(api.liveVoice.computerToolState, sessionId ? { roomId, sessionId } : 'skip')
 
   const cleanup = useCallback(() => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current)
@@ -94,9 +106,11 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     const generation = ++generationRef.current
     cleanup()
     sessionIdRef.current = ''
+    setSessionId('')
     persistedSessionRef.current = ''
     fragmentsRef.current = []
     setFragments([])
+    setActivities([])
     setError('')
     setStatus('requesting')
     try {
@@ -168,20 +182,31 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           cleanup()
         } else if (event.type === 'response.event') {
           const call = liveToolCall(event.raw)
+          if (call) setActivities(current => addVoiceToolActivity(current, call))
           if (call?.name === 'generate_image') {
-            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError)
+            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError, (result) => {
+              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
+            })
           } else if (call?.name === 'search_public_web') {
             void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({
               roomId, query: stringArg(call.arguments, 'query'),
-            }), 'The public web search could not be completed.', setError)
+            }), 'The public web search could not be completed.', setError, (result) => {
+              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
+            })
           } else if (call?.name === 'use_computer') {
             void fulfillVoiceExternalTool(channel, call.callId, () => executeVoiceComputer({
               roomId,
+              sessionId: sessionIdRef.current,
+              callId: call.callId,
               url: stringArg(call.arguments, 'url'),
               task: stringArg(call.arguments, 'task'),
-            }), 'The website task could not be completed.', setError)
+            }), 'The website task could not be completed.', setError, (result) => {
+              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
+            })
           } else if (call) {
-            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError)
+            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, (result) => {
+              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
+            })
           }
         } else if (event.type === 'error') {
           setError(event.message || 'Saathi encountered a voice error.')
@@ -202,6 +227,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       const result = await createSession({ roomId, sdp })
       if (generation !== generationRef.current) return
       sessionIdRef.current = result.sessionId
+      setSessionId(result.sessionId)
       await peer.setRemoteDescription({ type: 'answer', sdp: result.sdp })
     } catch (caught) {
       cleanup()
@@ -250,6 +276,8 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     status,
     error,
     turns: useMemo(() => groupVoiceFragments(fragments), [fragments]),
+    activities,
+    computerTool,
     voiceLevel,
     summarizing: savingSummary || status === 'ending',
     start,
@@ -323,6 +351,8 @@ type LiveToolCall = {
   arguments: Record<string, unknown>
 }
 
+type VoiceToolResult = { ok: boolean; message: string; imageUrl?: string }
+
 function liveToolCall(event: Record<string, unknown>): LiveToolCall | null {
   const nested = event.event && typeof event.event === 'object' ? event.event as Record<string, unknown> : event
   if (nested.type !== 'response.output_item.done') return null
@@ -356,22 +386,78 @@ function optionalStringArg(args: Record<string, unknown>, key: string) {
   return typeof args[key] === 'string' ? args[key] : undefined
 }
 
+export function addVoiceToolActivity(current: VoiceToolActivity[], call: LiveToolCall): VoiceToolActivity[] {
+  const tool = APPLICATION_ASSISTANT_TOOLS.find(candidate => candidate.name === call.name)
+  const args = call.name === 'generate_image' ? null : call.arguments
+  const detail = call.name === 'generate_image'
+    ? call.prompt
+    : call.name === 'search_public_web'
+      ? stringArg(args!, 'query')
+      : call.name === 'use_computer'
+        ? stringArg(args!, 'task')
+        : voiceActionDetail(call.name, args!)
+  const activity: VoiceToolActivity = {
+    id: call.callId,
+    name: call.name,
+    title: tool?.label ?? 'Saathi action',
+    detail,
+    status: 'running',
+  }
+  return [...current.filter(item => item.id !== call.callId), activity].slice(-6)
+}
+
+export function finishVoiceToolActivity(
+  current: VoiceToolActivity[],
+  callId: string,
+  result: VoiceToolResult,
+): VoiceToolActivity[] {
+  return current.map(activity => activity.id === callId
+    ? {
+        ...activity,
+        status: result.ok ? 'complete' as const : 'error' as const,
+        result: result.message,
+        imageUrl: result.imageUrl,
+      }
+    : activity)
+}
+
+function voiceActionDetail(name: ApplicationAssistantToolName, args: Record<string, unknown>) {
+  if (name === 'set_reading_language') return `Reading language · ${String(args.language ?? '')}`
+  if (name === 'set_image_style') return `Image style · ${String(args.style ?? '').replaceAll('_', ' ')}`
+  if (name === 'set_food_budget') return `${String(args.currency ?? '')} ${String(args.amount ?? '')} per month`
+  if (name === 'set_model_tier') return `Thinking level · ${String(args.tier ?? '')}`
+  if (name === 'remember') return `${String(args.key ?? '')} · ${String(args.value ?? '')}`
+  if (name === 'recall') return String(args.key ?? '')
+  return ''
+}
+
 async function fulfillVoiceImage(
   channel: RTCDataChannel,
   roomId: Id<'rooms'>,
   call: { callId: string; prompt: string; kind?: string; style?: string; language?: string },
-  createVoiceImage: (args: { roomId: Id<'rooms'>; prompt: string; kind?: string; style?: string; language?: string }) => Promise<{ ok: boolean; message: string }>,
+  createVoiceImage: (args: { roomId: Id<'rooms'>; prompt: string; kind?: string; style?: string; language?: string }) => Promise<VoiceToolResult>,
   setError: (message: string) => void,
+  onFinished: (result: VoiceToolResult) => void,
 ) {
-  const result = call.prompt
-    ? await createVoiceImage({ roomId, prompt: call.prompt, kind: call.kind, style: call.style, language: call.language })
-    : { ok: false, message: 'Describe the family-safe image you want.' }
+  let result: VoiceToolResult
+  try {
+    result = call.prompt
+      ? await createVoiceImage({ roomId, prompt: call.prompt, kind: call.kind, style: call.style, language: call.language })
+      : { ok: false, message: 'Describe the family-safe image you want.' }
+  } catch {
+    result = { ok: false, message: 'The image could not be created right now.' }
+  }
+  onFinished(result)
   if (!result.ok) setError(result.message)
   if (channel.readyState !== 'open') return
   channel.send(JSON.stringify({
     type: 'response.item.create',
     event_id: crypto.randomUUID(),
-    item: { type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result) },
+    item: {
+      type: 'function_call_output',
+      call_id: call.callId,
+      output: JSON.stringify({ ok: result.ok, message: result.message }),
+    },
   }))
   channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
 }
@@ -385,6 +471,7 @@ async function fulfillVoiceAction(
     action: ConversationAction
   }) => Promise<{ ok: boolean; message: string }>,
   setError: (message: string) => void,
+  onFinished: (result: VoiceToolResult) => void,
 ) {
   const action = voiceConversationAction(call)
   let result = { ok: false, message: 'I could not understand that settings change.' }
@@ -395,6 +482,7 @@ async function fulfillVoiceAction(
       result = { ok: false, message: 'That setting could not be changed. Check your family permissions and try again.' }
     }
   }
+  onFinished(result)
   if (!result.ok) setError(result.message)
   if (channel.readyState !== 'open') return
   channel.send(JSON.stringify({
@@ -411,6 +499,7 @@ async function fulfillVoiceExternalTool(
   execute: () => Promise<{ ok: boolean; message: string }>,
   failureMessage: string,
   setError: (message: string) => void,
+  onFinished: (result: VoiceToolResult) => void,
 ) {
   let result: { ok: boolean; message: string }
   try {
@@ -418,6 +507,7 @@ async function fulfillVoiceExternalTool(
   } catch {
     result = { ok: false, message: failureMessage }
   }
+  onFinished(result)
   if (!result.ok) setError(result.message)
   if (channel.readyState !== 'open') return
   channel.send(JSON.stringify({

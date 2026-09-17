@@ -27,3 +27,15 @@ export function isNoReplyText(value: string) {
   const normalized = value.trim().toUpperCase();
   return "[NO_REPLY]".startsWith(normalized) || /^\[NO_REPLY\][.!]?$/.test(normalized);
 }
+
+export function containsSaathiMention(value: string) {
+  return SAATHI_MENTION.test(value);
+}
+
+export function stripSaathiMention(value: string) {
+  return value.replace(/@saathi\b[:,]?/gi, "").trim();
+}
+
+export function mentionedUsernames(value: string) {
+  return [...new Set(Array.from(value.matchAll(/(?:^|\s)@([a-z][a-z0-9_]*)\b/gi), match => match[1].toLowerCase()))];
+}

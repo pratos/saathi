@@ -8,8 +8,7 @@ import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
 import { profileNameForUser } from "./lib/firecrawlInteract";
 import { imageKindValidator, imageLanguageValidator, imageStyleValidator } from "./lib/imageSafety";
-import { DEFAULT_MODEL_TIER, resolveModelTier } from "./lib/modelTiers";
-import { isNoReplyText, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
+import { isNoReplyText } from "./lib/saathi";
 
 const MAX_CONTEXT_MESSAGES = 200;
 const MAX_CONTEXT_CHARS = 60_000;
@@ -45,37 +44,6 @@ const workItem = v.object({
   leaseId: v.string(),
 });
 
-export const create = mutation({
-  args: {
-    roomId: v.id("rooms"), name: v.string(), systemPrompt: v.optional(v.string()), clientOperationId: v.string(),
-  },
-  returns: v.id("agents"),
-  handler: async (ctx, args) => {
-    const { userId, room } = await requireRoomPermission(ctx, args.roomId, "manage_room");
-    const name = args.name.trim();
-    const systemPrompt = args.systemPrompt?.trim() || SAATHI_SYSTEM_PROMPT;
-    validateOperationId(args.clientOperationId);
-    if (name.length < 2 || name.length > 80) throw invalid("Agent name must be between 2 and 80 characters");
-    if (systemPrompt.length > 10_000) throw invalid("System prompt must be 10,000 characters or shorter");
-
-    const existing = await ctx.db.query("agents").withIndex("by_room_creation_key", q =>
-      q.eq("roomId", args.roomId).eq("creationKey", args.clientOperationId),
-    ).unique();
-    if (existing) {
-      if (existing.createdBy !== userId) throw new ConvexError({ code: "IDEMPOTENCY_CONFLICT", message: "Operation ID already used" });
-      return existing._id;
-    }
-
-    const now = Date.now();
-    const space = await ctx.db.get(room.spaceId);
-    const route = resolveModelTier(space?.modelTier ?? DEFAULT_MODEL_TIER);
-    return ctx.db.insert("agents", {
-      spaceId: room.spaceId, roomId: room._id, createdBy: userId, creationKey: args.clientOperationId,
-      name, systemPrompt, provider: "openrouter", model: route.model, status: "idle", createdAt: now, updatedAt: now,
-    });
-  },
-});
-
 export const send = mutation({
   args: { agentId: v.id("agents"), prompt: v.string(), clientOperationId: v.string() },
   returns: v.id("agentJobs"),
@@ -106,21 +74,6 @@ export const send = mutation({
       await ctx.scheduler.runAfter(0, internal.agentWorker.run, { agentId: agent._id });
     }
     return jobId;
-  },
-});
-
-export const get = query({
-  args: { agentId: v.id("agents") },
-  returns: v.union(v.object({ agent: agentDoc, messages: v.array(v.any()), jobs: v.array(jobDoc) }), v.null()),
-  handler: async (ctx, { agentId }) => {
-    const agent = await ctx.db.get(agentId);
-    if (!agent) return null;
-    await requireRoomPermission(ctx, agent.roomId, "read");
-    const [recentMessages, jobs] = await Promise.all([
-      ctx.db.query("agentMessages").withIndex("by_agent_sequence", q => q.eq("agentId", agentId)).order("desc").take(MAX_CONTEXT_MESSAGES),
-      ctx.db.query("agentJobs").withIndex("by_agent_created", q => q.eq("agentId", agentId)).order("desc").take(20),
-    ]);
-    return { agent, messages: recentMessages.reverse().map(entry => entry.message), jobs };
   },
 });
 

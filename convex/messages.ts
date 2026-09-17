@@ -1,10 +1,11 @@
 import { MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
 import { requireRoomPermission } from "./lib/authz";
 import { DEFAULT_MODEL_TIER, resolveModelTier } from "./lib/modelTiers";
-import { SAATHI_MENTION, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
+import { containsSaathiMention, mentionedUsernames, SAATHI_SYSTEM_PROMPT, stripSaathiMention } from "./lib/saathi";
 
 const limits = new RateLimiter(components.rateLimiter, {
   postMessage: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 10 },
@@ -28,12 +29,36 @@ export const post = mutation({
     }
     const rate = await limits.limit(ctx, "postMessage", { key: String(userId) });
     if (!rate.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: rate.retryAfter });
+    const mentioned = mentionedUsernames(text);
+    const explicitlyMentioned = containsSaathiMention(text);
+    const mentions: Array<
+      | { kind: "assistant"; username: "saathi" }
+      | { kind: "person"; username: string; userId: Id<"users"> }
+    > = explicitlyMentioned ? [{ kind: "assistant", username: "saathi" }] : [];
+    const personHandles = new Set(mentioned.filter(username => username !== "saathi"));
+    if (personHandles.size) {
+      const grants = await ctx.db.query("roomMembers")
+        .withIndex("by_room_user", q => q.eq("roomId", room._id))
+        .take(100);
+      const roomUsers = await Promise.all(grants.map(async grant => {
+        const [roomUser, membership] = await Promise.all([
+          ctx.db.get(grant.userId),
+          ctx.db.query("memberships").withIndex("by_space_user", q => q.eq("spaceId", room.spaceId).eq("userId", grant.userId)).unique(),
+        ]);
+        return membership?.status === "active" ? roomUser : null;
+      }));
+      for (const roomUser of roomUsers) {
+        if (roomUser?.username && personHandles.has(roomUser.username)) {
+          mentions.push({ kind: "person", username: roomUser.username, userId: roomUser._id });
+        }
+      }
+    }
     const messageId = await ctx.db.insert("messages", {
       spaceId: room.spaceId, roomId: args.roomId, authorUserId: userId, actorType: "user", origin: "app",
-      originalText: text, language: args.language, idempotencyKey: args.clientOperationId, createdAt: Date.now(),
+      originalText: text, language: args.language, idempotencyKey: args.clientOperationId,
+      mentions: mentions.length ? mentions : undefined, createdAt: Date.now(),
     });
 
-    const explicitlyMentioned = SAATHI_MENTION.test(text);
     const shouldInvokeSaathi = room.assistantMode !== "off";
     if (shouldInvokeSaathi) {
       const agentRate = await limits.limit(ctx, "mentionSaathi", { key: `${room.spaceId}:${userId}` });
@@ -54,13 +79,16 @@ export const post = mutation({
         });
         agent = (await ctx.db.get(agentId))!;
       }
-      const messageForSaathi = text.replace(SAATHI_MENTION, "").trim() ||
+      const messageForSaathi = stripSaathiMention(text) ||
         "Introduce yourself briefly and ask how you can help this family.";
+      const personMentionContext = mentions.some(mention => mention.kind === "person")
+        ? ` Tagged family members: ${mentions.filter(mention => mention.kind === "person").map(mention => `@${mention.username}`).join(", ")}.`
+        : "";
       const prompt = explicitlyMentioned
-        ? `You were explicitly mentioned. Respond helpfully to: ${messageForSaathi}`
+        ? `You were explicitly mentioned. Respond helpfully to: ${messageForSaathi}${personMentionContext}`
         : room.assistantMode === "automatic"
-          ? `Respond helpfully to this message in the private automatic-assistant conversation: ${messageForSaathi}`
-          : `Ambiently assess this family message. Respond only if your input is useful; otherwise output exactly [NO_REPLY]. Message: ${messageForSaathi}`;
+          ? `Respond helpfully to this message in the private automatic-assistant conversation: ${messageForSaathi}${personMentionContext}`
+          : `Ambiently assess this family message. Respond only if your input is useful; otherwise output exactly [NO_REPLY]. Message: ${messageForSaathi}${personMentionContext}`;
       await ctx.db.insert("agentJobs", {
         agentId: agent._id, requestedBy: userId, prompt, clientOperationId: args.clientOperationId,
         status: "queued", attempt: 0,

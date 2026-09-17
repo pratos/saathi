@@ -15,9 +15,12 @@ export default defineSchema({
     name: v.optional(v.string()), image: v.optional(v.string()), email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.number()), phone: v.optional(v.string()),
     phoneVerificationTime: v.optional(v.number()), isAnonymous: v.optional(v.boolean()),
-    displayName: v.optional(v.string()), preferredLanguage: v.optional(language),
+    displayName: v.optional(v.string()), username: v.optional(v.string()), preferredLanguage: v.optional(language),
     preferredImageStyle: v.optional(imageStyleValidator),
   }).index("email", ["email"]).index("phone", ["phone"]),
+  usernameClaims: defineTable({
+    normalized: v.string(), userId: v.id("users"), claimedAt: v.number(),
+  }).index("by_normalized", ["normalized"]).index("by_user_id", ["userId"]),
   spaces: defineTable({
     name: v.string(),
     agentmailInboxId: v.optional(v.string()),
@@ -72,22 +75,27 @@ export default defineSchema({
     heartbeatMessageId: v.optional(v.id("messages")),
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
     receivedAt: v.number(),
-  }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]).index("by_space_category_received", ["spaceId", "category", "receivedAt"]),
-  emailThreads: defineTable({
-    spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")), inboxId: v.string(), threadId: v.string(),
-    allowedSenders: v.array(v.string()), status: v.union(v.literal("active"), v.literal("closed")), createdAt: v.number(),
-  }).index("by_inbox_thread", ["inboxId", "threadId"]).index("by_space", ["spaceId"]),
+  }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]),
   messages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), authorUserId: v.optional(v.id("users")),
     actorType: v.union(v.literal("user"), v.literal("assistant"), v.literal("email_guest"), v.literal("voice_transcript")),
     origin: v.union(v.literal("app"), v.literal("agentmail"), v.literal("assistant")),
     originalText: v.string(), language, idempotencyKey: v.string(),
+    mentions: v.optional(v.array(v.union(
+      v.object({ kind: v.literal("assistant"), username: v.literal("saathi") }),
+      v.object({ kind: v.literal("person"), username: v.string(), userId: v.id("users") }),
+    ))),
     voiceSpeaker: v.optional(v.union(v.literal("user"), v.literal("assistant"))), createdAt: v.number(),
   }).index("by_room_created", ["roomId", "createdAt"]).index("by_room_idempotency", ["roomId", "idempotencyKey"]),
   liveVoiceSessions: defineTable({
     sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
     createdAt: v.number(), finishedAt: v.optional(v.number()),
-  }).index("by_session_id", ["sessionId"]).index("by_room_created", ["roomId", "createdAt"]),
+    activeToolCallId: v.optional(v.string()),
+    activity: v.optional(v.literal("using_computer")),
+    computerTask: v.optional(v.string()),
+    computerLiveViewUrl: v.optional(v.string()),
+    computerInteractiveLiveViewUrl: v.optional(v.string()),
+  }).index("by_session_id", ["sessionId"]),
   gmailConnections: defineTable({
     spaceId: v.id("spaces"), userId: v.id("users"), connectedAccountId: v.string(),
     alias: v.string(), email: v.optional(v.string()), triggerId: v.string(),
@@ -116,14 +124,6 @@ export default defineSchema({
     createdBy: v.id("users"),
     spentAt: v.number(),
   }).index("by_space_category_spent", ["spaceId", "category", "spentAt"]).index("by_source_inbox", ["sourceInboxItemId"]),
-  voiceNotes: defineTable({
-    spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
-    authorUserId: v.id("users"), storageId: v.id("_storage"), mediaType: v.string(),
-    sizeBytes: v.number(), durationMs: v.number(),
-    status: v.union(v.literal("pending"), v.literal("transcribing"), v.literal("ready"), v.literal("failed")),
-    transcript: v.optional(v.string()), detectedLanguage: v.optional(v.string()),
-    failureCode: v.optional(v.string()), createdAt: v.number(), completedAt: v.optional(v.number()),
-  }).index("by_message", ["messageId"]).index("by_room_created", ["roomId", "createdAt"]),
   attachments: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), messageId: v.id("messages"),
     authorUserId: v.id("users"), storageId: v.id("_storage"), fileName: v.string(),
@@ -141,15 +141,6 @@ export default defineSchema({
     style: v.optional(imageStyleValidator),
     language: v.optional(language),
   }).index("by_room_created", ["roomId", "createdAt"]),
-  translations: defineTable({
-    messageId: v.optional(v.id("messages")), inboxItemId: v.optional(v.id("inboxItems")),
-    targetLanguage: language, text: v.string(), model: v.string(), confidence: v.optional(v.number()), createdAt: v.number(),
-  }).index("by_message_language", ["messageId", "targetLanguage"]).index("by_inbox_language", ["inboxItemId", "targetLanguage"]),
-  tasks: defineTable({
-    spaceId: v.id("spaces"), sourceInboxItemId: v.optional(v.id("inboxItems")), roomId: v.optional(v.id("rooms")),
-    title: v.string(), assigneeUserId: v.optional(v.id("users")), dueAt: v.optional(v.number()),
-    status: v.union(v.literal("open"), v.literal("done")), createdBy: v.id("users"), createdAt: v.number(),
-  }).index("by_space_status", ["spaceId", "status"]).index("by_assignee_status", ["assigneeUserId", "status"]),
   invitations: defineTable({
     spaceId: v.id("spaces"), tokenHash: v.string(), targetEmail: v.string(),
     role: v.union(v.literal("owner"), v.literal("member")), createdBy: v.id("users"),
@@ -157,20 +148,17 @@ export default defineSchema({
     // require a privileged production data scan during deployment.
     idempotencyKey: v.optional(v.string()), createdAt: v.optional(v.number()), expiresAt: v.number(),
     acceptedByUserId: v.optional(v.id("users")), acceptedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
-  }).index("by_token_hash", ["tokenHash"]).index("by_space", ["spaceId"])
+  }).index("by_token_hash", ["tokenHash"])
     .index("by_space_created", ["spaceId", "createdAt"])
     .index("by_creator_idempotency", ["createdBy", "idempotencyKey"]),
-  agentRuns: defineTable({
-    spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")), requestedBy: v.id("users"),
-    capability: v.string(), status: v.union(v.literal("pending"), v.literal("running"), v.literal("succeeded"), v.literal("failed")),
-    provider: v.optional(v.string()), model: v.optional(v.string()), idempotencyKey: v.string(), createdAt: v.number(), completedAt: v.optional(v.number()),
-  }).index("by_space_idempotency", ["spaceId", "idempotencyKey"]).index("by_space_created", ["spaceId", "createdAt"]),
   agents: defineTable({
-    spaceId: v.id("spaces"), roomId: v.id("rooms"), createdBy: v.id("users"), creationKey: v.string(),
+    spaceId: v.id("spaces"), roomId: v.id("rooms"), createdBy: v.id("users"),
+    // Retained so existing agent rows continue to validate after the old public creation API was removed.
+    creationKey: v.string(),
     name: v.string(), systemPrompt: v.string(), provider: v.literal("openrouter"), model: v.string(),
     status: v.union(v.literal("idle"), v.literal("running")), lastError: v.optional(v.string()),
     createdAt: v.number(), updatedAt: v.number(),
-  }).index("by_room", ["roomId"]).index("by_room_creation_key", ["roomId", "creationKey"]),
+  }).index("by_room", ["roomId"]),
   agentMessages: defineTable({
     agentId: v.id("agents"), sequence: v.number(), message: v.any(), createdAt: v.number(),
   }).index("by_agent_sequence", ["agentId", "sequence"]),
@@ -197,16 +185,14 @@ export default defineSchema({
   }).index("by_agent_created", ["agentId", "createdAt"])
     .index("by_agent_source", ["agentId", "sourceKey"])
     .searchIndex("search_summary", { searchField: "summary", filterFields: ["agentId"] }),
-  webSources: defineTable({
-    spaceId: v.id("spaces"), runId: v.id("agentRuns"), url: v.string(), title: v.optional(v.string()),
-    retrievedAt: v.number(), excerptHash: v.string(),
-  }).index("by_run", ["runId"]),
   auditEvents: defineTable({
     spaceId: v.optional(v.id("spaces")), actorUserId: v.optional(v.id("users")),
     action: v.string(), resourceType: v.string(), resourceId: v.optional(v.string()), metadata: v.optional(v.any()), createdAt: v.number(),
-  }).index("by_space_created", ["spaceId", "createdAt"]).index("by_actor_created", ["actorUserId", "createdAt"]),
+  }),
   usageLedger: defineTable({
-    spaceId: v.id("spaces"), runId: v.optional(v.id("agentRuns")), userId: v.id("users"),
+    spaceId: v.id("spaces"),
+    // Historical ledger rows may still carry the ID from the removed agentRuns table.
+    runId: v.optional(v.string()), userId: v.id("users"),
     provider: v.string(), model: v.optional(v.string()), unit: v.string(), quantity: v.number(), costClass: v.string(), createdAt: v.number(),
-  }).index("by_space_created", ["spaceId", "createdAt"]).index("by_user_created", ["userId", "createdAt"]),
+  }).index("by_space_created", ["spaceId", "createdAt"]),
 });

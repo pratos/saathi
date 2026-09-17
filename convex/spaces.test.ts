@@ -1,33 +1,33 @@
 import { convexTest, type TestConvex } from "convex-test";
 import { describe, expect, test } from "vitest";
-import { api } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
 describe("family inbox configuration", () => {
-  test("only an owner can connect an inbox and one inbox cannot serve two families", async () => {
+  test("the server-owned inbox path enforces ownership and tenant isolation", async () => {
     const t = convexTest(schema, modules);
     const { firstSpaceId, secondSpaceId, ownerId, memberId } = await seedFamilies(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
     const member = t.withIdentity({ subject: String(memberId) });
 
-    await expect(member.mutation(api.spaces.configureInbox, {
+    await expect(member.mutation(internal.spaces.attachCreatedInbox, {
       spaceId: firstSpaceId,
       inboxId: "member-attempt",
     })).rejects.toThrow(/permission/i);
 
-    await expect(owner.mutation(api.spaces.configureInbox, {
+    await expect(owner.mutation(internal.spaces.attachCreatedInbox, {
       spaceId: firstSpaceId,
-      inboxId: "  family-inbox-1  ",
+      inboxId: "family-inbox-1",
     })).resolves.toBeNull();
 
     expect(await t.run((ctx) => ctx.db.get(firstSpaceId))).toMatchObject({
       agentmailInboxId: "family-inbox-1",
     });
 
-    await expect(owner.mutation(api.spaces.configureInbox, {
+    await expect(owner.mutation(internal.spaces.attachCreatedInbox, {
       spaceId: secondSpaceId,
       inboxId: "family-inbox-1",
     })).rejects.toThrow(/INBOX_ALREADY_CONNECTED/);
@@ -39,7 +39,7 @@ describe("family inbox configuration", () => {
     const auditEvents = await t.run((ctx) => ctx.db.query("auditEvents").collect());
     expect(auditEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        action: "space.inbox_configured",
+        action: "space.inbox_created",
         actorUserId: ownerId,
         resourceId: String(firstSpaceId),
         spaceId: firstSpaceId,

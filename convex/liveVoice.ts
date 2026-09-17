@@ -2,7 +2,7 @@ import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, env, internalMutation, internalQuery } from "./_generated/server";
+import { action, env, internalMutation, internalQuery, query } from "./_generated/server";
 import { assistantProviderTools } from "./lib/assistantCapabilities";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
@@ -114,38 +114,135 @@ export const searchPublicWeb = action({
   handler: async (ctx, { roomId, query }) => {
     const text = query.trim();
     if (text.length < 2 || text.length > 300) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Use a short web search query." });
-    await ctx.runMutation(internal.liveVoice.prepareExternalTool, { roomId, capability: "search" });
+    await ctx.runMutation(internal.liveVoice.prepareExternalTool, { roomId });
     const message = await searchPublicWebWithFirecrawl(ctx, text);
     return { ok: true, message };
   },
 });
 
 export const useComputer = action({
-  args: { roomId: v.id("rooms"), url: v.string(), task: v.string() },
+  args: { roomId: v.id("rooms"), sessionId: v.string(), callId: v.string(), url: v.string(), task: v.string() },
   returns: v.object({ ok: v.boolean(), message: v.string() }),
-  handler: async (ctx, { roomId, url, task }) => {
-    const prepared: { profileName: string } = await ctx.runMutation(internal.liveVoice.prepareExternalTool, {
-      roomId, capability: "computer",
+  handler: async (ctx, { roomId, sessionId, callId, url, task }) => {
+    const prepared: { profileName: string } = await ctx.runMutation(internal.liveVoice.prepareComputerTool, {
+      roomId, sessionId, callId, task,
     });
-    const result = await runFirecrawlComputerTask({
-      apiKey: env.FIRECRAWL_API_KEY,
-      url,
-      task,
-      profileName: prepared.profileName,
+    try {
+      const result = await runFirecrawlComputerTask({
+        apiKey: env.FIRECRAWL_API_KEY,
+        url,
+        task,
+        profileName: prepared.profileName,
+        onLiveView: async (view) => {
+          await ctx.runMutation(internal.liveVoice.updateComputerView, {
+            roomId, sessionId, callId,
+            liveViewUrl: view.liveViewUrl,
+            interactiveLiveViewUrl: view.interactiveLiveViewUrl,
+          });
+        },
+      });
+      return { ok: true, message: result.output.slice(0, 8_000) };
+    } finally {
+      await ctx.runMutation(internal.liveVoice.finishComputerTool, { roomId, sessionId, callId });
+    }
+  },
+});
+
+export const computerToolState = query({
+  args: { roomId: v.id("rooms"), sessionId: v.string() },
+  returns: v.union(v.object({
+    callId: v.string(),
+    task: v.string(),
+    liveViewUrl: v.optional(v.string()),
+    interactiveLiveViewUrl: v.optional(v.string()),
+  }), v.null()),
+  handler: async (ctx, { roomId, sessionId }) => {
+    const { userId } = await requireRoomPermission(ctx, roomId, "post_message");
+    const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
+    if (!session || session.roomId !== roomId || session.startedBy !== userId || session.finishedAt
+      || session.activity !== "using_computer" || !session.activeToolCallId || !session.computerTask) return null;
+    return {
+      callId: session.activeToolCallId,
+      task: session.computerTask,
+      liveViewUrl: session.computerLiveViewUrl,
+      interactiveLiveViewUrl: session.computerInteractiveLiveViewUrl,
+    };
+  },
+});
+
+export const prepareComputerTool = internalMutation({
+  args: { roomId: v.id("rooms"), sessionId: v.string(), callId: v.string(), task: v.string() },
+  returns: v.object({ profileName: v.string() }),
+  handler: async (ctx, { roomId, sessionId, callId, task }) => {
+    const { userId } = await requireRoomPermission(ctx, roomId, "post_message");
+    const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
+    if (!session || session.roomId !== roomId || session.startedBy !== userId || session.finishedAt) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "This voice session does not belong to you" });
+    }
+    const cleanCallId = callId.trim();
+    const cleanTask = task.trim();
+    if (cleanCallId.length < 3 || cleanCallId.length > 200 || cleanTask.length < 3 || cleanTask.length > 4_000) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice browser task" });
+    }
+    const limit = await liveVoiceLimits.limit(ctx, "voiceComputer", { key: String(userId) });
+    if (!limit.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: limit.retryAfter });
+    await ctx.db.patch(session._id, {
+      activeToolCallId: cleanCallId,
+      activity: "using_computer",
+      computerTask: cleanTask,
+      computerLiveViewUrl: undefined,
+      computerInteractiveLiveViewUrl: undefined,
     });
-    return { ok: true, message: result.output.slice(0, 8_000) };
+    return { profileName: profileNameForUser(userId) };
+  },
+});
+
+export const updateComputerView = internalMutation({
+  args: {
+    roomId: v.id("rooms"), sessionId: v.string(), callId: v.string(),
+    liveViewUrl: v.optional(v.string()), interactiveLiveViewUrl: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { userId } = await requireRoomPermission(ctx, args.roomId, "post_message");
+    const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", args.sessionId)).unique();
+    if (!session || session.roomId !== args.roomId || session.startedBy !== userId || session.finishedAt
+      || session.activeToolCallId !== args.callId || session.activity !== "using_computer") return null;
+    await ctx.db.patch(session._id, {
+      computerLiveViewUrl: args.liveViewUrl,
+      computerInteractiveLiveViewUrl: args.interactiveLiveViewUrl,
+    });
+    return null;
+  },
+});
+
+export const finishComputerTool = internalMutation({
+  args: { roomId: v.id("rooms"), sessionId: v.string(), callId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { userId } = await requireRoomPermission(ctx, args.roomId, "post_message");
+    const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", args.sessionId)).unique();
+    if (!session || session.roomId !== args.roomId || session.startedBy !== userId
+      || session.activeToolCallId !== args.callId) return null;
+    await ctx.db.patch(session._id, {
+      activeToolCallId: undefined,
+      activity: undefined,
+      computerTask: undefined,
+      computerLiveViewUrl: undefined,
+      computerInteractiveLiveViewUrl: undefined,
+    });
+    return null;
   },
 });
 
 export const prepareExternalTool = internalMutation({
-  args: { roomId: v.id("rooms"), capability: v.union(v.literal("search"), v.literal("computer")) },
-  returns: v.object({ profileName: v.string() }),
-  handler: async (ctx, { roomId, capability }) => {
+  args: { roomId: v.id("rooms") },
+  returns: v.null(),
+  handler: async (ctx, { roomId }) => {
     const { userId } = await requireRoomPermission(ctx, roomId, "post_message");
-    const limitName = capability === "search" ? "voiceWebSearch" : "voiceComputer";
-    const limit = await liveVoiceLimits.limit(ctx, limitName, { key: String(userId) });
+    const limit = await liveVoiceLimits.limit(ctx, "voiceWebSearch", { key: String(userId) });
     if (!limit.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: limit.retryAfter });
-    return { profileName: profileNameForUser(userId) };
+    return null;
   },
 });
 
@@ -231,7 +328,14 @@ export const storeSummary = internalMutation({
         source: "voice", sourceKey: `voice:${sessionId}`, request: "Voice conversation", response: summary, createdAt: completedAt,
       });
     }
-    await ctx.db.patch(session._id, { finishedAt: completedAt });
+    await ctx.db.patch(session._id, {
+      finishedAt: completedAt,
+      activeToolCallId: undefined,
+      activity: undefined,
+      computerTask: undefined,
+      computerLiveViewUrl: undefined,
+      computerInteractiveLiveViewUrl: undefined,
+    });
     return "saved";
   },
 });

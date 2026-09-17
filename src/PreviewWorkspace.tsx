@@ -11,7 +11,6 @@ import {
   Languages,
   Mail,
   MessageSquareText,
-  Mic,
   Pause,
   Play,
   RefreshCcw,
@@ -19,13 +18,10 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
-  Square,
   Volume2,
-  X,
 } from 'lucide-react'
 import './App.css'
 
-type VoiceState = 'idle' | 'recording' | 'ready'
 type PreviewFamily = 'asha' | 'parents'
 
 const demoSteps = [
@@ -49,18 +45,6 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
   const [inboxConnected, setInboxConnected] = useState(false)
   const [message, setMessage] = useState('')
   const [sentMessages, setSentMessages] = useState<string[]>([])
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle')
-  const [voiceUrl, setVoiceUrl] = useState('')
-  const [voiceDuration, setVoiceDuration] = useState(0)
-  const [voiceError, setVoiceError] = useState('')
-  const [sharedVoice, setSharedVoice] = useState<{ url: string; duration: number } | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
-  const timerRef = useRef<number | null>(null)
-  const startedAtRef = useRef(0)
-  const discardRef = useRef(false)
-  const objectUrlsRef = useRef<string[]>([])
   const feedRef = useRef<HTMLDivElement | null>(null)
 
   const goToStep = (nextStep: number) => {
@@ -79,87 +63,6 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
     setSentMessages([])
     setMessage('')
     setPreviewCode('248613')
-    cancelVoice()
-  }
-
-  const stopTracks = () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
-  }
-
-  const clearTimer = () => {
-    if (timerRef.current !== null) window.clearInterval(timerRef.current)
-    timerRef.current = null
-  }
-
-  const startRecording = async () => {
-    setVoiceError('')
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setVoiceError('Voice recording is not supported in this browser.')
-      return
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(MediaRecorder.isTypeSupported)
-      const recorder = new MediaRecorder(stream, mediaType ? { mimeType: mediaType } : undefined)
-      recorderRef.current = recorder
-      streamRef.current = stream
-      chunksRef.current = []
-      startedAtRef.current = Date.now()
-      discardRef.current = false
-      setVoiceDuration(0)
-      setVoiceState('recording')
-      recorder.ondataavailable = (event) => {
-        if (event.data.size) chunksRef.current.push(event.data)
-      }
-      recorder.onstop = () => {
-        clearTimer()
-        stopTracks()
-        const duration = Math.min(Date.now() - startedAtRef.current, 30_000)
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        chunksRef.current = []
-        if (discardRef.current) {
-          setVoiceState('idle')
-          return
-        }
-        if (blob.size === 0 || duration < 250) {
-          setVoiceState('idle')
-          setVoiceError('That recording was too short. Please try again.')
-          return
-        }
-        const url = URL.createObjectURL(blob)
-        objectUrlsRef.current.push(url)
-        setVoiceUrl(url)
-        setVoiceDuration(duration)
-        setVoiceState('ready')
-      }
-      recorder.start(250)
-      timerRef.current = window.setInterval(() => {
-        const duration = Math.min(Date.now() - startedAtRef.current, 30_000)
-        setVoiceDuration(duration)
-        if (duration >= 30_000 && recorder.state === 'recording') recorder.stop()
-      }, 200)
-    } catch {
-      stopTracks()
-      setVoiceState('idle')
-      setVoiceError('Allow microphone access to record a voice note.')
-    }
-  }
-
-  const cancelVoice = () => {
-    discardRef.current = true
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-    if (voiceUrl) URL.revokeObjectURL(voiceUrl)
-    setVoiceUrl('')
-    setVoiceDuration(0)
-    setVoiceState('idle')
-  }
-
-  const shareVoice = () => {
-    if (!voiceUrl) return
-    setSharedVoice({ url: voiceUrl, duration: voiceDuration })
-    setVoiceUrl('')
-    setVoiceState('idle')
   }
 
   const sendMessage = (event: FormEvent) => {
@@ -184,7 +87,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
       if (firstCutOff) feed.scrollTop += firstCutOff.getBoundingClientRect().top - feedTop - 20
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [demoStep, selectedFamily, sentMessages, sharedVoice])
+  }, [demoStep, selectedFamily, sentMessages])
 
   useEffect(() => {
     if (!isPlaying) return
@@ -203,13 +106,6 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [])
-
-  useEffect(() => () => {
-    clearTimer()
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-    stopTracks()
-    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
   }, [])
 
   return (
@@ -333,20 +229,13 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
           </article>}
 
           {sentMessages.map((text, index) => <article className="outgoing-message" key={`${text}-${index}`}><span>You · Just now</span><p>{text}</p></article>)}
-          {sharedVoice && (
-            <article className="outgoing-message voice-note-message"><span>You · Voice note · {formatDuration(sharedVoice.duration)}</span><audio controls src={sharedVoice.url}>Your browser cannot play this recording.</audio></article>
-          )}
         </div>
 
         <footer className="conversation-composer">
-          {voiceState === 'recording' && <div className="recording-strip"><span><i /> Recording · {formatDuration(voiceDuration)} / 0:30</span><button onClick={() => recorderRef.current?.stop()}><Square fill="currentColor" /> Stop</button></div>}
-          {voiceState === 'ready' && <div className="recording-strip"><span>Voice note ready to share</span><div><button onClick={cancelVoice}><X /> Remove</button><button onClick={shareVoice}><Send /> Share</button></div></div>}
           <form onSubmit={sendMessage}>
             <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message your family or ask Saathi…" aria-label="Message" />
-            <button className="composer-mic" type="button" onClick={voiceState === 'idle' ? startRecording : cancelVoice} aria-label={voiceState === 'idle' ? 'Record a voice note' : 'Cancel voice note'}><Mic /></button>
             <button className="composer-send" type="submit" disabled={!message.trim()}>Send <Send /></button>
           </form>
-          {voiceError && <p className="dark-form-error" role="alert">{voiceError}</p>}
         </footer>
       </section>
 
@@ -384,9 +273,4 @@ function DemoControls({ step, isPlaying, onPlay, onStep, onRestart, onExit }: {
       </div>
     </header>
   )
-}
-
-function formatDuration(durationMs: number) {
-  const seconds = Math.ceil(durationMs / 1000)
-  return `0:${String(seconds).padStart(2, '0')}`
 }

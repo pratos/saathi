@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   ArrowLeft,
+  ArrowRight,
   AudioLines,
   Bell,
   Bot,
@@ -24,6 +25,7 @@ import {
   Paperclip,
   PhoneOff,
   Plus,
+  Search,
   Send,
   Settings2,
   ShieldCheck,
@@ -40,10 +42,13 @@ import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from './components/ui/select'
 import { VoiceBlob } from './VoiceBlob'
-import { useLiveVoice, type VoiceStatus, type VoiceTurn } from './useLiveVoice'
+import { useLiveVoice, type VoiceStatus, type VoiceToolActivity, type VoiceTurn } from './useLiveVoice'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
+type MentionCandidate =
+  | { kind: 'assistant'; username: 'saathi'; label: string }
+  | { kind: 'person'; username: string; label: string; userId: Id<'users'> }
 
 const ACCEPTED_ATTACHMENTS = 'image/jpeg,image/png,image/webp,image/gif,image/heic,application/pdf,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
 const SUPPORTED_ATTACHMENT_TYPES = new Set(ACCEPTED_ATTACHMENTS.split(','))
@@ -53,6 +58,7 @@ const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
   const acceptInvitation = useMutation(api.invitations.accept)
+  const currentUser = useQuery(api.users.current)
   const spaces = useQuery(api.spaces.mine)
   const [selectedSpaceId, setSelectedSpaceId] = useState<Id<'spaces'> | null>(() => gmailSpaceFromUrl())
   const [invitationState, setInvitationState] = useState<'idle' | 'accepting' | 'error'>(() => invitationToken() ? 'accepting' : 'idle')
@@ -64,7 +70,7 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
 
   useEffect(() => {
     const token = invitationToken()
-    if (!token || invitationState !== 'accepting') return
+    if (!token || invitationState !== 'accepting' || !currentUser?.username) return
     void sha256(token).then(tokenHash => acceptInvitation({ tokenHash })).then(spaceId => {
       setSelectedSpaceId(spaceId)
       clearInvitationToken()
@@ -78,13 +84,15 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
           : 'This invitation is invalid or has already been revoked.')
       setInvitationState('error')
     })
-  }, [acceptInvitation, invitationState])
+  }, [acceptInvitation, currentUser?.username, invitationState])
 
   const families = useMemo(() => {
     if (!spaces) return []
     return spaces.flatMap((row) => row.space ? [{ membership: row.membership, space: row.space }] : [])
   }, [spaces])
 
+  if (currentUser === undefined) return <LiveStatus message="Preparing your Saathi profile…" />
+  if (!currentUser.username) return <UsernameSetup onExit={onExit} />
   if (invitationState === 'accepting') return <LiveStatus message="Adding you to the invited family…" />
   if (invitationState === 'error') return <InvitationError message={invitationError} onDismiss={() => { clearInvitationToken(); setInvitationState('idle') }} />
   if (spaces === undefined) return <LiveStatus message="Loading your private family spaces…" />
@@ -92,6 +100,47 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
 
   const family = families.find(({ space }) => space._id === selectedSpaceId) ?? families[0]
   return <LiveFamilyShell families={families} family={family} onSelectFamily={setSelectedSpaceId} onExit={onExit} />
+}
+
+function UsernameSetup({ onExit }: { onExit: () => void }) {
+  const setUsername = useMutation(api.users.setUsername)
+  const [username, setUsernameDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await setUsername({ username })
+    } catch (caught) {
+      const code = convexErrorCode(caught)
+      setError(code === 'USERNAME_TAKEN'
+        ? 'That username is already being used. Try another one.'
+        : code === 'USERNAME_RESERVED'
+          ? 'That username is kept for Saathi. Try another one.'
+          : 'Start with a letter and use 3–24 letters, numbers, or underscores.')
+      setBusy(false)
+    }
+  }
+
+  return <main className="onboarding-page username-onboarding">
+    <button className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</button>
+    <section className="onboarding-card">
+      <Badge className="mode-badge live"><MessageSquareText size={15} /> One last step</Badge>
+      <h1>How should your family tag you?</h1>
+      <p>Choose a short username for family chats. People can type it after @ when they want your attention.</p>
+      <form onSubmit={submit}>
+        <label htmlFor="username">Your username</label>
+        <div className="username-field"><span aria-hidden="true">@</span><input id="username" value={username} onChange={event => setUsernameDraft(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} placeholder="priya_shah" minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" autoComplete="username" required autoFocus /></div>
+        <small className="username-help">Start with a letter. Use letters, numbers, or underscores.</small>
+        <Button className="primary large" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Continue to chat'} <ArrowRight /></Button>
+      </form>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="security-note"><ShieldCheck /><span><strong>Visible only where you belong</strong>Your username appears to people in your shared family chats.</span></div>
+    </section>
+  </main>
 }
 
 function CreateFirstFamily({ onExit }: { onExit: () => void }) {
@@ -382,6 +431,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   onInvite?: () => void
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
+  const mentionCandidates = useQuery(api.mentions.candidates, { roomId: room._id })
   const generatedImages = useQuery(api.images.forRoom, { roomId: room._id, limit: 20 })
   const attachments = useQuery(api.attachments.forRoom, { roomId: room._id, limit: 40 })
   const saathi = useQuery(api.agents.forRoom, { roomId: room._id })
@@ -401,6 +451,8 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   const [error, setError] = useState('')
   const [uploads, setUploads] = useState<PendingUpload[]>([])
   const [dragActive, setDragActive] = useState(false)
+  const [mentionMatch, setMentionMatch] = useState<{ start: number; end: number; query: string } | null>(null)
+  const [activeMention, setActiveMention] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -412,6 +464,12 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
   const attachmentMessageIds = useMemo(() => new Set((attachments ?? []).map((item) => item.messageId)), [attachments])
   const voice = useLiveVoice(room._id)
+  const filteredMentions = useMemo(() => {
+    if (!mentionMatch || !mentionCandidates) return []
+    return mentionCandidates.filter(candidate =>
+      candidate.username.startsWith(mentionMatch.query) || candidate.label.toLowerCase().startsWith(mentionMatch.query),
+    ).slice(0, 8)
+  }, [mentionCandidates, mentionMatch])
   const timeline = useMemo(() => [
     ...(messages ?? []).filter((item) => !attachmentMessageIds.has(item._id)).map((item) => ({ kind: 'message' as const, createdAt: item.createdAt, item })),
     ...(generatedImages ?? []).map((item) => ({ kind: 'image' as const, createdAt: item.createdAt, item })),
@@ -432,6 +490,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
     try {
       await postMessage({ roomId: room._id, text, language: profile?.preferredLanguage ?? 'en', clientOperationId: crypto.randomUUID().replaceAll('-', '') })
       setMessage('')
+      setMentionMatch(null)
     } catch {
       setError('Your message could not be shared. Please try again.')
     } finally {
@@ -439,7 +498,45 @@ function LiveRoom({ room, family, onBack, onInvite }: {
     }
   }
 
+  const updateMentionMatch = (value: string, caret: number | null) => {
+    if (caret === null) return setMentionMatch(null)
+    const prefix = value.slice(0, caret)
+    const match = prefix.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/)
+    setMentionMatch(match ? { start: caret - match[1].length - 1, end: caret, query: match[1].toLowerCase() } : null)
+    setActiveMention(0)
+  }
+
+  const chooseMention = (candidate: MentionCandidate) => {
+    if (!mentionMatch) return
+    const handle = candidate.kind === 'assistant' ? 'Saathi' : candidate.username
+    const next = `${message.slice(0, mentionMatch.start)}@${handle} ${message.slice(mentionMatch.end)}`
+    const caret = mentionMatch.start + handle.length + 2
+    setMessage(next)
+    setMentionMatch(null)
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(caret, caret)
+    })
+  }
+
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionMatch && filteredMentions.length) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveMention(current => (current + (event.key === 'ArrowDown' ? 1 : -1) + filteredMentions.length) % filteredMentions.length)
+        return
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        chooseMention(filteredMentions[activeMention] ?? filteredMentions[0])
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMentionMatch(null)
+        return
+      }
+    }
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
     event.preventDefault()
     event.currentTarget.form?.requestSubmit()
@@ -571,7 +668,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
                 ? <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
                 : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p></div></article>
             : entry.item.actorType === 'user'
-            ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>You · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
+            ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
                 <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <button type="button" className="share-family-mail" onClick={() => { const match = pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey); if (match) void shareMoney({ inboxItemId: match._id }) }}>Share with family inbox</button>}</div></div>
@@ -632,7 +729,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
               </div>
             </details>
           </div>
-          <span>Ask naturally—Saathi can also change settings here.</span>
+          <span>Type @ to tag someone or ask @Saathi.</span>
         </div>
         {imageOpen && <ImagePromptBox
           prompt={imageDraft}
@@ -654,21 +751,43 @@ function LiveRoom({ room, family, onBack, onInvite }: {
           <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files, 'library')} />
           <input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => chooseFiles(event.target.files, 'camera')} />
           <input ref={receiptInputRef} className="visually-hidden" type="file" accept="image/*,application/pdf" onChange={(event) => chooseFiles(event.target.files, 'receipt')} />
-          <textarea ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder={room.type === 'private' ? 'Ask Saathi anything…' : 'Message your family or ask Saathi…'} aria-label="Message for your family" rows={1} />
+          {mentionMatch && <div className="mention-menu" role="listbox" aria-label="People you can mention">
+            {mentionCandidates === undefined && <span className="mention-loading">Finding people…</span>}
+            {mentionCandidates !== undefined && filteredMentions.length === 0 && <span className="mention-empty">No matching person in this chat</span>}
+            {filteredMentions.map((candidate, index) => <button type="button" role="option" aria-selected={index === activeMention} className={index === activeMention ? 'active' : ''} key={`${candidate.kind}-${candidate.username}`} onMouseDown={event => event.preventDefault()} onClick={() => chooseMention(candidate)}>
+              <b>{candidate.kind === 'assistant' ? <Bot /> : initialsFor(candidate.label)}</b><span><strong>@{candidate.kind === 'assistant' ? 'Saathi' : candidate.username}</strong><small>{candidate.kind === 'assistant' ? 'Family assistant' : candidate.label}</small></span>
+            </button>)}
+          </div>}
+          <textarea ref={textareaRef} value={message} onChange={(event) => { setMessage(event.target.value); updateMentionMatch(event.target.value, event.target.selectionStart) }} onSelect={(event) => updateMentionMatch(event.currentTarget.value, event.currentTarget.selectionStart)} onKeyDown={handleComposerKeyDown} placeholder={room.type === 'private' ? 'Ask Saathi anything… Type @ to tag' : 'Message your family… Type @ to tag'} aria-label="Message for your family" aria-autocomplete="list" aria-expanded={Boolean(mentionMatch)} rows={1} />
           <Button className="composer-attachment" variant="ghost" size="icon" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></Button>
           <Button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></Button>
         </form>
         {error && <p className="dark-form-error" role="alert">{error}</p>}
         {voice.error && <p className="dark-form-error" role="alert">{voice.error}</p>}
       </footer>
-      {isVoiceCallOpen(voice.status) && <VoiceCallOverlay status={voice.status} turns={voice.turns} voiceLevel={voice.voiceLevel} onMute={voice.toggleMute} onEnd={voice.end} />}
+      {isVoiceCallOpen(voice.status) && <VoiceCallOverlay
+        status={voice.status}
+        turns={voice.turns}
+        activities={voice.activities}
+        computerTool={voice.computerTool}
+        voiceLevel={voice.voiceLevel}
+        onMute={voice.toggleMute}
+        onEnd={voice.end}
+      />}
     </section>
   )
 }
 
-function VoiceCallOverlay({ status, turns, voiceLevel, onMute, onEnd }: {
+function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, onMute, onEnd }: {
   status: VoiceStatus
   turns: VoiceTurn[]
+  activities: VoiceToolActivity[]
+  computerTool: {
+    callId: string
+    task: string
+    liveViewUrl?: string
+    interactiveLiveViewUrl?: string
+  } | null | undefined
   voiceLevel: number
   onMute: () => void
   onEnd: () => void
@@ -700,17 +819,22 @@ function VoiceCallOverlay({ status, turns, voiceLevel, onMute, onEnd }: {
         <div><span>LIVE VOICE</span><h2 id="voice-call-title">Talking with Saathi</h2></div>
         <span className={`voice-call-status ${status === 'muted' ? 'is-muted' : ''}`}><i />{statusText}</span>
       </header>
-      <div className="voice-orb-stage">
-        <VoiceBlob level={voiceLevel} muted={status === 'muted'} />
-      </div>
-      <div className="voice-live-transcript" aria-live="polite" aria-label="Live call transcript">
-        {turns.length === 0
-          ? <div className="voice-transcript-placeholder"><AudioLines /><p>{status === 'live' || status === 'muted' ? 'Start speaking. Your words will appear here.' : 'Your live transcript will appear here.'}</p></div>
-          : turns.map((turn, index) => <div className={`voice-caption ${turn.role}`} key={`${turn.role}-${turn.startMs}-${index}`}>
-              <strong>{turn.role === 'user' ? 'You' : 'Saathi'}</strong>
-              <p>{turn.text}{index === turns.length - 1 && <i className="transcript-cursor" />}</p>
-            </div>)}
-        <div ref={transcriptEndRef} />
+      <div className={`voice-call-body ${activities.length ? 'has-activity' : ''}`}>
+        <div className="voice-call-presence">
+          <div className="voice-orb-stage">
+            <VoiceBlob level={voiceLevel} muted={status === 'muted'} />
+          </div>
+          <div className="voice-live-transcript" aria-live="polite" aria-label="Live call transcript">
+            {turns.length === 0
+              ? <div className="voice-transcript-placeholder"><AudioLines /><p>{status === 'live' || status === 'muted' ? 'Start speaking. Your words will appear here.' : 'Your live transcript will appear here.'}</p></div>
+              : turns.map((turn, index) => <div className={`voice-caption ${turn.role}`} key={`${turn.role}-${turn.startMs}-${index}`}>
+                  <strong>{turn.role === 'user' ? 'You' : 'Saathi'}</strong>
+                  <p>{turn.text}{index === turns.length - 1 && <i className="transcript-cursor" />}</p>
+                </div>)}
+            <div ref={transcriptEndRef} />
+          </div>
+        </div>
+        {activities.length > 0 && <VoiceActivityPanel activities={activities} computerTool={computerTool} />}
       </div>
       <footer className="voice-call-controls">
         <button type="button" className={status === 'muted' ? 'is-muted' : ''} onClick={onMute} disabled={!['live', 'muted'].includes(status)} aria-label={status === 'muted' ? 'Unmute microphone' : 'Mute microphone'}>
@@ -724,6 +848,62 @@ function VoiceCallOverlay({ status, turns, voiceLevel, onMute, onEnd }: {
   </div>
 }
 
+function VoiceActivityPanel({ activities, computerTool }: {
+  activities: VoiceToolActivity[]
+  computerTool: {
+    callId: string
+    task: string
+    liveViewUrl?: string
+    interactiveLiveViewUrl?: string
+  } | null | undefined
+}) {
+  const activityListRef = useRef<HTMLDivElement>(null)
+  const hasRunningActivity = activities.some(activity => activity.status === 'running')
+
+  useEffect(() => {
+    const list = activityListRef.current
+    const current = list?.querySelector('.voice-activity-card.running') ?? list?.lastElementChild
+    current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [activities, computerTool?.liveViewUrl, computerTool?.interactiveLiveViewUrl])
+
+  return <aside className="voice-activity-panel" aria-label="Saathi actions" aria-live="polite">
+    <header><span>Working with you</span><small>Actions and handoffs stay in this call</small></header>
+    <div className="voice-activity-list" ref={activityListRef}>
+      {activities.map(activity => {
+        const liveViewUrl = computerTool?.callId === activity.id
+          ? computerTool.interactiveLiveViewUrl || computerTool.liveViewUrl
+          : ''
+        const compact = hasRunningActivity && activity.status === 'complete'
+        return <article className={`voice-activity-card ${activity.status} ${compact ? 'compact' : ''}`} key={activity.id}>
+          <div className="voice-activity-heading">
+            <span className="voice-activity-icon">{voiceActivityIcon(activity.name)}</span>
+            <span><strong>{activity.title}</strong><small>{activity.status === 'running' ? 'In progress' : activity.status === 'complete' ? 'Done' : 'Needs attention'}</small></span>
+            {activity.status === 'running' ? <i className="voice-activity-spinner" /> : activity.status === 'complete' ? <Check /> : <X />}
+          </div>
+          {!compact && activity.detail && <p className="voice-activity-detail">{activity.detail}</p>}
+          {liveViewUrl && <div className="voice-computer-handoff">
+            <div><Monitor /><span><strong>Your turn in the browser</strong><small>Sign in here if needed. Saathi never asks for your password.</small></span></div>
+            <a href={liveViewUrl} target="_blank" rel="noreferrer">Open full browser</a>
+            <iframe title="Saathi voice live browser" src={liveViewUrl} allow="clipboard-write" referrerPolicy="no-referrer" />
+          </div>}
+          {!compact && activity.imageUrl && <figure className="voice-generated-image"><img src={activity.imageUrl} alt={activity.detail} /><figcaption>Created and saved in this conversation</figcaption></figure>}
+          {!compact && activity.result && activity.name === 'search_public_web'
+            ? <div className="voice-activity-result"><AssistantText text={activity.result} /></div>
+            : !compact && activity.result && <p className="voice-activity-result">{activity.result}</p>}
+        </article>
+      })}
+    </div>
+  </aside>
+}
+
+function voiceActivityIcon(name: VoiceToolActivity['name']) {
+  if (name === 'search_public_web') return <Search />
+  if (name === 'generate_image') return <ImageIcon />
+  if (name === 'use_computer') return <Monitor />
+  if (name === 'remember' || name === 'recall') return <Sparkles />
+  return <Settings2 />
+}
+
 function isVoiceCallOpen(status: VoiceStatus) {
   return status === 'requesting' || status === 'connecting' || status === 'live' || status === 'muted' || status === 'ending'
 }
@@ -734,6 +914,15 @@ function AssistantText({ text }: { text: string }) {
       ? <a href={href} target="_blank" rel="noreferrer">{children}</a>
       : <span>{children}</span>,
   }}>{text}</ReactMarkdown></div>
+}
+
+function MentionText({ text, mentions }: { text: string; mentions?: Doc<'messages'>['mentions'] }) {
+  if (!mentions?.length) return text
+  const handles = new Set(mentions.map(mention => mention.username.toLowerCase()))
+  return text.split(/(@[a-z][a-z0-9_]*)/gi).map((part, index) => {
+    const username = part.startsWith('@') ? part.slice(1).toLowerCase() : ''
+    return handles.has(username) ? <mark className="chat-mention" key={`${part}-${index}`}>{part}</mark> : part
+  })
 }
 
 function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove }: {

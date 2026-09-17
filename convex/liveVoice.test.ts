@@ -35,6 +35,7 @@ describe("GPT-Live call summaries", () => {
       });
       await ctx.db.insert("liveVoiceSessions", { sessionId: "live_asymmetric_session_123", spaceId, roomId, startedBy: ownerId, createdAt: now });
       await ctx.db.insert("liveVoiceSessions", { sessionId: "live_empty_session_456", spaceId, roomId, startedBy: ownerId, createdAt: now + 1 });
+      await ctx.db.insert("liveVoiceSessions", { sessionId: "live_browser_session_789", spaceId, roomId, startedBy: ownerId, createdAt: now + 2 });
       return { roomId, ownerId, outsiderId, oldAssistantId, oldUserId };
     });
     const owner = t.withIdentity({ subject: String(ownerId) });
@@ -44,6 +45,48 @@ describe("GPT-Live call summaries", () => {
       sessionId: "live_asymmetric_session_123",
       summary: "The family agreed that Saathi should reply in Marathi and confirm the travel time.",
     };
+
+    await owner.mutation(internal.liveVoice.prepareComputerTool, {
+      roomId,
+      sessionId: "live_browser_session_789",
+      callId: "call_browser_handoff",
+      task: "Open the school parent login page",
+    });
+    await owner.mutation(internal.liveVoice.updateComputerView, {
+      roomId,
+      sessionId: "live_browser_session_789",
+      callId: "call_browser_handoff",
+      liveViewUrl: "https://example.test/view-only",
+      interactiveLiveViewUrl: "https://example.test/interactive",
+    });
+    await owner.mutation(internal.liveVoice.updateComputerView, {
+      roomId,
+      sessionId: "live_browser_session_789",
+      callId: "stale-call",
+      interactiveLiveViewUrl: "https://attacker.example.test/stale",
+    });
+    await expect(owner.query(api.liveVoice.computerToolState, {
+      roomId,
+      sessionId: "live_browser_session_789",
+    })).resolves.toEqual({
+      callId: "call_browser_handoff",
+      task: "Open the school parent login page",
+      liveViewUrl: "https://example.test/view-only",
+      interactiveLiveViewUrl: "https://example.test/interactive",
+    });
+    await expect(outsider.query(api.liveVoice.computerToolState, {
+      roomId,
+      sessionId: "live_browser_session_789",
+    })).resolves.toBeNull();
+    await owner.mutation(internal.liveVoice.finishComputerTool, {
+      roomId,
+      sessionId: "live_browser_session_789",
+      callId: "call_browser_handoff",
+    });
+    await expect(owner.query(api.liveVoice.computerToolState, {
+      roomId,
+      sessionId: "live_browser_session_789",
+    })).resolves.toBeNull();
 
     await expect(outsider.mutation(internal.liveVoice.storeSummary, args)).rejects.toThrow(/does not belong/i);
     await expect(owner.mutation(internal.liveVoice.storeSummary, args)).resolves.toBe("saved");

@@ -54,6 +54,10 @@ export const messages = query({
   args: { roomId: v.id("rooms"), limit: v.optional(v.number()) },
   handler: async (ctx, { roomId, limit }) => {
     await requireRoomPermission(ctx, roomId, "read");
-    return ctx.db.query("messages").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(Math.min(Math.max(limit ?? 50, 1), 100));
+    const messages = await ctx.db.query("messages").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(Math.min(Math.max(limit ?? 50, 1), 100));
+    return Promise.all(messages.map(async message => {
+      const author = message.authorUserId ? await ctx.db.get(message.authorUserId) : null;
+      return { ...message, authorUsername: author?.username };
+    }));
   },
 });

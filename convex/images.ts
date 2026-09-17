@@ -38,8 +38,8 @@ export const createFromVoice = action({
     style: v.optional(v.string()),
     language: v.optional(v.string()),
   },
-  returns: v.object({ ok: v.boolean(), message: v.string() }),
-  handler: async (ctx, args): Promise<{ ok: boolean; message: string }> => {
+  returns: v.object({ ok: v.boolean(), message: v.string(), imageUrl: v.optional(v.string()) }),
+  handler: async (ctx, args): Promise<{ ok: boolean; message: string; imageUrl?: string }> => {
     const prepared: { userId: Id<"users">; spaceId: Id<"spaces">; style: ImageStyle; language: ImageLanguage } | null =
       await ctx.runQuery(internal.images.prepareCreate, { roomId: args.roomId });
     if (!prepared) return { ok: false, message: "You do not have permission to add an image here." };
@@ -59,7 +59,12 @@ export const createFromVoice = action({
         await ctx.storage.delete(storageId);
         return { ok: false, message: "The image was discarded because room access changed." };
       }
-      return { ok: true, message: "The family-safe image is now in this conversation." };
+      const imageUrl = await ctx.storage.getUrl(storageId);
+      return {
+        ok: true,
+        message: "The family-safe image is now in this conversation.",
+        imageUrl: imageUrl ?? undefined,
+      };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Saathi could not create that image." };
     }

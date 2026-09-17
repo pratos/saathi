@@ -27,12 +27,11 @@ import type * as invitations from "../invitations.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_saathi from "../lib/saathi.js";
 import type * as liveVoice from "../liveVoice.js";
+import type * as mentions from "../mentions.js";
 import type * as messages from "../messages.js";
-import type * as modelProfiles from "../modelProfiles.js";
 import type * as rooms from "../rooms.js";
 import type * as spaces from "../spaces.js";
 import type * as users from "../users.js";
-import type * as voiceNotes from "../voiceNotes.js";
 
 import type {
   ApiFromModules,
@@ -60,12 +59,11 @@ declare const fullApi: ApiFromModules<{
   "lib/authz": typeof lib_authz;
   "lib/saathi": typeof lib_saathi;
   liveVoice: typeof liveVoice;
+  mentions: typeof mentions;
   messages: typeof messages;
-  modelProfiles: typeof modelProfiles;
   rooms: typeof rooms;
   spaces: typeof spaces;
   users: typeof users;
-  voiceNotes: typeof voiceNotes;
 }>;
 
 /**

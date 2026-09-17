@@ -14,7 +14,6 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
    - `FIRECRAWL_WEBHOOK_SECRET` (recommended for durable crawls)
    - `OPENAI_API_KEY` (required for GPT-Live voice conversations and inbox extraction)
    - `OPENROUTER_API_KEY` (durable Saathi agents using DeepSeek V4.1 Flash)
-   - `SARVAM_API_KEY` (Saaras voice-note transcription)
    - `COMPOSIO_API_KEY` (optional; enables member-managed Gmail OAuth and ingestion)
    - `COMPOSIO_WEBHOOK_SECRET` (optional until Gmail is enabled; verifies Composio Standard Webhooks)
 4. Register `https://<deployment>.convex.site/agentmail/webhook` in AgentMail. Firecrawl's component webhook is mounted at `/firecrawl/webhook`.
@@ -38,7 +37,6 @@ Provider credentials do not belong in GitHub Actions. Configure these directly o
 - `FIRECRAWL_API_KEY`; `FIRECRAWL_WEBHOOK_SECRET` is recommended for durable crawls.
 - `OPENROUTER_API_KEY` for the default family model.
 - `OPENAI_API_KEY` for inbox extraction and optional OpenAI model profiles.
-- `SARVAM_API_KEY` for voice-note transcription.
 - `COMPOSIO_API_KEY` and `COMPOSIO_WEBHOOK_SECRET` to enable private Gmail connections.
 - `OPENAI_MODEL_LUNA`, `OPENAI_MODEL_TERRA`, `OPENAI_MODEL_SOL`, and `OPENAI_MODEL_ASTRA` when those optional profiles are enabled.
 
@@ -46,17 +44,15 @@ Provider credentials do not belong in GitHub Actions. Configure these directly o
 
 Call `users.ensureCurrent` once after authentication, then scope every family request with a selected `spaceId`. Static routes are registered last so auth discovery and webhook routes cannot be swallowed by SPA fallback.
 
-Voice notes use `voiceNotes.generateUploadUrl` followed by a direct browser upload and `voiceNotes.submit`. Submission accepts recordings up to 30 seconds and 5 MB, validates the stored MIME type, re-checks room posting permission, and schedules a server-side Sarvam transcription. Clients read the audio URL and live transcript status through `voiceNotes.getByMessage`.
+Live conversations use browser WebRTC with `gpt-live-1`. The authenticated `liveVoice.startSession` action exchanges the browser SDP offer while keeping `OPENAI_API_KEY` server-side; hosted web search is available through Responses delegation. Transcript deltas remain in the full-screen call UI while people speak. Voice tool calls use the same application capability contract as text chat and appear as in-call action cards. Image results render in the call and persist in the room; Firecrawl computer use publishes a session-owned interactive browser handoff without exposing credentials to Saathi. Session ownership is rechecked at close, and exactly one concise summary is inserted idempotently without invoking the text agent; existing transcript rows remain readable. The browser never receives the permanent OpenAI key.
 
-Live conversations use browser WebRTC with `gpt-live-1`. The authenticated `liveVoice.startSession` action exchanges the browser SDP offer while keeping `OPENAI_API_KEY` server-side; hosted web search is available through Responses delegation. Transcript deltas remain in the full-screen call UI while people speak. Session ownership is rechecked at close, and exactly one concise summary is inserted idempotently without invoking the text agent; existing transcript rows remain readable. The browser never receives the permanent OpenAI key.
-
-Each active family member can create one automatic-assistant **My Saathi** room per family. Access always requires an explicit `roomMembers` grant: family ownership does not bypass the private-room check. Messages, files, voice notes, and GPT-Live calls reuse the same room authorization boundary.
+Each active family member can create one automatic-assistant **My Saathi** room per family. Access always requires an explicit `roomMembers` grant: family ownership does not bypass the private-room check. Messages, files, and GPT-Live calls reuse the same room authorization boundary.
 
 Gmail uses Composio-managed OAuth through Sessions with explicit multi-account selection. Saath stores connected-account identifiers and display metadata, never OAuth credentials or tokens. A new connection schedules a 30-day `GMAIL_FETCH_EMAILS` inbox backfill, and `GMAIL_NEW_GMAIL_MESSAGE` events enter through `POST /composio/webhook`. The endpoint verifies Standard Webhooks headers with a 300-second replay window. Only bills, purchase receipts, and bank notices are kept privately in My Saathi. Sharing an item from that DM makes it visible in the family inbox. Approved food-delivery receipts count toward the family's monthly food budget. Swiggy MCP ordering is not connected. To enable production delivery, set the two Composio variables above and register `https://giant-caiman-748.convex.site/composio/webhook` as the project webhook in Composio. Registration changes shared external state and is intentionally not performed by the application deployment.
 
 Family owners can send seven-day email invitations from the family workspace. Invitation URLs contain a random bearer token, but Convex stores only its SHA-256 hash. Acceptance requires Convex Auth to verify the exact invited email address, then atomically grants the family membership and shared-room access. Owners can revoke pending invitations.
 
-Durable Saathi sessions use `agents.create`, `agents.send`, and `agents.get`. Every agent belongs to one family room, inherits that room's RBAC, serializes prompts through a FIFO mailbox, and uses bounded transcript context plus explicit memory. Exact attempt leases reject late results after worker recovery. Client operation IDs make create/send retries idempotent, and prompts are rate limited per family and user. The Node action runtime is pinned to Node 22 in `convex.json`.
+Durable Saathi sessions are created lazily from room messages and use `agents.send` for retries plus `agents.forRoom` for status. Every agent belongs to one family room, inherits that room's RBAC, serializes prompts through a FIFO mailbox, and uses bounded transcript context plus explicit memory. Exact attempt leases reject late results after worker recovery. Client operation IDs make sends idempotent, and prompts are rate limited per family and user. The Node action runtime is pinned to Node 22 in `convex.json`.
 
 Family owners can paste an OpenAI, OpenRouter, or Codex API key under **Your keys**. Secrets are encrypted at rest and never returned to the browser; only the last four characters are shown. ChatGPT login is not an API and is not supported. Saved keys override the deployment defaults for that family.
 

@@ -53,6 +53,11 @@ describe("Jev decision records", () => {
     await expect(admin.query(api.jev.benchmarkReport, {})).resolves.toMatchObject({
       routing: { passed: 39, total: 39, wrongRestrictedBundles: 0, fullToolFallbacks: 8 },
       memory: { passed: 33, total: 36 },
+      toolSelection: {
+        model: "openai/gpt-5.6-luna",
+        currentCatalog: { passed: 30, total: 39, wrongCalls: 7 },
+        expandedCatalog: { passed: 32, total: 39, wrongCalls: 2 },
+      },
       comparison: { uncachedSavingsPercent: 66.8 },
       scale: { fullToolCount: 200, selectedToolCount: 10, schemaReductionPercent: 95, routedUncachedCostPerTurnUsd: 0.00059403 },
     });

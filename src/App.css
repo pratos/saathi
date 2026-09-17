@@ -1653,7 +1653,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .benchmark-report-heading h2 { margin: 7px 0 0; font: 600 28px 'Newsreader', Georgia, serif; }
 .benchmark-report-heading > small { color: #697283; font-size: 11px; line-height: 1.65; text-align: right; }
 .benchmark-table-wrap { overflow-x: auto; border: 1px solid #d8d2c8; border-radius: 14px; }
-.benchmark-decision-table { width: 100%; min-width: 830px; border-collapse: collapse; font-size: 11px; line-height: 1.45; }
+.benchmark-decision-table { width: 100%; min-width: 1040px; border-collapse: collapse; font-size: 11px; line-height: 1.45; }
 .benchmark-decision-table th, .benchmark-decision-table td { padding: 16px 14px; border-bottom: 1px solid #e4ded4; text-align: left; vertical-align: middle; }
 .benchmark-decision-table thead th { color: #697283; background: #f5f1e9; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
 .benchmark-decision-table tbody th { min-width: 170px; font-size: 12px; }
@@ -1724,10 +1724,12 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   .benchmark-decision-table tbody th { padding: 13px 14px 9px; border-bottom: 1px solid #e4ded4; }
   .benchmark-decision-table tbody td { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 9px 14px; border: 0; }
   .benchmark-decision-table tbody td::before { color: #697283; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-  .benchmark-decision-table tbody td:nth-of-type(1)::before { content: 'Cost / turn'; }
-  .benchmark-decision-table tbody td:nth-of-type(2)::before { content: 'Routing latency'; }
-  .benchmark-decision-table tbody td:nth-of-type(3)::before { content: 'Accuracy'; }
-  .benchmark-decision-table tbody td:nth-of-type(4)::before { content: 'Notes'; }
+  .benchmark-decision-table tbody td:nth-of-type(1)::before { content: 'Accuracy'; }
+  .benchmark-decision-table tbody td:nth-of-type(2)::before { content: 'Wrong / safety'; }
+  .benchmark-decision-table tbody td:nth-of-type(3)::before { content: 'Median'; }
+  .benchmark-decision-table tbody td:nth-of-type(4)::before { content: 'P95'; }
+  .benchmark-decision-table tbody td:nth-of-type(5)::before { content: 'Cost'; }
+  .benchmark-decision-table tbody td:nth-of-type(6)::before { content: 'Notes'; }
   .benchmark-verdicts { grid-template-columns: 1fr; }
   .benchmark-verdicts article { min-height: 0; border-right: 0; border-bottom: 1px solid #d8d2c8; }
   .benchmark-verdicts article:last-child { border-bottom: 0; }

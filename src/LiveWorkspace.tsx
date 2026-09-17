@@ -456,8 +456,11 @@ function BenchmarkAdminPage({ onClose }: { onClose: () => void }) {
 
 export function BenchmarkReportView({ report, onClose }: { report: BenchmarkReport; onClose: () => void }) {
   const combinedBenchmarkCost = report.routing.costUsd + report.memory.costUsd
+    + report.toolSelection.currentCatalog.totalCostUsd + report.toolSelection.expandedCatalog.totalCostUsd
   const uncachedSavings = report.comparison.fullTools.uncachedCostPerTurnUsd - report.comparison.jevBundles.combinedUncachedCostPerTurnUsd
   const cachedDifference = report.comparison.jevBundles.combinedCachedCostPerTurnUsd - report.comparison.fullTools.cachedCostPerTurnUsd
+  const currentSelection = report.toolSelection.currentCatalog
+  const expandedSelection = report.toolSelection.expandedCatalog
 
   return <div className="benchmark-admin-page">
     <header className="benchmark-admin-header">
@@ -482,26 +485,25 @@ export function BenchmarkReportView({ report, onClose }: { report: BenchmarkRepo
 
       <section className="benchmark-panel benchmark-decision-panel">
         <div className="benchmark-report-heading">
-          <div><span>Tool-routing benchmark</span><h2>Cost, latency, accuracy, and tradeoffs</h2></div>
-          <small>{report.routing.total} live cases<br />3 languages<br />{report.routing.multiTurnTotal} multi-turn cases</small>
+          <div><span>Luna tool-selection benchmark</span><h2>Cost, latency, accuracy, and tradeoffs</h2></div>
+          <small>{currentSelection.total} live cases<br />{report.toolSelection.repetitions} ordered repetition<br />Exact tool-set scoring</small>
         </div>
         <div className="benchmark-table-wrap">
           <table className="benchmark-decision-table">
-            <thead><tr><th>Approach</th><th>Cost / turn</th><th>Routing latency</th><th>Accuracy</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Candidate</th><th>Accuracy</th><th>Wrong / safety</th><th>Median</th><th>P95</th><th>Cost</th><th>Notes</th></tr></thead>
             <tbody>
-              <tr><th>Full list · 15 tools</th><td><strong>{formatTinyUsd(report.comparison.fullTools.uncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)} warm</td><td>0 ms added router<br /><small>Pi not measured</small></td><td>Not benchmarked</td><td>Stable cache prefix; every tool is visible to Pi.</td></tr>
-              <tr className="recommended"><th><span>Jev routed · 15 tools</span><b>Preferred when cold</b></th><td><strong>{formatTinyUsd(report.comparison.jevBundles.combinedUncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.comparison.jevBundles.combinedCachedCostPerTurnUsd)} warm</td><td><strong>+{report.routing.averageLatencyMs} ms</strong> average<br /><small>Jev only</small></td><td><strong>{report.routing.passed}/{report.routing.total}</strong> routes<br />0 wrong bundles</td><td>{report.routing.fullToolFallbacks} uncertain turns failed open to all tools; cache varies by bundle.</td></tr>
-              <tr><th>Full list · 200 tools</th><td><strong>{formatTinyUsd(report.scale.fullUncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.scale.fullCachedCostPerTurnUsd)} warm</td><td>0 ms added router<br /><small>Pi not measured</small></td><td>Not measured</td><td>Synthetic schema-cost baseline, not an exact-tool accuracy run.</td></tr>
-              <tr className="recommended"><th><span>Jev routed · 200 tools</span><b>Simulated</b></th><td><strong>{formatTinyUsd(report.scale.routedUncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.scale.routedCachedCostPerTurnUsd)} warm</td><td>~+{report.routing.averageLatencyMs} ms<br /><small>extrapolated</small></td><td>Not tested at 200</td><td>{report.scale.selectedToolCount}-tool domain selected; {report.scale.schemaReductionPercent}% schema reduction. Needs a real 200-tool accuracy benchmark.</td></tr>
+              <tr><th>Pi full list · {currentSelection.toolCount} tools</th><td><strong>{(currentSelection.passed / currentSelection.total * 100).toFixed(1)}%</strong><br /><small>{currentSelection.passed}/{currentSelection.total} exact</small></td><td>{currentSelection.wrongCalls} wrong<br /><small>{currentSelection.safetySignificantCalls} safety-significant</small></td><td><strong>{currentSelection.medianLatencyMs.toLocaleString()} ms</strong></td><td><strong>{currentSelection.p95LatencyMs.toLocaleString()} ms</strong></td><td><strong>{formatTinyUsd(currentSelection.totalCostUsd)}</strong><br /><small>{formatTinyUsd(currentSelection.averageCostPerTurnUsd)} / turn</small></td><td>Measured with the current catalog and warm provider cache behavior.</td></tr>
+              <tr><th>Pi full list · {expandedSelection.toolCount} tools</th><td><strong>{(expandedSelection.passed / expandedSelection.total * 100).toFixed(1)}%</strong><br /><small>{expandedSelection.passed}/{expandedSelection.total} exact</small></td><td>{expandedSelection.wrongCalls} wrong<br /><small>{expandedSelection.safetySignificantCalls} safety-significant</small></td><td><strong>{expandedSelection.medianLatencyMs.toLocaleString()} ms</strong></td><td><strong>{expandedSelection.p95LatencyMs.toLocaleString()} ms</strong></td><td><strong>{formatTinyUsd(expandedSelection.totalCostUsd)}</strong><br /><small>{formatTinyUsd(expandedSelection.averageCostPerTurnUsd)} / turn</small></td><td>Measured with 185 realistic distractors; one run is insufficient for an accuracy comparison.</td></tr>
+              <tr className="recommended"><th><span>Jev / SystemOne</span><b>Route only</b></th><td><strong>{(report.routing.passed / report.routing.total * 100).toFixed(1)}%</strong><br /><small>{report.routing.passed}/{report.routing.total} routes</small></td><td>0 wrong<br /><small>restricted bundles</small></td><td><strong>{report.routing.averageLatencyMs} ms avg</strong></td><td>Not captured</td><td><strong>{formatTinyUsd(report.routing.costUsd)}</strong><br /><small>{formatTinyUsd(report.routing.costUsd / report.routing.total)} / turn</small></td><td>Route accuracy only; routed Pi exact-tool accuracy and end-to-end latency remain unmeasured.</td></tr>
             </tbody>
           </table>
         </div>
         <div className="benchmark-verdicts">
-          <article><strong>{report.comparison.uncachedSavingsPercent}% cheaper</strong><span>Cold input cost: {formatTinyUsd(report.comparison.jevBundles.combinedUncachedCostPerTurnUsd)} versus {formatTinyUsd(report.comparison.fullTools.uncachedCostPerTurnUsd)}.</span></article>
-          <article><strong>+{report.routing.averageLatencyMs} ms</strong><span>Measured Jev routing overhead; Pi end-to-end latency is not yet measured.</span></article>
-          <article><strong>0 unsafe bundles</strong><span>No confidently narrowed request received the wrong tool bundle.</span></article>
+          <article><strong>2.7× slower</strong><span>Median latency grew from {currentSelection.medianLatencyMs} to {expandedSelection.medianLatencyMs.toLocaleString()} ms; p95 grew 3.4×.</span></article>
+          <article><strong>2.3× cost</strong><span>Total provider cost grew from {formatTinyUsd(currentSelection.totalCostUsd)} to {formatTinyUsd(expandedSelection.totalCostUsd)}.</span></article>
+          <article><strong>No accuracy win yet</strong><span>32/39 versus 30/39 is a single-run difference; the 200-tool run still made {expandedSelection.safetySignificantCalls} safety-significant calls.</span></article>
         </div>
-        <p className="benchmark-evidence-note">Measured routing and synthetic scale results are deliberately separate. The 200-tool rows estimate schema size and cost only; they do not claim production accuracy or latency.</p>
+        <p className="benchmark-evidence-note">OpenRouter reported {report.toolSelection.model} from OpenAI for every response. Tool calls were inspected but never executed. The computer omissions may reflect the missing portal URL, so exact-set accuracy should be rerun with adjudicated expectations and at least three repetitions before making a quality claim.</p>
       </section>
 
       <section className="benchmark-panel">

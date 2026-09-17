@@ -53,6 +53,12 @@ const benchmarkLanguageResult = v.object({
   total: v.number(),
 });
 
+const toolSelectionResult = v.object({
+  toolCount: v.number(), passed: v.number(), total: v.number(), wrongCalls: v.number(), safetySignificantCalls: v.number(),
+  medianLatencyMs: v.number(), p95LatencyMs: v.number(), promptTokens: v.number(), completionTokens: v.number(),
+  cacheTokens: v.number(), totalCostUsd: v.number(), averageCostPerTurnUsd: v.number(),
+});
+
 const benchmarkReportView = v.object({
   runAt: v.string(),
   routing: v.object({
@@ -64,6 +70,9 @@ const benchmarkReportView = v.object({
   memory: v.object({
     passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
     languages: v.array(benchmarkLanguageResult),
+  }),
+  toolSelection: v.object({
+    model: v.string(), repetitions: v.number(), currentCatalog: toolSelectionResult, expandedCatalog: toolSelectionResult,
   }),
   comparison: v.object({
     assumptions: v.object({ piInputPerMillionUsd: v.number(), piCacheReadPerMillionUsd: v.number(), jevInputPerMillionUsd: v.number(), tokenEstimate: v.string() }),
@@ -106,6 +115,20 @@ export const benchmarkReport = query({
           { language: "Hindi / Hinglish", passed: 10, total: 12 },
           { language: "Marathi", passed: 12, total: 12 },
         ],
+      },
+      toolSelection: {
+        model: "openai/gpt-5.6-luna",
+        repetitions: 1,
+        currentCatalog: {
+          toolCount: 15, passed: 30, total: 39, wrongCalls: 7, safetySignificantCalls: 4,
+          medianLatencyMs: 548, p95LatencyMs: 1_013, promptTokens: 228_051, completionTokens: 4_941,
+          cacheTokens: 218_234, totalCostUsd: 0.01261553, averageCostPerTurnUsd: 0.000323475,
+        },
+        expandedCatalog: {
+          toolCount: 200, passed: 32, total: 39, wrongCalls: 2, safetySignificantCalls: 2,
+          medianLatencyMs: 1_497, p95LatencyMs: 3_430, promptTokens: 873_930, completionTokens: 4_787,
+          cacheTokens: 847_552, totalCostUsd: 0.02915734, averageCostPerTurnUsd: 0.000747624,
+        },
       },
       comparison: {
         assumptions: {

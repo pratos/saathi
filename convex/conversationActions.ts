@@ -2,8 +2,10 @@ import { ConvexError, v } from "convex/values";
 import { mutation, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import type { ConversationAction } from "./lib/assistantCapabilities";
+import { normalizeMemoryKey } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
-import { imagePreset, imageStyleValidator, type ImageStyle } from "./lib/imageSafety";
+import { imagePreset, imageStyleValidator } from "./lib/imageSafety";
 import { MODEL_TIERS } from "./lib/modelTiers";
 
 const language = v.union(v.literal("en"), v.literal("hi"), v.literal("mr"));
@@ -15,13 +17,9 @@ export const conversationAction = v.union(
   v.object({ type: v.literal("set_image_style"), style: imageStyleValidator }),
   v.object({ type: v.literal("set_food_budget"), amount: v.number(), currency }),
   v.object({ type: v.literal("set_model_tier"), tier: modelTier }),
+  v.object({ type: v.literal("remember"), key: v.string(), value: v.string() }),
+  v.object({ type: v.literal("recall"), key: v.string() }),
 );
-
-type ConversationAction =
-  | { type: "set_language"; language: "en" | "hi" | "mr" }
-  | { type: "set_image_style"; style: ImageStyle }
-  | { type: "set_food_budget"; amount: number; currency: "INR" | "USD" }
-  | { type: "set_model_tier"; tier: keyof typeof MODEL_TIERS };
 
 const result = v.object({ ok: v.boolean(), message: v.string() });
 
@@ -30,7 +28,8 @@ export const execute = mutation({
   returns: result,
   handler: async (ctx, { roomId, action }) => {
     const { userId, membership, room } = await requireRoomPermission(ctx, roomId, "post_message");
-    return applyConversationAction(ctx, room.spaceId, userId, membership.role, action);
+    const agent = await ctx.db.query("agents").withIndex("by_room", q => q.eq("roomId", roomId)).first();
+    return applyConversationAction(ctx, room.spaceId, userId, membership.role, agent?._id ?? null, action);
   },
 });
 
@@ -59,7 +58,7 @@ export const executeForJob = internalMutation({
     if (room?.spaceId !== agent.spaceId || !membership || membership.status !== "active" || !roomMember || roomMember.role === "viewer") {
       throw new ConvexError({ code: "FORBIDDEN", message: "You no longer have permission to change this setting." });
     }
-    return applyConversationAction(ctx, agent.spaceId, job.requestedBy, membership.role, args.action);
+    return applyConversationAction(ctx, agent.spaceId, job.requestedBy, membership.role, agent._id, args.action);
   },
 });
 
@@ -68,6 +67,7 @@ async function applyConversationAction(
   spaceId: Id<"spaces">,
   userId: Id<"users">,
   role: "owner" | "member",
+  agentId: Id<"agents"> | null,
   action: ConversationAction,
 ) {
   if (action.type === "set_language") {
@@ -77,6 +77,25 @@ async function applyConversationAction(
   if (action.type === "set_image_style") {
     await ctx.db.patch(userId, { preferredImageStyle: action.style });
     return { ok: true, message: `Your default image style is now ${imagePreset(action.style).label}.` };
+  }
+  if (action.type === "remember" || action.type === "recall") {
+    if (!agentId) return { ok: false, message: "Saathi memory is not available in this conversation yet." };
+    const key = normalizeMemoryKey(action.key);
+    if (!key || key.length > 100) return { ok: false, message: "Use a short memory label under 100 characters." };
+    const existing = await ctx.db.query("agentMemory").withIndex("by_agent_key", q =>
+      q.eq("agentId", agentId).eq("key", key),
+    ).unique();
+    if (action.type === "recall") {
+      return existing
+        ? { ok: true, message: `${existing.key}: ${existing.value}` }
+        : { ok: false, message: `I don't have a saved fact for “${key}”.` };
+    }
+    const value = action.value.trim();
+    if (!value || value.length > 10_000) return { ok: false, message: "A remembered fact must be between 1 and 10,000 characters." };
+    const now = Date.now();
+    if (existing) await ctx.db.patch(existing._id, { value, updatedAt: now });
+    else await ctx.db.insert("agentMemory", { agentId, key, value, updatedAt: now });
+    return { ok: true, message: `I'll remember ${key}: ${value}` };
   }
   if (role !== "owner") {
     return { ok: false, message: "Only a family owner can change family-wide settings." };
@@ -116,30 +135,3 @@ async function applyConversationAction(
 function languageLabel(value: "en" | "hi" | "mr") {
   return value === "hi" ? "Hindi" : value === "mr" ? "Marathi" : "English";
 }
-
-export const CONVERSATION_ACTION_TOOLS = [
-  {
-    type: "function",
-    name: "set_reading_language",
-    description: "Change the caller's own reading language after they explicitly ask. This affects only that person.",
-    parameters: { type: "object", additionalProperties: false, properties: { language: { type: "string", enum: ["en", "hi", "mr"] } }, required: ["language"] },
-  },
-  {
-    type: "function",
-    name: "set_image_style",
-    description: "Change the caller's default image style after they explicitly ask.",
-    parameters: { type: "object", additionalProperties: false, properties: { style: { type: "string", enum: ["warm_family", "kitchen_table", "festival_home", "storybook", "family_collage", "memory_grid", "scrapbook", "fridge_photos", "infographic", "step_cards", "kids_chart", "wall_poster", "devotional", "diya_aarti", "rangoli", "festival_altar", "watercolor", "flat", "folk_art", "block_print"] } }, required: ["style"] },
-  },
-  {
-    type: "function",
-    name: "set_food_budget",
-    description: "Set the family's monthly food budget after an owner explicitly gives an amount and currency.",
-    parameters: { type: "object", additionalProperties: false, properties: { amount: { type: "number" }, currency: { type: "string", enum: ["INR", "USD"] } }, required: ["amount", "currency"] },
-  },
-  {
-    type: "function",
-    name: "set_model_tier",
-    description: "Change how deeply Saathi thinks for this family after an owner explicitly asks. med is the normal default; high and ultra use more resources.",
-    parameters: { type: "object", additionalProperties: false, properties: { tier: { type: "string", enum: ["low", "med", "high", "ultra"] } }, required: ["tier"] },
-  },
-] as const;

@@ -188,7 +188,15 @@ export default defineSchema({
     .index("by_agent_client_operation", ["agentId", "clientOperationId"]),
   agentMemory: defineTable({
     agentId: v.id("agents"), key: v.string(), value: v.string(), updatedAt: v.number(),
-  }).index("by_agent_key", ["agentId", "key"]),
+  }).index("by_agent_key", ["agentId", "key"])
+    .index("by_agent_updated", ["agentId", "updatedAt"]),
+  agentEpisodes: defineTable({
+    agentId: v.id("agents"), spaceId: v.id("spaces"), roomId: v.id("rooms"), requestedBy: v.id("users"),
+    source: v.union(v.literal("chat"), v.literal("voice")), sourceKey: v.string(),
+    summary: v.string(), createdAt: v.number(),
+  }).index("by_agent_created", ["agentId", "createdAt"])
+    .index("by_agent_source", ["agentId", "sourceKey"])
+    .searchIndex("search_summary", { searchField: "summary", filterFields: ["agentId"] }),
   webSources: defineTable({
     spaceId: v.id("spaces"), runId: v.id("agentRuns"), url: v.string(), title: v.optional(v.string()),
     retrievedAt: v.number(), excerptHash: v.string(),

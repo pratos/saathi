@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { groupVoiceFragments, liveToolCallFromEvent } from './useLiveVoice'
+import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from '../convex/lib/assistantCapabilities'
+import { groupVoiceFragments, liveToolCallFromEvent, voiceConversationAction } from './useLiveVoice'
 
 describe('live voice caption grouping', () => {
   test('preserves exact deltas and splits turns when speakers overlap', () => {
@@ -33,5 +34,35 @@ describe('live voice caption grouping', () => {
       },
     })).toEqual({ name: 'set_food_budget', callId: 'call_budget_1', arguments: { amount: 15000, currency: 'INR' } })
     expect(liveToolCallFromEvent({ type: 'session.output_transcript.delta', delta: 'hello' })).toBeNull()
+  })
+
+  test('uses the same nine application capabilities as Pi and routes voice memory and browser calls', () => {
+    const names = APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name)
+    expect(names).toHaveLength(9)
+    expect(assistantProviderTools().map(tool => tool.name)).toEqual(names)
+
+    const remember = liveToolCallFromEvent({
+      type: 'response.event',
+      event: {
+        type: 'response.output_item.done',
+        item: { type: 'function_call', name: 'remember', call_id: 'call_memory_1', arguments: '{"key":"school pickup","value":"Friday at 3 PM"}' },
+      },
+    })
+    expect(remember).toEqual({
+      name: 'remember', callId: 'call_memory_1', arguments: { key: 'school pickup', value: 'Friday at 3 PM' },
+    })
+    if (!remember || remember.name === 'generate_image') throw new Error('Expected a memory tool call')
+    expect(voiceConversationAction(remember)).toEqual({ type: 'remember', key: 'school pickup', value: 'Friday at 3 PM' })
+
+    expect(liveToolCallFromEvent({
+      type: 'response.event',
+      event: {
+        type: 'response.output_item.done',
+        item: { type: 'function_call', name: 'use_computer', call_id: 'call_browser_1', arguments: '{"url":"https://example.com","task":"Find the admissions page"}' },
+      },
+    })).toEqual({
+      name: 'use_computer', callId: 'call_browser_1',
+      arguments: { url: 'https://example.com', task: 'Find the admissions page' },
+    })
   })
 })

@@ -2,21 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAction, useMutation } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
-import { isImageStyle, type ImageStyle } from '../convex/lib/imageSafety'
+import {
+  APPLICATION_ASSISTANT_TOOLS,
+  conversationActionFromTool,
+  type ApplicationAssistantToolName,
+  type ConversationAction,
+} from '../convex/lib/assistantCapabilities'
 
 export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
 export type VoiceTurn = { role: 'user' | 'assistant'; text: string; startMs: number }
-type VoiceConversationAction =
-  | { type: 'set_language'; language: 'en' | 'hi' | 'mr' }
-  | { type: 'set_image_style'; style: ImageStyle }
-  | { type: 'set_food_budget'; amount: number; currency: 'INR' | 'USD' }
-  | { type: 'set_model_tier'; tier: 'low' | 'med' | 'high' | 'ultra' }
 
 export function useLiveVoice(roomId: Id<'rooms'>) {
   const createSession = useAction(api.liveVoice.startSession)
   const finishSession = useAction(api.liveVoice.finishSession)
   const createVoiceImage = useAction(api.images.createFromVoice)
+  const searchVoiceWeb = useAction(api.liveVoice.searchPublicWeb)
+  const executeVoiceComputer = useAction(api.liveVoice.useComputer)
   const executeConversationAction = useMutation(api.conversationActions.execute)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
@@ -168,6 +170,16 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           const call = liveToolCall(event.raw)
           if (call?.name === 'generate_image') {
             void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError)
+          } else if (call?.name === 'search_public_web') {
+            void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({
+              roomId, query: stringArg(call.arguments, 'query'),
+            }), 'The public web search could not be completed.', setError)
+          } else if (call?.name === 'use_computer') {
+            void fulfillVoiceExternalTool(channel, call.callId, () => executeVoiceComputer({
+              roomId,
+              url: stringArg(call.arguments, 'url'),
+              task: stringArg(call.arguments, 'task'),
+            }), 'The website task could not be completed.', setError)
           } else if (call) {
             void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError)
           }
@@ -204,7 +216,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')
     }
-  }, [cleanup, createSession, createVoiceImage, executeConversationAction, persistKnownTranscript, roomId, status])
+  }, [cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, persistKnownTranscript, roomId, searchVoiceWeb, status])
 
   const end = useCallback(() => {
     const channel = channelRef.current
@@ -306,7 +318,7 @@ type LiveToolCall = {
   style?: string
   language?: string
 } | {
-  name: 'set_reading_language' | 'set_image_style' | 'set_food_budget' | 'set_model_tier'
+  name: Exclude<ApplicationAssistantToolName, 'generate_image'>
   callId: string
   arguments: Record<string, unknown>
 }
@@ -320,8 +332,8 @@ function liveToolCall(event: Record<string, unknown>): LiveToolCall | null {
   if (!callId) return null
   const args = parseToolArgs(item.arguments)
   if (name === 'generate_image') return { name, callId, prompt: stringArg(args, 'prompt'), kind: optionalStringArg(args, 'kind'), style: optionalStringArg(args, 'style'), language: optionalStringArg(args, 'language') }
-  if (name === 'set_reading_language' || name === 'set_image_style' || name === 'set_food_budget' || name === 'set_model_tier') {
-    return { name, callId, arguments: args }
+  if (APPLICATION_ASSISTANT_TOOLS.some(tool => tool.name === name)) {
+    return { name: name as Exclude<ApplicationAssistantToolName, 'generate_image'>, callId, arguments: args }
   }
   return null
 }
@@ -370,7 +382,7 @@ async function fulfillVoiceAction(
   call: Exclude<LiveToolCall, { name: 'generate_image' }>,
   execute: (args: {
     roomId: Id<'rooms'>
-    action: VoiceConversationAction
+    action: ConversationAction
   }) => Promise<{ ok: boolean; message: string }>,
   setError: (message: string) => void,
 ) {
@@ -393,21 +405,31 @@ async function fulfillVoiceAction(
   channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
 }
 
-function voiceConversationAction(call: Exclude<LiveToolCall, { name: 'generate_image' }>): VoiceConversationAction | null {
-  const args = call.arguments
-  if (call.name === 'set_reading_language' && (args.language === 'en' || args.language === 'hi' || args.language === 'mr')) {
-    return { type: 'set_language' as const, language: args.language }
+async function fulfillVoiceExternalTool(
+  channel: RTCDataChannel,
+  callId: string,
+  execute: () => Promise<{ ok: boolean; message: string }>,
+  failureMessage: string,
+  setError: (message: string) => void,
+) {
+  let result: { ok: boolean; message: string }
+  try {
+    result = await execute()
+  } catch {
+    result = { ok: false, message: failureMessage }
   }
-  if (call.name === 'set_image_style' && typeof args.style === 'string' && isImageStyle(args.style)) {
-    return { type: 'set_image_style', style: args.style }
-  }
-  if (call.name === 'set_food_budget' && typeof args.amount === 'number' && (args.currency === 'INR' || args.currency === 'USD')) {
-    return { type: 'set_food_budget' as const, amount: args.amount, currency: args.currency }
-  }
-  if (call.name === 'set_model_tier' && (args.tier === 'low' || args.tier === 'med' || args.tier === 'high' || args.tier === 'ultra')) {
-    return { type: 'set_model_tier' as const, tier: args.tier }
-  }
-  return null
+  if (!result.ok) setError(result.message)
+  if (channel.readyState !== 'open') return
+  channel.send(JSON.stringify({
+    type: 'response.item.create',
+    event_id: crypto.randomUUID(),
+    item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(result) },
+  }))
+  channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
+}
+
+export function voiceConversationAction(call: Exclude<LiveToolCall, { name: 'generate_image' }>): ConversationAction | null {
+  return conversationActionFromTool(call.name, call.arguments)
 }
 
 export function liveToolCallFromEvent(value: unknown) {

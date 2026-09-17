@@ -3,21 +3,26 @@
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { createModels, type Model } from "@earendil-works/pi-ai";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
-import { FirecrawlClient, type SearchResponse } from "@firecrawl/firecrawl-convex";
 import { v } from "convex/values";
-import { Type } from "typebox";
-import { components, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
+import {
+  APPLICATION_ASSISTANT_TOOLS,
+  conversationActionFromTool,
+  type ApplicationAssistantToolName,
+  type ConversationAction,
+} from "./lib/assistantCapabilities";
 import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { generateFamilyImageBytes } from "./lib/imageGeneration";
 import { resolveOpenRouterKey } from "./lib/providerKeys";
-import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle, type ImageStyle } from "./lib/imageSafety";
+import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
+import { searchPublicWeb } from "./lib/publicWeb";
 import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
 
-const firecrawl = new FirecrawlClient(components.firecrawl);
+export { formatPublicWebResults as formatFirecrawlResults } from "./lib/publicWeb";
 
 const thinkingLevelMap = { off: "none" as const, minimal: null, low: "low" as const, medium: "medium" as const, high: "high" as const, xhigh: null, max: "max" as const };
 
@@ -138,155 +143,84 @@ function createTools(
   leaseId: string,
   openRouterKey: string,
 ): AgentTool[] {
-  return [
-    {
-      name: "search_public_web", label: "Search public web",
-      description: "Search current public web and news sources with Firecrawl. Use for recent news, changing facts, or claims that need current evidence. Never include private family data in the query.",
-      parameters: Type.Object({ query: Type.String({ minLength: 2, maxLength: 300 }) }, { additionalProperties: false }),
-      execute: async (_callId, params) => {
-        const { query } = params as { query: string };
-        const result = await firecrawl.search(ctx, query.trim(), {
-          sources: ["news", "web"], limit: 4, highlights: true,
-          scrapeOptions: { formats: ["markdown"], onlyMainContent: true, maxAge: 15 * 60 * 1000 },
+  return APPLICATION_ASSISTANT_TOOLS.map(tool => ({
+    name: tool.name,
+    label: tool.label,
+    description: tool.description,
+    parameters: tool.parameters,
+    execute: async (_callId, params) => executeApplicationTool(
+      ctx, agentId, jobId, leaseId, openRouterKey, tool.name, params,
+    ),
+  })) as AgentTool[];
+}
+
+async function executeApplicationTool(
+  ctx: ActionCtx,
+  agentId: Id<"agents">,
+  jobId: Id<"agentJobs">,
+  leaseId: string,
+  openRouterKey: string,
+  name: ApplicationAssistantToolName,
+  params: unknown,
+) {
+  const args = params as Record<string, unknown>;
+  if (name === "search_public_web") {
+    const text = await searchPublicWeb(ctx, String(args.query ?? ""));
+    return { content: [{ type: "text" as const, text }], details: { provider: "firecrawl" } };
+  }
+  if (name === "generate_image") {
+    const requested = args as { prompt: string; kind?: string; style?: string; language?: string };
+    const preferences = await ctx.runQuery(internal.agents.computerJobContext, { agentId, jobId, leaseId });
+    const kind = isImageKind(requested.kind) ? requested.kind : "scene";
+    const style = isImageStyle(requested.style) ? requested.style : preferences?.imageStyle ?? "warm_family";
+    const language = isImageLanguage(requested.language) ? requested.language : preferences?.language ?? "en";
+    const prompt = composeFamilyImagePrompt({ prompt: requested.prompt, kind, style, language });
+    const generated = await generateFamilyImageBytes(prompt, openRouterKey);
+    const storageId = await ctx.storage.store(new Blob([generated.bytes], { type: generated.mediaType }));
+    let imageId: Id<"generatedImages"> | null;
+    try {
+      imageId = await ctx.runMutation(internal.agents.saveGeneratedImage, {
+        agentId, jobId, leaseId, storageId, prompt: requested.prompt.trim(), model: SAATHI_IMAGE_MODEL, mediaType: generated.mediaType,
+        kind, style, language,
+      });
+    } catch (error) {
+      await ctx.storage.delete(storageId);
+      throw error;
+    }
+    if (!imageId) {
+      await ctx.storage.delete(storageId);
+      throw new Error("Image was discarded because room access changed before it completed.");
+    }
+    return {
+      content: [{ type: "text" as const, text: "The requested image was generated and attached to the family chat." }],
+      details: { provider: "openrouter", model: SAATHI_IMAGE_MODEL, imageId: String(imageId) },
+    };
+  }
+  if (name === "use_computer") {
+    const { url, task } = args as { url: string; task: string };
+    const job = await ctx.runQuery(internal.agents.computerJobContext, { agentId, jobId, leaseId });
+    if (!job) throw new Error("Computer use was discarded because room access changed.");
+    const result = await runFirecrawlComputerTask({
+      apiKey: env.FIRECRAWL_API_KEY,
+      url,
+      task,
+      profileName: job.profileName,
+      onLiveView: async (view) => {
+        await ctx.runMutation(internal.agents.updateComputerView, {
+          agentId, jobId, leaseId,
+          liveViewUrl: view.liveViewUrl,
+          interactiveLiveViewUrl: view.interactiveLiveViewUrl,
         });
-        return {
-          content: [{ type: "text", text: formatFirecrawlResults(result) }],
-          details: { provider: "firecrawl" },
-        };
       },
-    },
-    {
-      name: "generate_image", label: "Generate image",
-      description: "Generate one family-safe image for this room when a person explicitly requests an image, infographic, or respectful devotional artwork. Never create sexual, nude, or graphic violent images.",
-      parameters: Type.Object({
-        prompt: Type.String({ minLength: 3, maxLength: 2_000 }),
-        kind: Type.Optional(Type.Union([Type.Literal("scene"), Type.Literal("infographic"), Type.Literal("devotional")])),
-        style: Type.Optional(Type.Union([
-          Type.Literal("warm_family"), Type.Literal("kitchen_table"), Type.Literal("festival_home"), Type.Literal("storybook"),
-          Type.Literal("family_collage"), Type.Literal("memory_grid"), Type.Literal("scrapbook"), Type.Literal("fridge_photos"),
-          Type.Literal("infographic"), Type.Literal("step_cards"), Type.Literal("kids_chart"), Type.Literal("wall_poster"),
-          Type.Literal("devotional"), Type.Literal("diya_aarti"), Type.Literal("rangoli"), Type.Literal("festival_altar"),
-          Type.Literal("watercolor"), Type.Literal("flat"), Type.Literal("folk_art"), Type.Literal("block_print"),
-        ])),
-        language: Type.Optional(Type.Union([Type.Literal("en"), Type.Literal("hi"), Type.Literal("mr")])),
-      }, { additionalProperties: false }),
-      execute: async (_callId, params) => {
-        const requested = params as { prompt: string; kind?: string; style?: string; language?: string };
-        const preferences = await ctx.runQuery(internal.agents.computerJobContext, { agentId, jobId, leaseId });
-        const kind = isImageKind(requested.kind) ? requested.kind : "scene";
-        const style = isImageStyle(requested.style) ? requested.style : preferences?.imageStyle ?? "warm_family";
-        const language = isImageLanguage(requested.language) ? requested.language : preferences?.language ?? "en";
-        const prompt = composeFamilyImagePrompt({ prompt: requested.prompt, kind, style, language });
-        const generated = await generateFamilyImageBytes(prompt, openRouterKey);
-        const storageId = await ctx.storage.store(new Blob([generated.bytes], { type: generated.mediaType }));
-        let imageId: Id<"generatedImages"> | null;
-        try {
-          imageId = await ctx.runMutation(internal.agents.saveGeneratedImage, {
-            agentId, jobId, leaseId, storageId, prompt: requested.prompt.trim(), model: SAATHI_IMAGE_MODEL, mediaType: generated.mediaType,
-            kind, style, language,
-          });
-        } catch (error) {
-          await ctx.storage.delete(storageId);
-          throw error;
-        }
-        if (!imageId) {
-          await ctx.storage.delete(storageId);
-          throw new Error("Image was discarded because room access changed before it completed.");
-        }
-        return {
-          content: [{ type: "text", text: "The requested image was generated and attached to the family chat." }],
-          details: { provider: "openrouter", model: SAATHI_IMAGE_MODEL, imageId: String(imageId) },
-        };
-      },
-    },
-    {
-      name: "use_computer", label: "Use computer",
-      description: "Open a public https website in Firecrawl Interact so the family can watch and, if needed, sign in in the live browser. Use only when a person explicitly asks to browse, click through, log in, or operate a site. Never type passwords, OTPs, or payment details. Never checkout, pay, or place an order. Browser cookies stay in a Firecrawl profile for this person so later visits can continue without storing passwords in Saathi.",
-      parameters: Type.Object({
-        url: Type.String({ minLength: 8, maxLength: 2_000 }),
-        task: Type.String({ minLength: 3, maxLength: 4_000 }),
-      }, { additionalProperties: false }),
-      execute: async (_callId, params) => {
-        const { url, task } = params as { url: string; task: string };
-        const job = await ctx.runQuery(internal.agents.computerJobContext, { agentId, jobId, leaseId });
-        if (!job) throw new Error("Computer use was discarded because room access changed.");
-        const result = await runFirecrawlComputerTask({
-          apiKey: env.FIRECRAWL_API_KEY,
-          url,
-          task,
-          profileName: job.profileName,
-          onLiveView: async (view) => {
-            await ctx.runMutation(internal.agents.updateComputerView, {
-              agentId, jobId, leaseId,
-              liveViewUrl: view.liveViewUrl,
-              interactiveLiveViewUrl: view.interactiveLiveViewUrl,
-            });
-          },
-        });
-        return {
-          content: [{ type: "text", text: result.output }],
-          details: { provider: "firecrawl", scrapeId: result.scrapeId, liveViewUrl: result.liveViewUrl },
-        };
-      },
-    },
-    {
-      name: "set_reading_language", label: "Set reading language",
-      description: "Change this person's reading language only after they explicitly ask. Use en for English, hi for Hindi, or mr for Marathi.",
-      parameters: Type.Object({ language: Type.Union([Type.Literal("en"), Type.Literal("hi"), Type.Literal("mr")]) }, { additionalProperties: false }),
-      execute: async (_callId, params) => conversationAction(ctx, agentId, jobId, leaseId, {
-        type: "set_language", language: (params as { language: "en" | "hi" | "mr" }).language,
-      }),
-    },
-    {
-      name: "set_image_style", label: "Set image style",
-      description: "Change this person's default image style only after they explicitly ask.",
-      parameters: Type.Object({ style: Type.Union([
-        Type.Literal("warm_family"), Type.Literal("kitchen_table"), Type.Literal("festival_home"), Type.Literal("storybook"),
-        Type.Literal("family_collage"), Type.Literal("memory_grid"), Type.Literal("scrapbook"), Type.Literal("fridge_photos"),
-        Type.Literal("infographic"), Type.Literal("step_cards"), Type.Literal("kids_chart"), Type.Literal("wall_poster"),
-        Type.Literal("devotional"), Type.Literal("diya_aarti"), Type.Literal("rangoli"), Type.Literal("festival_altar"),
-        Type.Literal("watercolor"), Type.Literal("flat"), Type.Literal("folk_art"), Type.Literal("block_print"),
-      ]) }, { additionalProperties: false }),
-      execute: async (_callId, params) => conversationAction(ctx, agentId, jobId, leaseId, {
-        type: "set_image_style", style: (params as { style: ImageStyle }).style,
-      }),
-    },
-    {
-      name: "set_food_budget", label: "Set food budget",
-      description: "Set the monthly family food budget only after an owner explicitly gives an amount and currency.",
-      parameters: Type.Object({ amount: Type.Number(), currency: Type.Union([Type.Literal("INR"), Type.Literal("USD")]) }, { additionalProperties: false }),
-      execute: async (_callId, params) => {
-        const requested = params as { amount: number; currency: "INR" | "USD" };
-        return conversationAction(ctx, agentId, jobId, leaseId, { type: "set_food_budget", ...requested });
-      },
-    },
-    {
-      name: "set_model_tier", label: "Set thinking level",
-      description: "Change the family Saathi thinking level only after an owner explicitly asks. Medium is the normal default; high and ultra use more resources.",
-      parameters: Type.Object({ tier: Type.Union([Type.Literal("low"), Type.Literal("med"), Type.Literal("high"), Type.Literal("ultra")]) }, { additionalProperties: false }),
-      execute: async (_callId, params) => conversationAction(ctx, agentId, jobId, leaseId, {
-        type: "set_model_tier", tier: (params as { tier: "low" | "med" | "high" | "ultra" }).tier,
-      }),
-    },
-    {
-      name: "remember", label: "Remember", description: "Store a short fact the family explicitly asked to retain.",
-      parameters: Type.Object({ key: Type.String(), value: Type.String() }, { additionalProperties: false }),
-      execute: async (_callId, params) => {
-        const { key, value } = params as { key: string; value: string };
-        await ctx.runMutation(internal.agents.remember, { agentId, key, value });
-        return { content: [{ type: "text", text: `Remembered ${key}.` }], details: {} };
-      },
-    },
-    {
-      name: "recall", label: "Recall", description: "Recall a retained family fact by key.",
-      parameters: Type.Object({ key: Type.String() }, { additionalProperties: false }),
-      execute: async (_callId, params) => {
-        const { key } = params as { key: string };
-        const value = await ctx.runQuery(internal.agents.recall, { agentId, key });
-        return { content: [{ type: "text", text: value ?? `No memory found for ${key}.` }], details: { found: value !== null } };
-      },
-    },
-  ];
+    });
+    return {
+      content: [{ type: "text" as const, text: result.output }],
+      details: { provider: "firecrawl", scrapeId: result.scrapeId, liveViewUrl: result.liveViewUrl },
+    };
+  }
+  const action = conversationActionFromTool(name, args);
+  if (!action) throw new Error(`Invalid parameters for ${name}.`);
+  return conversationAction(ctx, agentId, jobId, leaseId, action);
 }
 
 async function conversationAction(
@@ -294,10 +228,7 @@ async function conversationAction(
   agentId: Id<"agents">,
   jobId: Id<"agentJobs">,
   leaseId: string,
-  action: { type: "set_language"; language: "en" | "hi" | "mr" }
-    | { type: "set_image_style"; style: ImageStyle }
-    | { type: "set_food_budget"; amount: number; currency: "INR" | "USD" }
-    | { type: "set_model_tier"; tier: "low" | "med" | "high" | "ultra" },
+  action: ConversationAction,
 ) {
   const result = await ctx.runMutation(internal.conversationActions.executeForJob, { agentId, jobId, leaseId, action });
   return { content: [{ type: "text" as const, text: result.message }], details: { applied: result.ok } };
@@ -321,27 +252,6 @@ export function withWebAccessPrompt(systemPrompt: string) {
   return systemPrompt.includes("search_public_web")
     ? systemPrompt
     : `${systemPrompt}\n\n${SAATHI_WEB_ACCESS_PROMPT}`;
-}
-
-export function formatFirecrawlResults(result: SearchResponse) {
-  const entries = [...(result.news ?? []), ...(result.web ?? [])].slice(0, 6);
-  if (entries.length === 0) return "No relevant public web results were found.";
-  return entries.map((entry, index) => {
-    const metadata = "metadata" in entry && entry.metadata && typeof entry.metadata === "object"
-      ? entry.metadata as Record<string, unknown> : undefined;
-    const title = cleanText(("title" in entry ? entry.title : undefined) ?? metadata?.title) || `Source ${index + 1}`;
-    const url = cleanText(("url" in entry ? entry.url : undefined) ?? metadata?.url ?? metadata?.sourceURL);
-    const excerpt = cleanText(
-      ("markdown" in entry ? entry.markdown : undefined) ??
-      ("description" in entry ? entry.description : undefined) ??
-      ("summary" in entry ? entry.summary : undefined),
-    ).slice(0, 2_500);
-    return [`Source ${index + 1}: ${title}`, url && `URL: ${url}`, excerpt && `Evidence: ${excerpt}`].filter(Boolean).join("\n");
-  }).join("\n\n").slice(0, 12_000);
-}
-
-function cleanText(value: unknown) {
-  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
 function makeConvexSafe(messages: AgentMessage[]): unknown[] {

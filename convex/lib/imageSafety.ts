@@ -119,6 +119,7 @@ export function imageCaption(prompt: string, kind: ImageKind, language: ImageLan
 export const GENERATE_IMAGE_TOOL = {
   type: "function",
   name: "generate_image",
+  label: "Generate image",
   description: "Create one family-safe image and attach it to this conversation. Use for explicit image requests, language-specific infographics, or respectful devotional art. Pick a named preset style when the caller asks for a look. Never create sexual, nude, pornographic, or graphic violent images.",
   parameters: {
     type: "object",

@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
 import { profileNameForUser } from "./lib/firecrawlInteract";
 import { imageKindValidator, imageLanguageValidator, imageStyleValidator } from "./lib/imageSafety";
@@ -11,6 +12,8 @@ import { DEFAULT_MODEL_TIER, resolveModelTier } from "./lib/modelTiers";
 import { isNoReplyText, SAATHI_SYSTEM_PROMPT } from "./lib/saathi";
 
 const MAX_CONTEXT_MESSAGES = 200;
+const MAX_CONTEXT_CHARS = 60_000;
+const MAX_JOB_ATTEMPTS = 3;
 
 const limits = new RateLimiter(components.rateLimiter, {
   promptAgent: { kind: "token bucket", rate: 20, period: MINUTE, capacity: 5 },
@@ -173,13 +176,16 @@ export const beginNext = internalMutation({
       q.eq("agentId", agentId),
     ).order("desc").take(MAX_CONTEXT_MESSAGES);
     const nextSequence = (recentMessages[0]?.sequence ?? -1) + 1;
-    const history = recentMessages.reverse().map(entry => entry.message);
+    const history = boundContext(recentMessages.reverse().map(entry => entry.message));
     const roomHistory = await seedRoomHistory(ctx, agent.roomId);
     const seeded = roomHistory.length > 0 ? roomHistory : history;
+    const memoryContext = await buildAgentMemoryContext(ctx, agentId, job.prompt);
     return {
       agent,
       job: { ...job, status: "running" as const, startedAt, attempt, leaseId },
-      messages: seeded,
+      messages: memoryContext
+        ? [{ role: "user", content: memoryContext, timestamp: startedAt }, ...seeded]
+        : seeded,
       nextSequence,
       leaseId,
     };
@@ -215,9 +221,14 @@ export const finish = internalMutation({
       computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined,
     });
     if (!args.error && responseText) {
+      const completedAt = Date.now();
       await ctx.db.insert("messages", {
         spaceId: agent.spaceId, roomId: agent.roomId, actorType: "assistant", origin: "assistant",
-        originalText: responseText, language: "en", idempotencyKey: `agent-${job._id}`, createdAt: Date.now(),
+        originalText: responseText, language: "en", idempotencyKey: `agent-${job._id}`, createdAt: completedAt,
+      });
+      await recordAgentEpisode(ctx, {
+        agentId: agent._id, spaceId: agent.spaceId, roomId: agent.roomId, requestedBy: job.requestedBy,
+        source: "chat", sourceKey: `job:${job._id}`, request: job.prompt, response: responseText, createdAt: completedAt,
       });
     }
     const inputTokens = Math.max(0, args.inputTokens ?? 0);
@@ -320,28 +331,21 @@ export const recover = internalMutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return null;
+    if (job.attempt >= MAX_JOB_ATTEMPTS) {
+      const error = `Agent worker lease expired after ${job.attempt} attempts`;
+      await ctx.db.patch(job._id, {
+        status: "failed", completedAt: Date.now(), leaseId: undefined, activity: undefined,
+        computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined, error,
+      });
+      await scheduleNextOrIdle(ctx, args.agentId, error);
+      return null;
+    }
     await ctx.db.patch(job._id, {
       status: "queued", startedAt: undefined, leaseId: undefined, activity: undefined,
       computerLiveViewUrl: undefined, computerInteractiveLiveViewUrl: undefined,
       error: "Recovered after the worker lease expired",
     });
     await ctx.scheduler.runAfter(0, internal.agentWorker.run, { agentId: args.agentId });
-    return null;
-  },
-});
-
-export const remember = internalMutation({
-  args: { agentId: v.id("agents"), key: v.string(), value: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const key = args.key.trim();
-    const value = args.value.trim();
-    if (!key || key.length > 100 || !value || value.length > 10_000) throw invalid("Invalid memory key or value");
-    const existing = await ctx.db.query("agentMemory").withIndex("by_agent_key", q =>
-      q.eq("agentId", args.agentId).eq("key", key),
-    ).unique();
-    if (existing) await ctx.db.patch(existing._id, { value, updatedAt: Date.now() });
-    else await ctx.db.insert("agentMemory", { agentId: args.agentId, key, value, updatedAt: Date.now() });
     return null;
   },
 });
@@ -363,17 +367,6 @@ export const computerJobContext = internalQuery({
       imageStyle: requester?.preferredImageStyle ?? "warm_family",
       language: requester?.preferredLanguage ?? "en",
     };
-  },
-});
-
-export const recall = internalQuery({
-  args: { agentId: v.id("agents"), key: v.string() },
-  returns: v.union(v.string(), v.null()),
-  handler: async (ctx, args) => {
-    const memory = await ctx.db.query("agentMemory").withIndex("by_agent_key", q =>
-      q.eq("agentId", args.agentId).eq("key", args.key.trim()),
-    ).unique();
-    return memory?.value ?? null;
   },
 });
 
@@ -407,7 +400,7 @@ async function seedRoomHistory(ctx: MutationCtx, roomId: Id<"rooms">) {
   const rows = await ctx.db.query("messages").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(24);
   const attachments = await ctx.db.query("attachments").withIndex("by_room_created", q => q.eq("roomId", roomId)).order("desc").take(12);
   const byMessage = new Map(attachments.map(attachment => [String(attachment.messageId), attachment]));
-  return rows.reverse().map(message => {
+  const messages = rows.reverse().map(message => {
     const attachment = byMessage.get(String(message._id));
     const fileNote = attachment
       ? `\n[Shared file: ${attachment.fileName}${attachment.transcript ? ` — ${attachment.transcript.slice(0, 800)}` : ""}]`
@@ -419,6 +412,20 @@ async function seedRoomHistory(ctx: MutationCtx, roomId: Id<"rooms">) {
       timestamp: message.createdAt,
     };
   });
+  return boundContext(messages);
+}
+
+function boundContext(messages: unknown[]) {
+  const selected: unknown[] = [];
+  let chars = 0;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    const size = JSON.stringify(message).length;
+    if (selected.length > 0 && chars + size > MAX_CONTEXT_CHARS) break;
+    selected.unshift(message);
+    chars += size;
+  }
+  return selected;
 }
 
 function invalid(message: string) {

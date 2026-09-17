@@ -70,4 +70,40 @@ describe("conversational actions", () => {
     })).resolves.toMatchObject({ ok: false });
     expect(await t.run(ctx => ctx.db.query("familyBudgets").collect())).toEqual([]);
   });
+
+  test("stores normalized facts for one room agent and never leaks them to another room", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const now = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "memory-family", createdAt: now });
+      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
+      const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now });
+      const otherRoomId = await ctx.db.insert("rooms", { spaceId, type: "private", title: "Private", assistantMode: "mention", createdBy: ownerId, createdAt: now });
+      await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt: now });
+      await ctx.db.insert("roomMembers", { roomId: otherRoomId, userId: ownerId, role: "manager", createdAt: now });
+      for (const [targetRoomId, creationKey] of [[roomId, "family-agent"], [otherRoomId, "private-agent"]] as const) {
+        await ctx.db.insert("agents", {
+          spaceId, roomId: targetRoomId, createdBy: ownerId, creationKey, name: "Saathi",
+          systemPrompt: "Be helpful", provider: "openrouter", model: MODEL_TIERS.med.model, status: "idle",
+          createdAt: now, updatedAt: now,
+        });
+      }
+      return { ownerId, roomId, otherRoomId };
+    });
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+
+    await expect(owner.mutation(api.conversationActions.execute, {
+      roomId: seeded.roomId,
+      action: { type: "remember", key: "  Departure   City ", value: "Pune" },
+    })).resolves.toEqual({ ok: true, message: "I'll remember departure city: Pune" });
+    await expect(owner.mutation(api.conversationActions.execute, {
+      roomId: seeded.roomId,
+      action: { type: "recall", key: "DEPARTURE CITY" },
+    })).resolves.toEqual({ ok: true, message: "departure city: Pune" });
+    await expect(owner.mutation(api.conversationActions.execute, {
+      roomId: seeded.otherRoomId,
+      action: { type: "recall", key: "departure city" },
+    })).resolves.toEqual({ ok: false, message: "I don't have a saved fact for “departure city”." });
+  });
 });

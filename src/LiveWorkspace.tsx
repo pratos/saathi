@@ -209,6 +209,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const [copiedInbox, setCopiedInbox] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
+  const [jevOpen, setJevOpen] = useState(false)
   const createSpace = useMutation(api.spaces.create)
   const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
   const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
@@ -291,6 +292,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Inbox</span></button>
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
         <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
+        {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Lab</span></button>}
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
           {profileOpen && <div className="session-menu" role="menu">
@@ -410,6 +412,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           {family.membership.role === 'owner' && <section><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
         </details>
         {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
+        {family.membership.role === 'owner' && <section className="jev-settings-card"><span>Jev decision lab</span><p>Test how Saathi routes a request and inspect recent chat, voice, and Gmail decisions without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Lab</button></section>}
         </div>
       </aside>
       <nav className="mobile-workspace-nav" aria-label="Workspace">
@@ -420,8 +423,83 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       </nav>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
+      {jevOpen && <JevLabDrawer spaceId={family.space._id} onClose={() => setJevOpen(false)} />}
     </main>
   )
+}
+
+function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: () => void }) {
+  const recent = useQuery(api.jev.recent, { spaceId, limit: 30 })
+  const evaluate = useAction(api.jev.evaluate)
+  const [text, setText] = useState('Book a table for dinner tomorrow')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<{
+    route: string
+    routeConfidence: number
+    routeProbabilities: Record<string, number>
+    needsClarification: number
+    model: string
+    inputTokens: number
+    latencyMs: number
+  } | null>(null)
+
+  useEffect(() => {
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => event.key === 'Escape' && onClose()
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!text.trim()) return
+    setBusy(true)
+    setError('')
+    try {
+      setResult(await evaluate({ spaceId, text }))
+    } catch (caught) {
+      setError(convexErrorCode(caught) === 'JEV_NOT_CONFIGURED'
+        ? 'TYPESAFE_API_KEY is not available to this Convex deployment.'
+        : 'Jev could not evaluate this request. Try again in a moment.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const probabilities = result
+    ? Object.entries(result.routeProbabilities).sort((left, right) => right[1] - left[1])
+    : []
+
+  return <div className="jev-lab-backdrop" role="presentation" onMouseDown={onClose}>
+    <aside className="jev-lab-drawer" role="dialog" aria-modal="true" aria-labelledby="jev-lab-title" onMouseDown={event => event.stopPropagation()}>
+      <header><div><span><Sparkles /> Decision sidecar</span><h2 id="jev-lab-title">Jev Lab</h2><p>Typed decisions stay outside Pi’s chat history.</p></div><button type="button" onClick={onClose} aria-label="Close Jev Lab" autoFocus><X /></button></header>
+      <form className="jev-test-form" onSubmit={submit}>
+        <label htmlFor="jev-test-input">Try a request</label>
+        <textarea id="jev-test-input" value={text} onChange={event => setText(event.target.value)} rows={4} maxLength={12_000} />
+        <button type="submit" disabled={busy || !text.trim()}>{busy ? 'Evaluating…' : 'Evaluate with Jev'}</button>
+      </form>
+      {error && <p className="jev-lab-error" role="alert">{error}</p>}
+      {result && <section className="jev-result" aria-live="polite">
+        <div className="jev-result-heading"><span>Route</span><strong>{result.route.replaceAll('_', ' ')}</strong><small>{Math.round(result.routeConfidence * 100)}% confidence · {result.latencyMs} ms</small></div>
+        <div className="jev-clarify"><span>Clarification signal</span><strong>{Math.round(result.needsClarification * 100)}%</strong></div>
+        <div className="jev-probabilities">{probabilities.map(([label, probability]) => <div key={label}><span>{label.replaceAll('_', ' ')}</span><i><b style={{ width: `${Math.max(2, probability * 100)}%` }} /></i><strong>{Math.round(probability * 100)}%</strong></div>)}</div>
+        <small>{result.model} · {result.inputTokens} input tokens</small>
+      </section>}
+      <section className="jev-history"><div className="jev-section-title"><h3>Recent decisions</h3><span>{recent?.length ?? 0}</span></div>
+        {recent === undefined && <p>Loading decisions…</p>}
+        {recent?.length === 0 && <p>No decisions yet. Run the test above or ask Saathi something.</p>}
+        {recent?.map(item => <article key={item._id}><div><span>{jevSourceLabel(item.source)}</span><time>{formatRelativeTime(item.createdAt)}</time></div><strong>{item.decision.replaceAll('_', ' ')}</strong><p>{item.inputPreview}</p><small>{item.confidence === undefined ? '' : `${Math.round(item.confidence * 100)}% · `}{item.latencyMs} ms · {item.inputTokens} tokens</small></article>)}
+      </section>
+    </aside>
+  </div>
+}
+
+function jevSourceLabel(source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab') {
+  if (source === 'chat_turn') return 'Pi route'
+  if (source === 'chat_tool') return 'Pi tool'
+  if (source === 'voice_tool') return 'Voice tool'
+  if (source === 'gmail') return 'Gmail'
+  return 'Lab test'
 }
 
 function LiveRoom({ room, family, onBack, onInvite }: {

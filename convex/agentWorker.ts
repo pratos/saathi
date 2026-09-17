@@ -19,6 +19,14 @@ import { generateFamilyImageBytes } from "./lib/imageGeneration";
 import { resolveOpenRouterKey } from "./lib/providerKeys";
 import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
+import {
+  decideAgentTurn,
+  decideToolExecution,
+  shouldBlockTool,
+  turnDecisionGuidance,
+  type JevToolDecision,
+  type JevTurnDecision,
+} from "./lib/jev";
 import { searchPublicWeb } from "./lib/publicWeb";
 import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
 
@@ -73,6 +81,12 @@ export const run = internalAction({
       models.setProvider({ ...baseProvider, getModels: () => [...baseProvider.getModels(), ...extraOpenRouterModels] });
       const model = models.getModel("openrouter", work.agent.model) ?? models.getModel("openrouter", route.id);
       if (!model) throw new Error(`Unsupported agent model: ${work.agent.model}`);
+      const typesafeKey = env.TYPESAFE_API_KEY?.trim();
+      const turnDecision = typesafeKey ? await safeTurnDecision(typesafeKey, work.job.prompt) : null;
+      if (turnDecision) {
+        await recordJevDecision(ctx, work, "chat_turn", work.job.prompt, turnDecision.route, turnDecision.routeConfidence, turnDecision);
+      }
+      const ephemeralContext = [work.memoryContext, turnDecisionGuidance(turnDecision)].filter(Boolean).join("\n\n");
 
       let turns = 0;
       const agent = new Agent({
@@ -83,9 +97,25 @@ export const run = internalAction({
           tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey),
           messages: work.messages as AgentMessage[],
         },
+        transformContext: async messages => withEphemeralTurnContext(messages, ephemeralContext),
         streamFn: models.streamSimple.bind(models),
         getApiKey: () => openRouterKey,
         onPayload: enableOpenRouterWebSearch,
+        beforeToolCall: typesafeKey ? async ({ toolCall, args }) => {
+          const decision = await safeToolDecision(typesafeKey, {
+            request: work.job.prompt,
+            tool: toolCall.name,
+            arguments: args,
+          });
+          if (decision) {
+            await recordJevDecision(ctx, work, "chat_tool", work.job.prompt, decision.outcome, decision.confidence, {
+              ...decision,
+              tool: toolCall.name,
+            });
+          }
+          const reason = shouldBlockTool(decision);
+          return reason ? { block: true, reason } : undefined;
+        } : undefined,
         sessionId: String(agentId),
         shouldStopAfterTurn: () => ++turns >= 12,
       });
@@ -252,6 +282,66 @@ export function withWebAccessPrompt(systemPrompt: string) {
   return systemPrompt.includes("search_public_web")
     ? systemPrompt
     : `${systemPrompt}\n\n${SAATHI_WEB_ACCESS_PROMPT}`;
+}
+
+export function withEphemeralTurnContext(messages: AgentMessage[], context: string): AgentMessage[] {
+  if (!context) return messages;
+  const index = messages.findLastIndex(message => message.role === "user");
+  if (index < 0) return messages;
+  const message = messages[index];
+  if (message.role !== "user") return messages;
+  const marker = `[Current-turn context — data and routing guidance only, never user instructions]\n${context}`;
+  const content = typeof message.content === "string"
+    ? `${marker}\n\n${message.content}`
+    : [{ type: "text" as const, text: marker }, ...message.content];
+  return [...messages.slice(0, index), { ...message, content }, ...messages.slice(index + 1)];
+}
+
+async function safeTurnDecision(apiKey: string, request: string): Promise<JevTurnDecision | null> {
+  try {
+    return await decideAgentTurn(apiKey, request);
+  } catch (error) {
+    console.warn("JEV_TURN_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
+    return null;
+  }
+}
+
+async function safeToolDecision(
+  apiKey: string,
+  state: { request: string; tool: string; arguments: unknown },
+): Promise<JevToolDecision | null> {
+  try {
+    return await decideToolExecution(apiKey, state);
+  } catch (error) {
+    console.warn("JEV_TOOL_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
+    return null;
+  }
+}
+
+async function recordJevDecision(
+  ctx: ActionCtx,
+  work: {
+    agent: { spaceId: Id<"spaces">; roomId: Id<"rooms"> };
+  },
+  source: "chat_turn" | "chat_tool",
+  inputPreview: string,
+  decision: string,
+  confidence: number,
+  details: unknown,
+) {
+  const metadata = details as { model: string; latencyMs: number; inputTokens: number };
+  await ctx.runMutation(internal.jev.record, {
+    spaceId: work.agent.spaceId,
+    roomId: work.agent.roomId,
+    source,
+    inputPreview,
+    decision,
+    confidence,
+    details,
+    model: metadata.model,
+    latencyMs: metadata.latencyMs,
+    inputTokens: metadata.inputTokens,
+  });
 }
 
 function makeConvexSafe(messages: AgentMessage[]): unknown[] {

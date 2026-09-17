@@ -40,6 +40,7 @@ const workItem = v.object({
   agent: agentDoc,
   job: jobDoc,
   messages: v.array(v.any()),
+  memoryContext: v.string(),
   nextSequence: v.number(),
   leaseId: v.string(),
 });
@@ -136,9 +137,8 @@ export const beginNext = internalMutation({
     return {
       agent,
       job: { ...job, status: "running" as const, startedAt, attempt, leaseId },
-      messages: memoryContext
-        ? [{ role: "user", content: memoryContext, timestamp: startedAt }, ...seeded]
-        : seeded,
+      messages: seeded,
+      memoryContext,
       nextSequence,
       leaseId,
     };

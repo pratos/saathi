@@ -29,6 +29,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const searchVoiceWeb = useAction(api.liveVoice.searchPublicWeb)
   const executeVoiceComputer = useAction(api.liveVoice.useComputer)
   const executeConversationAction = useMutation(api.conversationActions.execute)
+  const authorizeVoiceTool = useAction(api.jev.authorizeVoiceTool)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
@@ -182,29 +183,40 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           cleanup()
         } else if (event.type === 'response.event') {
           const call = liveToolCall(event.raw)
+          const requestText = latestVoiceUserText(fragmentsRef.current)
           if (call) setActivities(current => addVoiceToolActivity(current, call))
           if (call?.name === 'generate_image') {
-            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError, (result) => {
+            void fulfillVoiceImage(channel, roomId, call, async args => {
+              const approval = await authorizeVoiceTool({ roomId, requestText, tool: call.name, arguments: args })
+              return approval.ok ? createVoiceImage(args) : approval
+            }, setError, (result) => {
               setActivities(current => finishVoiceToolActivity(current, call.callId, result))
             })
           } else if (call?.name === 'search_public_web') {
-            void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({
-              roomId, query: stringArg(call.arguments, 'query'),
-            }), 'The public web search could not be completed.', setError, (result) => {
+            void fulfillVoiceExternalTool(channel, call.callId, async () => {
+              const approval = await authorizeVoiceTool({ roomId, requestText, tool: call.name, arguments: call.arguments })
+              return approval.ok ? searchVoiceWeb({ roomId, query: stringArg(call.arguments, 'query') }) : approval
+            }, 'The public web search could not be completed.', setError, (result) => {
               setActivities(current => finishVoiceToolActivity(current, call.callId, result))
             })
           } else if (call?.name === 'use_computer') {
-            void fulfillVoiceExternalTool(channel, call.callId, () => executeVoiceComputer({
-              roomId,
-              sessionId: sessionIdRef.current,
-              callId: call.callId,
-              url: stringArg(call.arguments, 'url'),
-              task: stringArg(call.arguments, 'task'),
-            }), 'The website task could not be completed.', setError, (result) => {
+            void fulfillVoiceExternalTool(channel, call.callId, async () => {
+              const approval = await authorizeVoiceTool({ roomId, requestText, tool: call.name, arguments: call.arguments })
+              return approval.ok ? executeVoiceComputer({
+                roomId,
+                sessionId: sessionIdRef.current,
+                callId: call.callId,
+                url: stringArg(call.arguments, 'url'),
+                task: stringArg(call.arguments, 'task'),
+              }) : approval
+            }, 'The website task could not be completed.', setError, (result) => {
               setActivities(current => finishVoiceToolActivity(current, call.callId, result))
             })
           } else if (call) {
-            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, (result) => {
+            void fulfillVoiceAction(channel, roomId, call, async args => {
+              const approval = await authorizeVoiceTool({ roomId, requestText, tool: call.name, arguments: call.arguments })
+              return approval.ok ? executeConversationAction(args) : approval
+            }, setError, (result) => {
               setActivities(current => finishVoiceToolActivity(current, call.callId, result))
             })
           }
@@ -242,7 +254,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')
     }
-  }, [cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, persistKnownTranscript, roomId, searchVoiceWeb, status])
+  }, [authorizeVoiceTool, cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, persistKnownTranscript, roomId, searchVoiceWeb, status])
 
   const end = useCallback(() => {
     const channel = channelRef.current
@@ -491,6 +503,11 @@ async function fulfillVoiceAction(
     item: { type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result) },
   }))
   channel.send(JSON.stringify({ type: 'response.create', event_id: crypto.randomUUID() }))
+}
+
+export function latestVoiceUserText(fragments: VoiceFragment[]) {
+  const turns = groupVoiceFragments(fragments)
+  return turns.findLast(turn => turn.role === 'user')?.text.trim() ?? ''
 }
 
 async function fulfillVoiceExternalTool(

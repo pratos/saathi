@@ -189,6 +189,12 @@ export default defineSchema({
   }).index("by_agent_created", ["agentId", "createdAt"])
     .index("by_agent_source", ["agentId", "sourceKey"])
     .searchIndex("search_summary", { searchField: "summary", filterFields: ["agentId"] }),
+  jevDecisions: defineTable({
+    spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")),
+    source: v.union(v.literal("chat_turn"), v.literal("chat_tool"), v.literal("voice_tool"), v.literal("gmail"), v.literal("lab")),
+    inputPreview: v.string(), decision: v.string(), confidence: v.optional(v.number()),
+    details: v.any(), model: v.string(), latencyMs: v.number(), inputTokens: v.number(), createdAt: v.number(),
+  }).index("by_space_created", ["spaceId", "createdAt"]),
   auditEvents: defineTable({
     spaceId: v.optional(v.id("spaces")), actorUserId: v.optional(v.id("users")),
     action: v.string(), resourceType: v.string(), resourceId: v.optional(v.string()), metadata: v.optional(v.any()), createdAt: v.number(),

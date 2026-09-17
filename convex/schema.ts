@@ -100,9 +100,13 @@ export default defineSchema({
     spaceId: v.id("spaces"), userId: v.id("users"), connectedAccountId: v.string(),
     alias: v.string(), email: v.optional(v.string()), triggerId: v.string(),
     status: v.union(v.literal("active"), v.literal("error")),
+    // Kept for compatibility with connections synced before operational state was split out.
     createdAt: v.number(), lastSyncedAt: v.optional(v.number()),
   }).index("by_space_user", ["spaceId", "userId"])
     .index("by_connected_account", ["connectedAccountId"]),
+  gmailConnectionSyncStates: defineTable({
+    connectionId: v.id("gmailConnections"), lastSyncedAt: v.number(),
+  }).index("by_connection_id", ["connectionId"]),
   gmailProcessedMessages: defineTable({
     connectionId: v.id("gmailConnections"), externalMessageId: v.string(), useful: v.boolean(), processedAt: v.number(),
   }).index("by_connection_message", ["connectionId", "externalMessageId"]),

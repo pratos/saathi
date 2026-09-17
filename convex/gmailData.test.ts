@@ -28,6 +28,19 @@ describe("private Gmail ingestion", () => {
     const owner = t.withIdentity({ subject: String(ownerId) });
     const common = { connectionId, threadId: "thread-family-1", receivedAt: 1_700_000_000_000, category: "receipts" as const };
 
+    await member.mutation(internal.gmailData.touchSynced, { connectionId });
+    const syncState = await t.run(async ctx => ({
+      connection: await ctx.db.get(connectionId),
+      state: await ctx.db.query("gmailConnectionSyncStates")
+        .withIndex("by_connection_id", q => q.eq("connectionId", connectionId))
+        .unique(),
+    }));
+    expect(syncState.connection?.lastSyncedAt).toBeUndefined();
+    expect(syncState.state?.lastSyncedAt).toEqual(expect.any(Number));
+    await expect(member.query(api.gmailData.mine, { spaceId })).resolves.toEqual([
+      expect.objectContaining({ _id: connectionId, lastSyncedAt: syncState.state?.lastSyncedAt }),
+    ]);
+
     await member.mutation(internal.gmailData.saveClassification, {
       ...common,
       externalMessageId: "irrelevant-1",

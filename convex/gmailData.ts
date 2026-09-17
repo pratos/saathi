@@ -12,7 +12,15 @@ export const mine = query({
   args: { spaceId: v.id("spaces") },
   handler: async (ctx, { spaceId }) => {
     const { userId } = await requireSpacePermission(ctx, spaceId, "read");
-    return ctx.db.query("gmailConnections").withIndex("by_space_user", q => q.eq("spaceId", spaceId).eq("userId", userId)).collect();
+    const connections = await ctx.db.query("gmailConnections")
+      .withIndex("by_space_user", q => q.eq("spaceId", spaceId).eq("userId", userId))
+      .collect();
+    return Promise.all(connections.map(async connection => {
+      const syncState = await ctx.db.query("gmailConnectionSyncStates")
+        .withIndex("by_connection_id", q => q.eq("connectionId", connection._id))
+        .unique();
+      return { ...connection, lastSyncedAt: syncState?.lastSyncedAt ?? connection.lastSyncedAt };
+    }));
   },
 });
 
@@ -80,9 +88,12 @@ export const touchSynced = internalMutation({
   args: { connectionId: v.id("gmailConnections") },
   returns: v.null(),
   handler: async (ctx, { connectionId }) => {
-    const connection = await ctx.db.get(connectionId);
-    if (!connection) return null;
-    await ctx.db.patch(connection._id, { lastSyncedAt: Date.now() });
+    const lastSyncedAt = Date.now();
+    const existing = await ctx.db.query("gmailConnectionSyncStates")
+      .withIndex("by_connection_id", q => q.eq("connectionId", connectionId))
+      .unique();
+    if (existing) await ctx.db.patch(existing._id, { lastSyncedAt });
+    else await ctx.db.insert("gmailConnectionSyncStates", { connectionId, lastSyncedAt });
     return null;
   },
 });

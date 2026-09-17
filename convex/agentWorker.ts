@@ -83,7 +83,8 @@ export const run = internalAction({
       if (!model) throw new Error(`Unsupported agent model: ${work.agent.model}`);
       const typesafeKey = env.TYPESAFE_API_KEY?.trim();
       const decisionInput = decisionInputForAgentJob(work.job.prompt);
-      const turnDecision = typesafeKey ? await safeTurnDecision(typesafeKey, decisionInput) : null;
+      const decisionContext = decisionContextForAgentJob(work.messages as AgentMessage[]);
+      const turnDecision = typesafeKey ? await safeTurnDecision(typesafeKey, decisionInput, decisionContext) : null;
       if (turnDecision) {
         await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, turnDecision);
       }
@@ -109,6 +110,7 @@ export const run = internalAction({
         beforeToolCall: typesafeKey ? async ({ toolCall, args }) => {
           const decision = await safeToolDecision(typesafeKey, {
             request: decisionInput,
+            recentConversation: decisionContext,
             tool: toolCall.name,
             arguments: args,
           });
@@ -193,21 +195,32 @@ function createTools(
 
 const JEV_TOOL_SELECTION_CONFIDENCE = 0.85;
 
-const ROUTE_TOOL_BUNDLES: Record<JevTurnDecision["route"], readonly ApplicationAssistantToolName[]> = {
+const ROUTE_TOOL_BUNDLES: Record<Exclude<JevTurnDecision["route"], "multi_tool">, readonly ApplicationAssistantToolName[]> = {
   answer: [],
   clarify: [],
   search: ["search_public_web"],
   computer: ["use_computer"],
   image: ["generate_image"],
   settings: ["set_reading_language", "set_image_style", "set_food_budget", "set_model_tier"],
-  memory: ["remember", "recall"],
+  memory: ["remember", "recall", "forget_memory", "list_memories"],
+  family_data: ["get_food_budget", "find_room_files", "search_family_inbox"],
 };
+
+const ACTIONABLE_TOOL_ROUTES = ["search", "computer", "image", "settings", "memory", "family_data"] as const;
 
 export function toolNamesForTurnDecision(decision: JevTurnDecision | null): readonly ApplicationAssistantToolName[] | null {
   if (!decision) return null;
   if (decision.route === "clarify" || decision.needsClarification >= 0.72) return [];
   if (decision.routeConfidence < JEV_TOOL_SELECTION_CONFIDENCE
     || decision.routeProbabilities[decision.route] < JEV_TOOL_SELECTION_CONFIDENCE) return null;
+  if (decision.route === "multi_tool") {
+    const likelyRoutes = ACTIONABLE_TOOL_ROUTES
+      .filter(route => decision.routeProbabilities[route] > 0)
+      .sort((left, right) => decision.routeProbabilities[right] - decision.routeProbabilities[left])
+      .slice(0, 2);
+    if (likelyRoutes.length < 2) return null;
+    return [...new Set(likelyRoutes.flatMap(route => ROUTE_TOOL_BUNDLES[route]))];
+  }
   return ROUTE_TOOL_BUNDLES[decision.route];
 }
 
@@ -336,9 +349,21 @@ export function decisionInputForAgentJob(prompt: string) {
   return prefix ? prompt.slice(prefix.length).trim() : prompt.trim();
 }
 
-async function safeTurnDecision(apiKey: string, request: string): Promise<JevTurnDecision | null> {
+export function decisionContextForAgentJob(messages: AgentMessage[]) {
+  const lines = messages.slice(-8).flatMap(message => {
+    if (message.role !== "user" && message.role !== "assistant") return [];
+    const text = typeof message.content === "string"
+      ? message.content
+      : message.content.flatMap(block => block.type === "text" ? [block.text] : []).join(" ");
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    return cleaned ? [`${message.role === "user" ? "Person" : "Saathi"}: ${cleaned}`] : [];
+  });
+  return lines.join("\n").slice(-6_000);
+}
+
+async function safeTurnDecision(apiKey: string, request: string, recentConversation: string): Promise<JevTurnDecision | null> {
   try {
-    return await decideAgentTurn(apiKey, request);
+    return await decideAgentTurn(apiKey, request, recentConversation);
   } catch (error) {
     console.warn("JEV_TURN_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
     return null;
@@ -347,7 +372,7 @@ async function safeTurnDecision(apiKey: string, request: string): Promise<JevTur
 
 async function safeToolDecision(
   apiKey: string,
-  state: { request: string; tool: string; arguments: unknown },
+  state: { request: string; recentConversation: string; tool: string; arguments: unknown },
 ): Promise<JevToolDecision | null> {
   try {
     return await decideToolExecution(apiKey, state);

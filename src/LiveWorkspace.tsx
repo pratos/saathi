@@ -466,7 +466,7 @@ export function BenchmarkReportView({ report, onClose }: { report: BenchmarkRepo
     </header>
     <div className="benchmark-admin-scroll">
       <section className="benchmark-summary-grid" aria-label="Benchmark summary">
-        <article><ChartBar /><span>Tool routing</span><strong>{report.routing.passed}/{report.routing.total}</strong><small>{Math.round(report.routing.passed / report.routing.total * 100)}% correct · {report.routing.wrongRestrictedBundles} wrong bundles</small></article>
+        <article><ChartBar /><span>Tool routing</span><strong>{report.routing.passed}/{report.routing.total}</strong><small>{report.routing.multiTurnPassed}/{report.routing.multiTurnTotal} multi-turn · {report.routing.wrongRestrictedBundles} wrong bundles</small></article>
         <article><Database /><span>Memory decisions</span><strong>{report.memory.passed}/{report.memory.total}</strong><small>{(report.memory.passed / report.memory.total * 100).toFixed(1)}% correct · Marathi 12/12</small></article>
         <article><CircleDollarSign /><span>Benchmark cost</span><strong>{formatTinyUsd(combinedBenchmarkCost)}</strong><small>{report.routing.averageLatencyMs} ms routing · {report.memory.averageLatencyMs} ms memory</small></article>
       </section>
@@ -477,7 +477,31 @@ export function BenchmarkReportView({ report, onClose }: { report: BenchmarkRepo
           <BenchmarkLanguageTable title="Tool routing" results={report.routing.languages} />
           <BenchmarkLanguageTable title="Memory decisions" results={report.memory.languages} />
         </div>
-        <div className="benchmark-safety-note"><ShieldCheck /><span><strong>No wrong restricted bundles.</strong> Six requests were conservatively routed to clarification-only, including portal tasks missing required access details.</span></div>
+        <div className="benchmark-safety-note"><ShieldCheck /><span><strong>No wrong restricted bundles.</strong> Multi-turn requests passed {report.routing.multiTurnPassed}/{report.routing.multiTurnTotal}, multi-tool requests passed {report.routing.multiToolPassed}/{report.routing.multiToolTotal}, and {report.routing.clarificationOnlyTurns} requests were conservatively routed to clarification-only.</span></div>
+      </section>
+
+      <section className="benchmark-panel benchmark-decision-panel">
+        <div className="benchmark-report-heading">
+          <div><span>Tool-routing benchmark</span><h2>Cost, latency, accuracy, and tradeoffs</h2></div>
+          <small>{report.routing.total} live cases<br />3 languages<br />{report.routing.multiTurnTotal} multi-turn cases</small>
+        </div>
+        <div className="benchmark-table-wrap">
+          <table className="benchmark-decision-table">
+            <thead><tr><th>Approach</th><th>Cost / turn</th><th>Routing latency</th><th>Accuracy</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><th>Full list · 15 tools</th><td><strong>{formatTinyUsd(report.comparison.fullTools.uncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)} warm</td><td>0 ms added router<br /><small>Pi not measured</small></td><td>Not benchmarked</td><td>Stable cache prefix; every tool is visible to Pi.</td></tr>
+              <tr className="recommended"><th><span>Jev routed · 15 tools</span><b>Preferred when cold</b></th><td><strong>{formatTinyUsd(report.comparison.jevBundles.combinedUncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.comparison.jevBundles.combinedCachedCostPerTurnUsd)} warm</td><td><strong>+{report.routing.averageLatencyMs} ms</strong> average<br /><small>Jev only</small></td><td><strong>{report.routing.passed}/{report.routing.total}</strong> routes<br />0 wrong bundles</td><td>{report.routing.fullToolFallbacks} uncertain turns failed open to all tools; cache varies by bundle.</td></tr>
+              <tr><th>Full list · 200 tools</th><td><strong>{formatTinyUsd(report.scale.fullUncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.scale.fullCachedCostPerTurnUsd)} warm</td><td>0 ms added router<br /><small>Pi not measured</small></td><td>Not measured</td><td>Synthetic schema-cost baseline, not an exact-tool accuracy run.</td></tr>
+              <tr className="recommended"><th><span>Jev routed · 200 tools</span><b>Simulated</b></th><td><strong>{formatTinyUsd(report.scale.routedUncachedCostPerTurnUsd)}</strong> cold<br />{formatTinyUsd(report.scale.routedCachedCostPerTurnUsd)} warm</td><td>~+{report.routing.averageLatencyMs} ms<br /><small>extrapolated</small></td><td>Not tested at 200</td><td>{report.scale.selectedToolCount}-tool domain selected; {report.scale.schemaReductionPercent}% schema reduction. Needs a real 200-tool accuracy benchmark.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="benchmark-verdicts">
+          <article><strong>{report.comparison.uncachedSavingsPercent}% cheaper</strong><span>Cold input cost: {formatTinyUsd(report.comparison.jevBundles.combinedUncachedCostPerTurnUsd)} versus {formatTinyUsd(report.comparison.fullTools.uncachedCostPerTurnUsd)}.</span></article>
+          <article><strong>+{report.routing.averageLatencyMs} ms</strong><span>Measured Jev routing overhead; Pi end-to-end latency is not yet measured.</span></article>
+          <article><strong>0 unsafe bundles</strong><span>No confidently narrowed request received the wrong tool bundle.</span></article>
+        </div>
+        <p className="benchmark-evidence-note">Measured routing and synthetic scale results are deliberately separate. The 200-tool rows estimate schema size and cost only; they do not claim production accuracy or latency.</p>
       </section>
 
       <section className="benchmark-panel">
@@ -493,13 +517,14 @@ export function BenchmarkReportView({ report, onClose }: { report: BenchmarkRepo
           </article>
         </div>
         <p className="benchmark-callout"><strong>Cold-cache result:</strong> about {report.comparison.uncachedSavingsPercent}% less routing/tool-schema input cost, saving {formatTinyUsd(uncachedSavings)} per turn or about ${(uncachedSavings * 1_000).toFixed(2)} per 1,000 turns.</p>
+        <p className="benchmark-callout"><strong>200-tool scale simulation:</strong> one domain bundle exposed {report.scale.selectedToolCount} of {report.scale.fullToolCount} tools and reduced estimated schema size from ~{report.scale.fullSchemaTokens.toLocaleString()} to ~{report.scale.selectedSchemaTokens.toLocaleString()} tokens ({report.scale.schemaReductionPercent}%). At the same prices, full vs routed input is {formatTinyUsd(report.scale.fullUncachedCostPerTurnUsd)} vs {formatTinyUsd(report.scale.routedUncachedCostPerTurnUsd)} cold, and {formatTinyUsd(report.scale.fullCachedCostPerTurnUsd)} vs {formatTinyUsd(report.scale.routedCachedCostPerTurnUsd)} with warm tool-schema cache reads.</p>
       </section>
 
       <section className="benchmark-panel cache-panel">
         <div className="benchmark-panel-title"><div><span>Cache impact</span><h2>Cheaper when cold, less cache-friendly</h2></div></div>
         <div className="cache-explanation">
           <article><strong>Full tools</strong><p>One stable tool prefix gives the best chance of repeated cache hits. If the full schema is already cached, its estimated tool-schema read costs only {formatTinyUsd(report.comparison.fullTools.cachedCostPerTurnUsd)}.</p></article>
-          <article><strong>Routed bundles</strong><p>Seven stable route variants reduce uncached tokens but fragment the prefix cache. Even with a warm bundle, Jev remains an uncached sidecar cost of {formatTinyUsd(report.comparison.jevBundles.jevCostPerTurnUsd)}.</p></article>
+          <article><strong>Routed bundles</strong><p>Stable domain bundles and bounded two-domain unions reduce uncached tokens but fragment the prefix cache. Even with a warm bundle, Jev remains an uncached sidecar cost of {formatTinyUsd(report.comparison.jevBundles.jevCostPerTurnUsd)}.</p></article>
         </div>
         <p className="benchmark-cache-warning"><strong>Decision:</strong> routed bundles are economically better on cache misses and reduce context pressure. A reliably warm full-tool prefix is approximately {formatTinyUsd(cachedDifference)} cheaper per turn on schema-related input alone. Verify OpenRouter’s actual cached-token reporting and end-to-end Pi latency before declaring production savings.</p>
       </section>
@@ -624,6 +649,8 @@ const jevRouteLabels: Record<string, string> = {
   image: 'Create an image',
   settings: 'Change a setting',
   memory: 'Use memory',
+  family_data: 'Read saved family data',
+  multi_tool: 'Use multiple tools',
   execute: 'Allow the action',
   block: 'Stop the action',
   bills: 'Keep as a bill',

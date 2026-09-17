@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import {
+  decisionContextForAgentJob,
   decisionInputForAgentJob,
   enableOpenRouterWebSearch,
   formatFirecrawlResults,
@@ -184,6 +185,19 @@ describe("durable family agent", () => {
       "You were explicitly mentioned. Respond helpfully to: @saathi उद्यासाठी पुण्यात plumber शोध आणि सकाळी call karna",
     )).toBe("@saathi उद्यासाठी पुण्यात plumber शोध आणि सकाळी call karna");
     expect(decisionInputForAgentJob("  Keep this ordinary prompt intact  ")).toBe("Keep this ordinary prompt intact");
+  });
+
+  test("gives Jev bounded recent conversation text for resolving follow-ups", () => {
+    const context = decisionContextForAgentJob([
+      { role: "user", content: "Make an invitation", timestamp: 1 },
+      {
+        role: "assistant", content: [{ type: "text", text: "Which visual style should I use?" }], timestamp: 2,
+        api: "openai-completions", provider: "openrouter", model: "test", stopReason: "stop",
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      },
+    ] as Parameters<typeof decisionContextForAgentJob>[0]);
+
+    expect(context).toBe("Person: Make an invitation\nSaathi: Which visual style should I use?");
   });
 
   test("creates Saathi lazily and distinguishes ambient checks from explicit mentions", async () => {

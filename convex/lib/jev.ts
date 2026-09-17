@@ -10,6 +10,8 @@ const TURN_ROUTES = {
   image: "The user asks to create an image, infographic, invitation, or artwork.",
   settings: "The user explicitly asks to change a Saathi or family setting.",
   memory: "The user explicitly asks Saathi to remember or recall a stable fact.",
+  family_data: "The user asks to read authorized saved family data such as a budget, room file, or saved inbox item.",
+  multi_tool: "The request requires two or more distinct tool routes to complete correctly.",
 } as const;
 
 const EMAIL_CATEGORIES = {
@@ -57,17 +59,18 @@ export type JevToolDecision = {
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-export async function decideAgentTurn(apiKey: string, request: string): Promise<JevTurnDecision> {
+export async function decideAgentTurn(apiKey: string, request: string, recentConversation = ""): Promise<JevTurnDecision> {
   const startedAt = Date.now();
   const response = await client(apiKey).systemOne({
     state: {
       latest_user_request: request.slice(0, 12_000),
+      recent_conversation: recentConversation.slice(-6_000),
       interpretation_policy: MULTILINGUAL_INTENT_GUIDANCE,
     },
     questions: {
       route: choice({
         question: "Which single route best handles `latest_user_request` now?",
-        focus: "Apply `interpretation_policy`, then classify the immediate next step. Do not invent missing details.",
+        focus: "Apply `interpretation_policy` and resolve follow-ups using `recent_conversation`, then classify the immediate next step. Choose multi_tool when distinct tool routes are both required. Do not invent missing details.",
       }, TURN_ROUTES),
       needs_clarification: noul({
         question: "Must Saathi ask a clarification question before it can respond or act correctly?",
@@ -135,6 +138,7 @@ export async function decideEmail(apiKey: string, email: {
 
 export async function decideToolExecution(apiKey: string, state: {
   request: string;
+  recentConversation?: string;
   tool: string;
   arguments: unknown;
 }): Promise<JevToolDecision> {
@@ -142,6 +146,7 @@ export async function decideToolExecution(apiKey: string, state: {
   const response = await client(apiKey).systemOne({
     state: {
       latest_user_request: state.request.slice(0, 8_000),
+      recent_conversation: state.recentConversation?.slice(-6_000) ?? "",
       proposed_tool: state.tool,
       proposed_arguments: jsonValue(state.arguments),
       interpretation_policy: MULTILINGUAL_INTENT_GUIDANCE,
@@ -154,7 +159,7 @@ export async function decideToolExecution(apiKey: string, state: {
     questions: {
       outcome: choice({
         question: "What should code do with `proposed_tool` and `proposed_arguments` for `latest_user_request`?",
-        focus: "Apply `interpretation_policy`, then check explicit intent, required details, and fixed policy. Prefer clarification over guessing, but not merely because the request is multilingual.",
+        focus: "Apply `interpretation_policy`, resolve follow-ups using `recent_conversation`, then check explicit intent, required details, and fixed policy. Prefer clarification over guessing, but not merely because the request is multilingual.",
       }, TOOL_OUTCOMES),
     },
   });

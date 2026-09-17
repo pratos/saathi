@@ -51,9 +51,10 @@ describe("Jev decision records", () => {
     await expect(owner.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
     await expect(member.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
     await expect(admin.query(api.jev.benchmarkReport, {})).resolves.toMatchObject({
-      routing: { passed: 21, total: 21, wrongRestrictedBundles: 0 },
+      routing: { passed: 39, total: 39, wrongRestrictedBundles: 0, fullToolFallbacks: 8 },
       memory: { passed: 33, total: 36 },
-      comparison: { uncachedSavingsPercent: 81.2 },
+      comparison: { uncachedSavingsPercent: 66.8 },
+      scale: { fullToolCount: 200, selectedToolCount: 10, schemaReductionPercent: 95, routedUncachedCostPerTurnUsd: 0.00059403 },
     });
   });
 

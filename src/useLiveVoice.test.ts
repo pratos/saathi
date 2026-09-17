@@ -52,9 +52,9 @@ describe('live voice caption grouping', () => {
     expect(liveToolCallFromEvent({ type: 'session.output_transcript.delta', delta: 'hello' })).toBeNull()
   })
 
-  test('uses the same nine application capabilities as Pi and routes voice memory and browser calls', () => {
+  test('uses the same application capabilities as Pi and routes voice memory and browser calls', () => {
     const names = APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name)
-    expect(names).toHaveLength(9)
+    expect(names).toHaveLength(14)
     expect(assistantProviderTools().map(tool => tool.name)).toEqual(names)
 
     const remember = liveToolCallFromEvent({

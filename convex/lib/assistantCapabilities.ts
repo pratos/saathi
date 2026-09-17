@@ -7,7 +7,12 @@ export type ConversationAction =
   | { type: "set_food_budget"; amount: number; currency: "INR" | "USD" }
   | { type: "set_model_tier"; tier: "low" | "med" | "high" | "ultra" }
   | { type: "remember"; key: string; value: string }
-  | { type: "recall"; key: string };
+  | { type: "recall"; key: string }
+  | { type: "forget_memory"; key: string }
+  | { type: "list_memories" }
+  | { type: "get_food_budget" }
+  | { type: "find_room_files"; query: string }
+  | { type: "search_family_inbox"; query: string };
 
 export const SEARCH_PUBLIC_WEB_TOOL = {
   type: "function",
@@ -82,6 +87,46 @@ const RECALL_TOOL = {
   parameters: Type.Object({ key: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
 } as const;
 
+const FORGET_MEMORY_TOOL = {
+  type: "function",
+  name: "forget_memory",
+  label: "Forget memory",
+  description: "Delete one explicitly remembered fact only when the caller directly asks Saathi to forget it. Use the fact's short descriptive key.",
+  parameters: Type.Object({ key: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
+} as const;
+
+const LIST_MEMORIES_TOOL = {
+  type: "function",
+  name: "list_memories",
+  label: "List memories",
+  description: "List the stable facts explicitly remembered in this conversation. Do not use for general conversation history.",
+  parameters: Type.Object({}, { additionalProperties: false }),
+} as const;
+
+const GET_FOOD_BUDGET_TOOL = {
+  type: "function",
+  name: "get_food_budget",
+  label: "Check food budget",
+  description: "Read the family's current monthly food budget, tracked spending, and remaining amount.",
+  parameters: Type.Object({}, { additionalProperties: false }),
+} as const;
+
+const FIND_ROOM_FILES_TOOL = {
+  type: "function",
+  name: "find_room_files",
+  label: "Find conversation files",
+  description: "Find authorized files shared in the current conversation by file name or extracted text. Never search another room.",
+  parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
+} as const;
+
+const SEARCH_FAMILY_INBOX_TOOL = {
+  type: "function",
+  name: "search_family_inbox",
+  label: "Search saved inbox",
+  description: "Search email items already saved to Saathi and visible in the current authorized conversation. This does not search all Gmail or send email.",
+  parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
+} as const;
+
 export const CONVERSATION_ACTION_TOOLS = [
   SET_READING_LANGUAGE_TOOL,
   SET_IMAGE_STYLE_TOOL,
@@ -89,6 +134,11 @@ export const CONVERSATION_ACTION_TOOLS = [
   SET_MODEL_TIER_TOOL,
   REMEMBER_TOOL,
   RECALL_TOOL,
+  FORGET_MEMORY_TOOL,
+  LIST_MEMORIES_TOOL,
+  GET_FOOD_BUDGET_TOOL,
+  FIND_ROOM_FILES_TOOL,
+  SEARCH_FAMILY_INBOX_TOOL,
 ] as const;
 
 export const APPLICATION_ASSISTANT_TOOLS = [
@@ -124,5 +174,10 @@ export function conversationActionFromTool(name: string, value: unknown): Conver
     return { type: "remember", key: args.key, value: args.value };
   }
   if (name === "recall" && typeof args.key === "string") return { type: "recall", key: args.key };
+  if (name === "forget_memory" && typeof args.key === "string") return { type: "forget_memory", key: args.key };
+  if (name === "list_memories") return { type: "list_memories" };
+  if (name === "get_food_budget") return { type: "get_food_budget" };
+  if (name === "find_room_files" && typeof args.query === "string") return { type: "find_room_files", query: args.query };
+  if (name === "search_family_inbox" && typeof args.query === "string") return { type: "search_family_inbox", query: args.query };
   return null;
 }

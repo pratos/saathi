@@ -36,8 +36,9 @@ describe("Jev decision policy", () => {
       computer: ["use_computer"],
       image: ["generate_image"],
       settings: ["set_reading_language", "set_image_style", "set_food_budget", "set_model_tier"],
-      memory: ["remember", "recall"],
-    } satisfies Record<JevTurnDecision["route"], readonly string[]>;
+      memory: ["remember", "recall", "forget_memory", "list_memories"],
+      family_data: ["get_food_budget", "find_room_files", "search_family_inbox"],
+    } satisfies Record<Exclude<JevTurnDecision["route"], "multi_tool">, readonly string[]>;
     for (const [route, tools] of Object.entries(expected)) {
       expect(toolNamesForTurnDecision(turn({
         route: route as JevTurnDecision["route"],
@@ -47,7 +48,7 @@ describe("Jev decision policy", () => {
     }
   });
 
-  test("uses no tools for clarification and all tools when routing is uncertain", () => {
+  test("uses no tools for clarification, unions likely multi-tool bundles, and fails open when uncertain", () => {
     expect(toolNamesForTurnDecision(turn({
       route: "computer",
       routeConfidence: 0.99,
@@ -63,6 +64,20 @@ describe("Jev decision policy", () => {
       route: "search",
       routeConfidence: 0.9,
       routeProbabilities: probabilities("search", 0.84),
+    }))).toBeNull();
+    expect(toolNamesForTurnDecision(turn({
+      route: "multi_tool",
+      routeConfidence: 0.95,
+      routeProbabilities: {
+        ...probabilities("multi_tool", 0.89),
+        search: 0.06,
+        memory: 0.05,
+      },
+    }))).toEqual(["search_public_web", "remember", "recall", "forget_memory", "list_memories"]);
+    expect(toolNamesForTurnDecision(turn({
+      route: "multi_tool",
+      routeConfidence: 0.84,
+      routeProbabilities: probabilities("multi_tool", 0.9),
     }))).toBeNull();
     expect(toolNamesForTurnDecision(null)).toBeNull();
   });
@@ -86,7 +101,7 @@ function turn(overrides: Partial<JevTurnDecision>): JevTurnDecision {
   return {
     route: "answer",
     routeConfidence: 0.8,
-    routeProbabilities: { answer: 0.8, clarify: 0.05, search: 0.05, computer: 0.03, image: 0.03, settings: 0.02, memory: 0.02 },
+    routeProbabilities: { answer: 0.8, clarify: 0.04, search: 0.04, computer: 0.02, image: 0.02, settings: 0.02, memory: 0.02, family_data: 0.02, multi_tool: 0.02 },
     needsClarification: 0.1,
     ...metadata,
     ...overrides,
@@ -104,7 +119,7 @@ function tool(overrides: Partial<JevToolDecision>): JevToolDecision {
 }
 
 function probabilities(route: JevTurnDecision["route"], selected: number): JevTurnDecision["routeProbabilities"] {
-  const remainder = (1 - selected) / 6;
+  const remainder = (1 - selected) / 8;
   return {
     answer: remainder,
     clarify: remainder,
@@ -113,6 +128,8 @@ function probabilities(route: JevTurnDecision["route"], selected: number): JevTu
     image: remainder,
     settings: remainder,
     memory: remainder,
+    family_data: remainder,
+    multi_tool: remainder,
     [route]: selected,
   };
 }

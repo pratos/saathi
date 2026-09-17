@@ -57,7 +57,9 @@ const benchmarkReportView = v.object({
   runAt: v.string(),
   routing: v.object({
     passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
-    wrongRestrictedBundles: v.number(), clarificationOnlyTurns: v.number(), languages: v.array(benchmarkLanguageResult),
+    wrongRestrictedBundles: v.number(), clarificationOnlyTurns: v.number(), fullToolFallbacks: v.number(),
+    multiTurnPassed: v.number(), multiTurnTotal: v.number(), multiToolPassed: v.number(), multiToolTotal: v.number(),
+    languages: v.array(benchmarkLanguageResult),
   }),
   memory: v.object({
     passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
@@ -68,6 +70,12 @@ const benchmarkReportView = v.object({
     fullTools: v.object({ toolCount: v.number(), estimatedSchemaTokens: v.number(), uncachedCostPerTurnUsd: v.number(), cachedCostPerTurnUsd: v.number() }),
     jevBundles: v.object({ averageToolCount: v.number(), estimatedSchemaTokens: v.number(), piUncachedCostPerTurnUsd: v.number(), piCachedCostPerTurnUsd: v.number(), jevCostPerTurnUsd: v.number(), combinedUncachedCostPerTurnUsd: v.number(), combinedCachedCostPerTurnUsd: v.number() }),
     uncachedSavingsPercent: v.number(),
+  }),
+  scale: v.object({
+    fullToolCount: v.number(), selectedToolCount: v.number(), bundleCount: v.number(),
+    fullSchemaTokens: v.number(), selectedSchemaTokens: v.number(), schemaReductionPercent: v.number(),
+    fullUncachedCostPerTurnUsd: v.number(), routedUncachedCostPerTurnUsd: v.number(),
+    fullCachedCostPerTurnUsd: v.number(), routedCachedCostPerTurnUsd: v.number(),
   }),
 });
 
@@ -82,16 +90,17 @@ export const benchmarkReport = query({
     return {
       runAt: "2026-09-17",
       routing: {
-        passed: 21, total: 21, averageLatencyMs: 122, inputTokens: 14_667, costUsd: 0.000616014,
-        wrongRestrictedBundles: 0, clarificationOnlyTurns: 6,
+        passed: 39, total: 39, averageLatencyMs: 124, inputTokens: 31_135, costUsd: 0.00130767,
+        wrongRestrictedBundles: 0, clarificationOnlyTurns: 7, fullToolFallbacks: 8,
+        multiTurnPassed: 12, multiTurnTotal: 12, multiToolPassed: 3, multiToolTotal: 3,
         languages: [
-          { language: "English", passed: 7, total: 7 },
-          { language: "Hindi / Hinglish", passed: 7, total: 7 },
-          { language: "Marathi", passed: 7, total: 7 },
+          { language: "English", passed: 13, total: 13 },
+          { language: "Hindi / Hinglish", passed: 13, total: 13 },
+          { language: "Marathi", passed: 13, total: 13 },
         ],
       },
       memory: {
-        passed: 33, total: 36, averageLatencyMs: 124, inputTokens: 46_522, costUsd: 0.001953924,
+        passed: 33, total: 36, averageLatencyMs: 146, inputTokens: 46_522, costUsd: 0.001953924,
         languages: [
           { language: "English", passed: 11, total: 12 },
           { language: "Hindi / Hinglish", passed: 10, total: 12 },
@@ -106,17 +115,23 @@ export const benchmarkReport = query({
           tokenEstimate: "Current application and provider tool JSON characters divided by four; common prompt, conversation, output, and model reasoning are excluded.",
         },
         fullTools: {
-          toolCount: 10, estimatedSchemaTokens: 1_309,
-          uncachedCostPerTurnUsd: 0.0006545, cachedCostPerTurnUsd: 0.000003927,
+          toolCount: 15, estimatedSchemaTokens: 1_683,
+          uncachedCostPerTurnUsd: 0.0008415, cachedCostPerTurnUsd: 0.000005049,
         },
         jevBundles: {
-          averageToolCount: 1.43, estimatedSchemaTokens: 188,
-          piUncachedCostPerTurnUsd: 0.000094, piCachedCostPerTurnUsd: 0.000000564,
-          jevCostPerTurnUsd: 0.000029334,
-          combinedUncachedCostPerTurnUsd: 0.000123334,
-          combinedCachedCostPerTurnUsd: 0.000029898,
+          averageToolCount: 4.49, estimatedSchemaTokens: 491,
+          piUncachedCostPerTurnUsd: 0.0002455, piCachedCostPerTurnUsd: 0.000001473,
+          jevCostPerTurnUsd: 0.00003353,
+          combinedUncachedCostPerTurnUsd: 0.00027903,
+          combinedCachedCostPerTurnUsd: 0.000035003,
         },
-        uncachedSavingsPercent: 81.2,
+        uncachedSavingsPercent: 66.8,
+      },
+      scale: {
+        fullToolCount: 200, selectedToolCount: 10, bundleCount: 20,
+        fullSchemaTokens: 22_502, selectedSchemaTokens: 1_121, schemaReductionPercent: 95,
+        fullUncachedCostPerTurnUsd: 0.011251, routedUncachedCostPerTurnUsd: 0.00059403,
+        fullCachedCostPerTurnUsd: 0.000067506, routedCachedCostPerTurnUsd: 0.000036893,
       },
     };
   },

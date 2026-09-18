@@ -8,31 +8,46 @@ export const MAX_ROUTING_RISK = 1.25;
 export const JEV_INPUT_PRICE_PER_MILLION_USD = 0.042;
 
 export const TOOL_BUNDLES = {
-  research: {
-    description: "Find public or authorized family information, including web browsing, budgets, files, and saved inbox items.",
-    tools: ["search_public_web", "use_computer", "get_food_budget", "find_room_files", "search_family_inbox"],
+  public_research: {
+    description: "Find current public facts and research on the web.",
+    tools: ["search_public_web"],
+  },
+  web_operations: {
+    description: "Interact with a public website or browser session.",
+    tools: ["use_computer"],
   },
   creation: {
     description: "Create family-facing media and visual artifacts.",
     tools: ["generate_image"],
   },
-  preferences: {
-    description: "Change personal or owner-authorized family preferences and operating settings.",
-    tools: ["set_reading_language", "set_image_style", "set_food_budget", "set_model_tier"],
-  },
   memory: {
     description: "Store, retrieve, list, or delete explicitly saved family facts.",
     tools: ["remember", "recall", "forget_memory", "list_memories"],
+  },
+  personal_settings: {
+    description: "Change the caller's reading language or image-style preference.",
+    tools: ["set_reading_language", "set_image_style"],
+  },
+  family_settings: {
+    description: "Change owner-controlled family budget or model settings.",
+    tools: ["set_food_budget", "set_model_tier"],
+  },
+  family_data: {
+    description: "Read authorized family budgets, files, and saved inbox items.",
+    tools: ["get_food_budget", "find_room_files", "search_family_inbox"],
   },
 } as const satisfies Record<string, { description: string; tools: readonly ApplicationAssistantToolName[] }>;
 
 export type ToolBundleId = keyof typeof TOOL_BUNDLES;
 
 const BUNDLE_CHOICES = {
-  research: TOOL_BUNDLES.research.description,
+  public_research: TOOL_BUNDLES.public_research.description,
+  web_operations: TOOL_BUNDLES.web_operations.description,
   creation: TOOL_BUNDLES.creation.description,
-  preferences: TOOL_BUNDLES.preferences.description,
   memory: TOOL_BUNDLES.memory.description,
+  personal_settings: TOOL_BUNDLES.personal_settings.description,
+  family_settings: TOOL_BUNDLES.family_settings.description,
+  family_data: TOOL_BUNDLES.family_data.description,
 } as const;
 
 const SECONDARY_BUNDLE_CHOICES = {

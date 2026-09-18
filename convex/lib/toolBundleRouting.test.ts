@@ -9,10 +9,13 @@ import {
 } from "./toolBundleRouting.js";
 
 const fixtureBundles = {
-  research: { description: "Research", tools: Array.from({ length: 12 }, (_, index) => `research_${index}`) },
-  creation: { description: "Creation", tools: Array.from({ length: 10 }, (_, index) => `creation_${index}`) },
-  preferences: { description: "Preferences", tools: Array.from({ length: 8 }, (_, index) => `preferences_${index}`) },
-  memory: { description: "Memory", tools: Array.from({ length: 6 }, (_, index) => `memory_${index}`) },
+  public_research: { description: "Public research", tools: Array.from({ length: 6 }, (_, index) => `public_research_${index}`) },
+  web_operations: { description: "Web operations", tools: Array.from({ length: 5 }, (_, index) => `web_operations_${index}`) },
+  creation: { description: "Creation", tools: Array.from({ length: 5 }, (_, index) => `creation_${index}`) },
+  memory: { description: "Memory", tools: Array.from({ length: 5 }, (_, index) => `memory_${index}`) },
+  personal_settings: { description: "Personal settings", tools: Array.from({ length: 5 }, (_, index) => `personal_settings_${index}`) },
+  family_settings: { description: "Family settings", tools: Array.from({ length: 5 }, (_, index) => `family_settings_${index}`) },
+  family_data: { description: "Family data", tools: Array.from({ length: 5 }, (_, index) => `family_data_${index}`) },
 } as const;
 const largeCatalog = Object.values(fixtureBundles).flatMap(bundle => [...bundle.tools]);
 
@@ -34,7 +37,7 @@ describe("shadow tool-bundle routing policy", () => {
 
   test("intersects at most two stable bundles with the already-authorized catalog", () => {
     const primary = recommendToolBundles(largeCatalog, decision(), fixtureBundles);
-    expect(primary.recommendedToolNames).toEqual(fixtureBundles.research.tools);
+    expect(primary.recommendedToolNames).toEqual(fixtureBundles.public_research.tools);
 
     const two = recommendToolBundles(largeCatalog, decision({
       secondaryBundle: "creation",
@@ -42,12 +45,12 @@ describe("shadow tool-bundle routing policy", () => {
       secondaryProbabilities: probabilities("creation", 0.9, true),
       needsSecondaryBundle: 0.8,
     }), fixtureBundles);
-    expect(two.recommendedToolNames).toEqual([...fixtureBundles.research.tools, ...fixtureBundles.creation.tools]);
+    expect(two.recommendedToolNames).toEqual([...fixtureBundles.public_research.tools, ...fixtureBundles.creation.tools]);
     expect(two.secondaryBundle).toBe("creation");
 
-    const unauthorized = largeCatalog.filter(tool => tool !== "research_3");
+    const unauthorized = largeCatalog.filter(tool => tool !== "public_research_3");
     const intersected = recommendToolBundles(unauthorized, decision(), fixtureBundles);
-    expect(intersected.recommendedToolNames).not.toContain("research_3");
+    expect(intersected.recommendedToolNames).not.toContain("public_research_3");
   });
 
   test("uses the full authorized set for every fail-open condition and exact threshold boundaries", () => {
@@ -56,12 +59,12 @@ describe("shadow tool-bundle routing policy", () => {
       ["malformed", malformedDecision(), "malformed_output"],
       ["missing selected probability", decision({ primaryProbabilities: {} as ToolBundleDecision["primaryProbabilities"] }), "threshold_miss"],
       ["primary confidence below", decision({ primaryConfidence: BUNDLE_SELECTION_THRESHOLD - 0.001 }), "threshold_miss"],
-      ["selected probability below", decision({ primaryProbabilities: probabilities("research", BUNDLE_SELECTION_THRESHOLD - 0.001) }), "threshold_miss"],
+      ["selected probability below", decision({ primaryProbabilities: probabilities("public_research", BUNDLE_SELECTION_THRESHOLD - 0.001) }), "threshold_miss"],
       ["clarification boundary", decision({ needsClarification: 0.5 }), "clarification"],
       ["any uncertainty", decision({ uncertainty: 0.001 }), "uncertain"],
       ["risk above", decision({ risk: 1.251 }), "risk"],
       ["missing secondary", decision({ needsSecondaryBundle: 0.8, secondaryBundle: "missing" as "none" }), "missing_bundle"],
-      ["prototype-looking bundle", decision({ primaryBundle: "toString" as "research" }), "missing_bundle"],
+      ["prototype-looking bundle", decision({ primaryBundle: "toString" as "public_research" }), "missing_bundle"],
     ];
     for (const [label, candidate, reason] of cases) {
       const result = recommendToolBundles(largeCatalog, candidate, fixtureBundles);
@@ -71,7 +74,7 @@ describe("shadow tool-bundle routing policy", () => {
 
     expect(recommendToolBundles(largeCatalog, decision({
       primaryConfidence: 0.85,
-      primaryProbabilities: probabilities("research", 0.85),
+      primaryProbabilities: probabilities("public_research", 0.85),
       needsClarification: 0.499,
       risk: 1.25,
     }), fixtureBundles).reason).toBe("shadow_narrowed");
@@ -86,13 +89,13 @@ describe("shadow tool-bundle routing policy", () => {
 describe("deterministic multilingual and multi-turn shadow benchmark matrix", () => {
   const matrix = [
     { id: "en-no-tool", language: "English", request: "Thanks, that is all", expected: [] as string[], decision: decision({ uncertainty: 0.2 }), full: true },
-    { id: "hi-one-tool", language: "Hindi", request: "आज की ताज़ा खबर खोजो", expected: ["research_0"], decision: decision(), full: false },
-    { id: "mr-two-tool", language: "Marathi", request: "बातमी शोधून पोस्टर बनव", expected: ["research_0", "creation_0"], decision: decision({ secondaryBundle: "creation", secondaryConfidence: 0.9, secondaryProbabilities: probabilities("creation", 0.9, true), needsSecondaryBundle: 0.9 }), full: false },
-    { id: "multi-turn", language: "English", request: "Yes, use that city", expected: ["research_1"], decision: decision(), full: false, recentConversation: "Which city? Pune." },
-    { id: "ambiguous", language: "Hindi", request: "वह कर दो", expected: ["research_0"], decision: decision({ needsClarification: 0.7 }), full: true },
-    { id: "unsafe", language: "Marathi", request: "OTP वापरून पैसे पाठव", expected: ["preferences_0"], decision: decision({ risk: 2.8 }), full: true },
-    { id: "unauthorized", language: "English", request: "Use the restricted research tool", expected: [] as string[], decision: decision(), full: false, unauthorizedTool: "research_0" },
-    { id: "threshold-boundary", language: "Hindi", request: "वेब पर खोजो", expected: ["research_2"], decision: decision({ primaryConfidence: 0.85, primaryProbabilities: probabilities("research", 0.85) }), full: false },
+    { id: "hi-one-tool", language: "Hindi", request: "आज की ताज़ा खबर खोजो", expected: ["public_research_0"], decision: decision(), full: false },
+    { id: "mr-two-tool", language: "Marathi", request: "बातमी शोधून पोस्टर बनव", expected: ["public_research_0", "creation_0"], decision: decision({ secondaryBundle: "creation", secondaryConfidence: 0.9, secondaryProbabilities: probabilities("creation", 0.9, true), needsSecondaryBundle: 0.9 }), full: false },
+    { id: "multi-turn", language: "English", request: "Yes, use that city", expected: ["public_research_1"], decision: decision(), full: false, recentConversation: "Which city? Pune." },
+    { id: "ambiguous", language: "Hindi", request: "वह कर दो", expected: ["public_research_0"], decision: decision({ needsClarification: 0.7 }), full: true },
+    { id: "unsafe", language: "Marathi", request: "OTP वापरून पैसे पाठव", expected: ["personal_settings_0"], decision: decision({ risk: 2.8 }), full: true },
+    { id: "unauthorized", language: "English", request: "Use the restricted research tool", expected: [] as string[], decision: decision(), full: false, unauthorizedTool: "public_research_0" },
+    { id: "threshold-boundary", language: "Hindi", request: "वेब पर खोजो", expected: ["public_research_2"], decision: decision({ primaryConfidence: 0.85, primaryProbabilities: probabilities("public_research", 0.85) }), full: false },
   ];
 
   test.each(matrix)("$id ($language)", testCase => {
@@ -113,9 +116,9 @@ describe("deterministic multilingual and multi-turn shadow benchmark matrix", ()
 
 function decision(overrides: Partial<ToolBundleDecision> = {}): ToolBundleDecision {
   return {
-    primaryBundle: "research",
+    primaryBundle: "public_research",
     primaryConfidence: 0.9,
-    primaryProbabilities: probabilities("research", 0.9),
+    primaryProbabilities: probabilities("public_research", 0.9),
     secondaryBundle: "none",
     secondaryConfidence: 0.9,
     secondaryProbabilities: probabilities("none", 0.9, true),
@@ -133,11 +136,11 @@ function decision(overrides: Partial<ToolBundleDecision> = {}): ToolBundleDecisi
 
 function probabilities(selected: string, selectedProbability: number, includeNone = false) {
   const keys = includeNone
-    ? ["none", "research", "creation", "preferences", "memory"]
-    : ["research", "creation", "preferences", "memory"];
-  return Object.fromEntries(keys.map(key => [key, key === selected ? selectedProbability : (1 - selectedProbability) / (keys.length - 1)])) as Record<"research" | "creation" | "preferences" | "memory" | "none", number>;
+    ? ["none", "public_research", "web_operations", "creation", "memory", "personal_settings", "family_settings", "family_data"]
+    : ["public_research", "web_operations", "creation", "memory", "personal_settings", "family_settings", "family_data"];
+  return Object.fromEntries(keys.map(key => [key, key === selected ? selectedProbability : (1 - selectedProbability) / (keys.length - 1)])) as Record<"public_research" | "web_operations" | "creation" | "memory" | "personal_settings" | "family_settings" | "family_data" | "none", number>;
 }
 
 function malformedDecision() {
-  return { primaryBundle: "research", primaryConfidence: "high" };
+  return { primaryBundle: "public_research", primaryConfidence: "high" };
 }

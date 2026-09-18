@@ -103,6 +103,10 @@ describe("conversational actions", () => {
     })).resolves.toEqual({ ok: true, message: "I'll remember departure city: Pune" });
     await expect(owner.mutation(api.conversationActions.execute, {
       roomId: seeded.roomId,
+      action: { type: "remember", key: "bank account number", value: "123456789012" },
+    })).resolves.toMatchObject({ ok: false });
+    await expect(owner.mutation(api.conversationActions.execute, {
+      roomId: seeded.roomId,
       action: { type: "recall", key: "DEPARTURE CITY" },
     })).resolves.toEqual({ ok: true, message: "departure city: Pune" });
     await expect(owner.mutation(api.conversationActions.execute, {

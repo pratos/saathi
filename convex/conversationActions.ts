@@ -6,6 +6,7 @@ import type { ConversationAction } from "./lib/assistantCapabilities";
 import { normalizeMemoryKey } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
 import { imagePreset, imageStyleValidator } from "./lib/imageSafety";
+import { containsProhibitedSecret } from "./lib/memoryTriage";
 import { MODEL_TIERS } from "./lib/modelTiers";
 
 const language = v.union(v.literal("en"), v.literal("hi"), v.literal("mr"));
@@ -109,6 +110,9 @@ async function applyConversationAction(
     }
     const value = action.value.trim();
     if (!value || value.length > 10_000) return { ok: false, message: "A remembered fact must be between 1 and 10,000 characters." };
+    if (containsProhibitedSecret(`${key} ${value}`)) {
+      return { ok: false, message: "I can't retain passwords, OTPs, API keys, payment credentials, or exact account identifiers." };
+    }
     const now = Date.now();
     if (existing) await ctx.db.patch(existing._id, { value, updatedAt: now });
     else await ctx.db.insert("agentMemory", { agentId, key, value, updatedAt: now });

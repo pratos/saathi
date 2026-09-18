@@ -24,6 +24,12 @@ import {
   turnDecisionGuidance,
   type JevTurnDecision,
 } from "./lib/jev";
+import {
+  memoryDecisionGuidance,
+  safelyDecideMemory,
+  shouldTriageMemoryRequest,
+  type MemorySemanticDecision,
+} from "./lib/memoryTriage";
 import { searchPublicWeb } from "./lib/publicWeb";
 import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
 import {
@@ -91,12 +97,19 @@ export const run = internalAction({
       const decisionContext = decisionContextForAgentJob(work.messages as AgentMessage[]);
       const authorizedToolNames = APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name);
       const largeCatalog = authorizedToolNames.length > DIRECT_PI_TOOL_LIMIT;
-      const turnDecision = typesafeKey && !largeCatalog
-        ? await safeTurnDecision(typesafeKey, decisionInput, decisionContext)
-        : null;
-      const bundleAttempt = typesafeKey && largeCatalog
-        ? await safeBundleDecision(typesafeKey, decisionInput, decisionContext)
-        : { decision: null, latencyMs: 0, error: null };
+      const memoryCandidate = shouldTriageMemoryRequest(decisionInput);
+      const [turnDecision, bundleAttempt, memoryDecision] = await Promise.all([
+        typesafeKey && !largeCatalog
+          ? safeTurnDecision(typesafeKey, decisionInput, decisionContext)
+          : Promise.resolve(null),
+        typesafeKey && largeCatalog
+          ? safeBundleDecision(typesafeKey, decisionInput, decisionContext)
+          : Promise.resolve({ decision: null, latencyMs: 0, error: null }),
+        typesafeKey && memoryCandidate
+          ? safelyDecideMemory(typesafeKey, { originalText: decisionInput })
+          : Promise.resolve(null),
+      ]);
+      const memoryTriage = memoryDecisionTelemetry(memoryDecision);
       const toolRouting = recommendToolBundles(authorizedToolNames, bundleAttempt.decision);
       const toolRoutingDetails = {
         ...toolRouting,
@@ -117,6 +130,7 @@ export const run = internalAction({
       if (turnDecision) {
         await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, {
           ...turnDecision,
+          memoryTriage,
           toolRouting: toolRoutingDetails,
         });
       } else if (largeCatalog) {
@@ -132,10 +146,23 @@ export const run = internalAction({
             model: bundleAttempt.decision?.model ?? "jev-unavailable",
             latencyMs: bundleAttempt.decision?.latencyMs ?? bundleAttempt.latencyMs,
             inputTokens: bundleAttempt.decision?.inputTokens ?? 0,
+            memoryTriage,
           },
         );
+      } else if (memoryDecision?.status === "classified") {
+        await recordJevDecision(ctx, work, "chat_turn", decisionInput, `memory_${memoryDecision.operation.value}`, memoryDecision.operation.confidence, {
+          model: memoryDecision.model ?? "jev-unavailable",
+          latencyMs: memoryDecision.latencyMs,
+          inputTokens: memoryDecision.inputTokens,
+          memoryTriage,
+          toolRouting: toolRoutingDetails,
+        });
       }
-      const ephemeralContext = [work.memoryContext, turnDecisionGuidance(turnDecision)].filter(Boolean).join("\n\n");
+      const ephemeralContext = [
+        work.memoryContext,
+        turnDecisionGuidance(turnDecision),
+        memoryDecisionGuidance(memoryDecision),
+      ].filter(Boolean).join("\n\n");
 
       let turns = 0;
       const agent = new Agent({
@@ -385,6 +412,24 @@ async function safeBundleDecision(
     console.warn("JEV_BUNDLE_DECISION_FAILED", errorName);
     return { decision: null, latencyMs: Date.now() - startedAt, error: errorName };
   }
+}
+
+export function memoryDecisionTelemetry(decision: MemorySemanticDecision | null) {
+  if (!decision) return null;
+  return {
+    status: decision.status,
+    operation: decision.operation,
+    category: decision.category,
+    requestedScope: decision.requestedScope,
+    explicitWrite: decision.explicitWrite,
+    explicitRemove: decision.explicitRemove,
+    sensitive: decision.sensitive,
+    relevance: decision.relevance,
+    durability: decision.durability,
+    model: decision.model,
+    inputTokens: decision.inputTokens,
+    latencyMs: decision.latencyMs,
+  };
 }
 
 async function recordJevDecision(

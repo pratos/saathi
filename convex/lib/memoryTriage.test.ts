@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   applyMemoryPolicy,
   containsProhibitedSecret,
+  memoryDecisionGuidance,
   safelyDecideMemory,
+  shouldTriageMemoryRequest,
   type MemoryCategory,
   type MemoryOperation,
   type MemoryScope,
@@ -95,6 +97,20 @@ describe("deterministic memory policy", () => {
     expect(applyMemoryPolicy(decision, { ...personalContext, confirmedOperation: operation })).toMatchObject({ action: operation });
   });
 
+  test("allows an exact confirmed removal of sensitive retained data without repeating it", () => {
+    const decision = classified({
+      originalText: "Forget my saved bank account number.",
+      operation: "remove",
+      category: "excluded_sensitive",
+      explicitRemove: 0.98,
+      sensitive: 0.99,
+    });
+    expect(applyMemoryPolicy(decision, personalContext)).toMatchObject({ action: "confirm", operation: "remove" });
+    expect(applyMemoryPolicy(decision, { ...personalContext, confirmedOperation: "remove" }))
+      .toEqual({ action: "remove", scope: "person" });
+    expect(memoryDecisionGuidance(decision)).toMatch(/exact authorized deletion/i);
+  });
+
   test("fails closed on classifier failure and low confidence", async () => {
     const failed = await safelyDecideMemory("test-key", { originalText: "माझी माहिती लक्षात ठेव" }, async () => {
       throw new Error("Jev unavailable");
@@ -112,6 +128,21 @@ describe("deterministic memory policy", () => {
       .toMatchObject({ action: "recall", scope: "person" });
     expect(applyMemoryPolicy(classified({ originalText: "Is my saved preference relevant?", operation: "relevance" }), personalContext))
       .toMatchObject({ action: "relevance", scope: "person" });
+  });
+
+  test.each([
+    "Remember our departure city",
+    "यह बात याद रखो",
+    "हे लक्षात ठेव",
+    "Yaad rakhna",
+  ])("recognizes multilingual requests worth semantic triage: %s", text => {
+    expect(shouldTriageMemoryRequest(text)).toBe(true);
+  });
+
+  test("turns classified operations into bounded ephemeral guidance", () => {
+    const store = classified({ originalText: "Remember that I prefer tea", operation: "store", explicitWrite: 0.95 });
+    expect(memoryDecisionGuidance(store)).toMatch(/explicit store request/i);
+    expect(memoryDecisionGuidance(classified({ originalText: "ordinary chat", operation: "none" }))).toBe("");
   });
 });
 

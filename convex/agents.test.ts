@@ -10,6 +10,7 @@ import {
   decisionInputForAgentJob,
   enableOpenRouterWebSearch,
   formatFirecrawlResults,
+  memoryDecisionTelemetry,
   withEphemeralTurnContext,
   withWebAccessPrompt,
 } from "./agentWorker.js";
@@ -169,6 +170,19 @@ describe("durable family agent", () => {
       content: expect.stringContaining("departure city: Pune"),
     });
     expect(JSON.stringify(projected[2])).toContain("Latest request");
+  });
+
+  test("records bounded memory telemetry without duplicating the person's request", () => {
+    const telemetry = memoryDecisionTelemetry({
+      originalText: "Remember my private preference verbatim",
+      operation: { value: "store", confidence: 0.95, probabilities: { none: 0, recall: 0, store: 0.95, merge: 0.02, remove: 0.01, relevance: 0.02 } },
+      category: { value: "preference", confidence: 0.9, probabilities: { profile: 0.01, preference: 0.9, relationship: 0.01, household_rule: 0.01, plan: 0.01, episode: 0.01, temporary: 0.03, excluded_sensitive: 0.02 } },
+      requestedScope: { value: "person", confidence: 0.9, probabilities: { person: 0.9, family: 0.04, current_room: 0.03, unspecified: 0.03 } },
+      explicitWrite: 0.98, explicitRemove: 0, sensitive: 0, relevance: 2, durability: 4,
+      model: "jev-test", inputTokens: 100, latencyMs: 10, status: "classified",
+    });
+    expect(telemetry).toMatchObject({ operation: { value: "store" }, category: { value: "preference" } });
+    expect(JSON.stringify(telemetry)).not.toContain("private preference verbatim");
   });
 
   test("sends the person's request to Jev instead of the internal agent-job wrapper", () => {

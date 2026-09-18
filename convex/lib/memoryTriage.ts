@@ -71,7 +71,8 @@ export type EffectiveMemoryDecision =
   | { action: "reject"; reason: "unauthenticated" | "unauthorized_access" | "unauthorized_scope" | "sensitive_data" }
   | { action: "confirm"; operation: MutableMemoryOperation; scope: "person" | "family"; reason: "mutation_requires_confirmation" }
   | { action: "recall" | "relevance"; scope: "person" | "family"; category: MemoryCategory }
-  | { action: MutableMemoryOperation; scope: "person" | "family"; category: Exclude<MemoryCategory, "excluded_sensitive" | "temporary"> };
+  | { action: "store" | "merge"; scope: "person" | "family"; category: Exclude<MemoryCategory, "excluded_sensitive" | "temporary"> }
+  | { action: "remove"; scope: "person" | "family" };
 
 const MIN_CHOICE_CONFIDENCE = 0.72;
 const MIN_EXPLICIT_WRITE = 0.8;
@@ -164,16 +165,19 @@ export function applyMemoryPolicy(
   if (!context.authenticated) return { action: "reject", reason: "unauthenticated" };
   if (!context.activeFamilyMember || !context.canPostToRoom) return { action: "reject", reason: "unauthorized_access" };
   if (decision.status === "unavailable") return { action: "none", reason: "classifier_unavailable" };
-  if (containsProhibitedSecret(decision.originalText)
+  const confidentRemoval = decision.operation.value === "remove" && isConfident(decision.operation);
+  if (!confidentRemoval && (containsProhibitedSecret(decision.originalText)
     || decision.category.value === "excluded_sensitive"
-    || decision.sensitive > MAX_SENSITIVE_CONFIDENCE) {
+    || decision.sensitive > MAX_SENSITIVE_CONFIDENCE)) {
     return { action: "reject", reason: "sensitive_data" };
   }
   if (!isConfident(decision.operation) || !isConfident(decision.category) || !isConfident(decision.requestedScope)) {
     return { action: "none", reason: "uncertain" };
   }
   if (decision.operation.value === "none") return { action: "none", reason: "no_memory_intent" };
-  if (decision.category.value === "temporary") return { action: "none", reason: "temporary_context" };
+  if (decision.operation.value !== "remove" && decision.category.value === "temporary") {
+    return { action: "none", reason: "temporary_context" };
+  }
 
   const scope = authorizedScope(decision.requestedScope.value, context);
   if (!scope) return { action: "reject", reason: "unauthorized_scope" };
@@ -189,7 +193,39 @@ export function applyMemoryPolicy(
   if (context.confirmedOperation !== operation) {
     return { action: "confirm", operation, scope, reason: "mutation_requires_confirmation" };
   }
+  if (operation === "remove") return { action: operation, scope };
+  if (decision.category.value === "excluded_sensitive" || decision.category.value === "temporary") {
+    return { action: "none", reason: "uncertain" };
+  }
   return { action: operation, scope, category: decision.category.value };
+}
+
+export function shouldTriageMemoryRequest(text: string) {
+  return /\b(?:remember|recall|forget|forgot|memory|memories|save this|saved fact|yaad|bhool)\b|(?:याद|भूल|लक्षात|विसर|आठव)/iu.test(text);
+}
+
+export function memoryDecisionGuidance(decision: MemorySemanticDecision | null) {
+  if (!decision || decision.status === "unavailable") return "";
+  const operation = decision.operation.value;
+  const confidentOperation = isConfident(decision.operation);
+  if (containsProhibitedSecret(decision.originalText)
+    || decision.category.value === "excluded_sensitive"
+    || decision.sensitive > MAX_SENSITIVE_CONFIDENCE) {
+    return operation === "remove" && confidentOperation
+      ? "Jev memory sidecar: the person is asking to remove sensitive retained data. Allow an exact authorized deletion, but do not repeat the sensitive value."
+      : "Jev memory sidecar: do not store or repeat the sensitive value. Explain briefly that Saathi cannot retain secrets.";
+  }
+  if (!confidentOperation) return "";
+  if ((operation === "store" || operation === "merge") && decision.explicitWrite >= MIN_EXPLICIT_WRITE) {
+    return `Jev memory sidecar: this is an explicit ${operation} request in ${decision.requestedScope.value} scope. Use the normal authorized memory tool; do not widen its scope.`;
+  }
+  if (operation === "remove" && decision.explicitRemove >= MIN_EXPLICIT_REMOVE) {
+    return "Jev memory sidecar: this is an explicit removal request. Delete only the exact authorized memory target; ask a focused question if the target is ambiguous.";
+  }
+  if (operation === "recall" || operation === "relevance") {
+    return `Jev memory sidecar: this is a ${operation} request, not permission to write or delete memory.`;
+  }
+  return "";
 }
 
 export function containsProhibitedSecret(text: string) {

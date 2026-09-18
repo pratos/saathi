@@ -30,7 +30,9 @@ describe("shared inbox classification telemetry", () => {
     });
 
     await expect(t.mutation(internal.jev.claimInboxClassification, { inboxItemId: seeded.inboxItemId })).resolves.toBe(true);
-    await expect(t.mutation(internal.jev.claimInboxClassification, { inboxItemId: seeded.inboxItemId })).resolves.toBe(false);
+    // A workflow retry may resume a claimed-but-incomplete classification without
+    // creating a second telemetry row.
+    await expect(t.mutation(internal.jev.claimInboxClassification, { inboxItemId: seeded.inboxItemId })).resolves.toBe(true);
     await expect(t.mutation(internal.jev.claimInboxClassification, { inboxItemId: seeded.gmailItemId })).resolves.toBe(false);
 
     const result = {
@@ -48,6 +50,7 @@ describe("shared inbox classification telemetry", () => {
       disposition: "retained_household_candidate" as const,
     };
     await t.mutation(internal.jev.completeInboxClassification, { inboxItemId: seeded.inboxItemId, result });
+    await expect(t.mutation(internal.jev.claimInboxClassification, { inboxItemId: seeded.inboxItemId })).resolves.toBe(false);
     await t.mutation(internal.jev.completeInboxClassification, {
       inboxItemId: seeded.inboxItemId,
       result: { ...result, decision: { ...result.decision, category: "ignore", confidence: 0.99 } },

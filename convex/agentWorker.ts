@@ -10,6 +10,7 @@ import { env, internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import {
   APPLICATION_ASSISTANT_TOOLS,
+  authorizedAssistantToolNames,
   conversationActionFromTool,
   type ApplicationAssistantToolName,
   type ConversationAction,
@@ -25,9 +26,12 @@ import {
   type JevTurnDecision,
 } from "./lib/jev";
 import {
+  applyMemoryPolicy,
+  confirmedMemoryOperation,
   memoryDecisionGuidance,
   safelyDecideMemory,
   shouldTriageMemoryRequest,
+  toolsAllowedByMemoryPolicy,
   type MemorySemanticDecision,
 } from "./lib/memoryTriage";
 import { searchPublicWeb } from "./lib/publicWeb";
@@ -95,7 +99,7 @@ export const run = internalAction({
       const typesafeKey = env.TYPESAFE_API_KEY?.trim();
       const decisionInput = decisionInputForAgentJob(work.job.prompt);
       const decisionContext = decisionContextForAgentJob(work.messages as AgentMessage[]);
-      const authorizedToolNames = APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name);
+      const authorizedToolNames = authorizedAssistantToolNames(work.requesterRole);
       const largeCatalog = authorizedToolNames.length > DIRECT_PI_TOOL_LIMIT;
       const memoryCandidate = shouldTriageMemoryRequest(decisionInput);
       const [turnDecision, bundleAttempt, memoryDecision] = await Promise.all([
@@ -109,6 +113,16 @@ export const run = internalAction({
           ? safelyDecideMemory(typesafeKey, { originalText: decisionInput })
           : Promise.resolve(null),
       ]);
+      const memoryPolicy = memoryDecision
+        ? applyMemoryPolicy(memoryDecision, {
+          authenticated: true,
+          activeFamilyMember: true,
+          canPostToRoom: true,
+          ...work.memoryPolicyContext,
+          confirmedOperation: confirmedMemoryOperation(decisionInput),
+        })
+        : null;
+      const piToolNames = toolsAllowedByMemoryPolicy(authorizedToolNames, memoryPolicy);
       const memoryTriage = memoryDecisionTelemetry(memoryDecision);
       const toolRouting = recommendToolBundles(authorizedToolNames, bundleAttempt.decision);
       const toolRoutingDetails = {
@@ -127,14 +141,16 @@ export const run = internalAction({
         bundleRecall: null,
         productionNarrowingApplied: false,
       };
+      let jevDecisionId: Id<"jevDecisions"> | null = null;
       if (turnDecision) {
-        await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, {
+        jevDecisionId = await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, {
           ...turnDecision,
           memoryTriage,
+          memoryPolicy,
           toolRouting: toolRoutingDetails,
         });
       } else if (largeCatalog) {
-        await recordJevDecision(
+        jevDecisionId = await recordJevDecision(
           ctx,
           work,
           "chat_turn",
@@ -147,21 +163,23 @@ export const run = internalAction({
             latencyMs: bundleAttempt.decision?.latencyMs ?? bundleAttempt.latencyMs,
             inputTokens: bundleAttempt.decision?.inputTokens ?? 0,
             memoryTriage,
+            memoryPolicy,
           },
         );
       } else if (memoryDecision?.status === "classified") {
-        await recordJevDecision(ctx, work, "chat_turn", decisionInput, `memory_${memoryDecision.operation.value}`, memoryDecision.operation.confidence, {
+        jevDecisionId = await recordJevDecision(ctx, work, "chat_turn", decisionInput, `memory_${memoryDecision.operation.value}`, memoryDecision.operation.confidence, {
           model: memoryDecision.model ?? "jev-unavailable",
           latencyMs: memoryDecision.latencyMs,
           inputTokens: memoryDecision.inputTokens,
           memoryTriage,
+          memoryPolicy,
           toolRouting: toolRoutingDetails,
         });
       }
       const ephemeralContext = [
         work.memoryContext,
         turnDecisionGuidance(turnDecision),
-        memoryDecisionGuidance(memoryDecision),
+        memoryDecisionGuidance(memoryPolicy),
       ].filter(Boolean).join("\n\n");
 
       let turns = 0;
@@ -170,21 +188,25 @@ export const run = internalAction({
           systemPrompt: withWebAccessPrompt(work.agent.systemPrompt),
           model,
           thinkingLevel,
-          // Shadow mode intentionally exposes every already-authorized tool. The
-          // recommendation above is telemetry only until promotion gates pass.
-          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey, authorizedToolNames),
+          // Bundle recommendations remain telemetry-only. Deterministic caller
+          // authorization and pre-turn memory policy still constrain this list.
+          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey, piToolNames),
           messages: work.messages as AgentMessage[],
         },
         transformContext: async messages => withEphemeralTurnContext(messages, ephemeralContext),
         streamFn: models.streamSimple.bind(models),
         getApiKey: () => openRouterKey,
-        onPayload: payload => enableOpenRouterWebSearch(payload, authorizedToolNames.includes("search_public_web")),
+        onPayload: payload => enableOpenRouterWebSearch(payload, piToolNames.includes("search_public_web")),
         sessionId: String(agentId),
         shouldStopAfterTurn: () => ++turns >= 12,
       });
 
       let persistedText = "";
+      const selectedToolNames = new Set<ApplicationAssistantToolName>();
       agent.subscribe(async (event) => {
+        if (event.type === "tool_execution_start" && piToolNames.includes(event.toolName as ApplicationAssistantToolName)) {
+          selectedToolNames.add(event.toolName as ApplicationAssistantToolName);
+        }
         const toolActivity = event.type === "tool_execution_start" || event.type === "tool_execution_end"
           ? event.toolName === "search_public_web" ? "searching_web" as const
             : event.toolName === "generate_image" ? "generating_image" as const
@@ -213,6 +235,16 @@ export const run = internalAction({
       });
 
       await agent.prompt(work.job.prompt);
+      if (jevDecisionId && largeCatalog) {
+        await ctx.runMutation(internal.jev.completeTurnToolRouting, {
+          decisionId: jevDecisionId,
+          jobId: work.job._id,
+          outcome: {
+            selectedToolNames: [...selectedToolNames],
+            metrics: shadowRoutingMetrics(toolRouting, [...selectedToolNames]),
+          },
+        });
+      }
       const messages = makeConvexSafe(agent.state.messages.slice(work.messages.length));
       const usage = assistantUsage(agent.state.messages);
       await ctx.runMutation(internal.agents.finish, {
@@ -428,6 +460,7 @@ export function memoryDecisionTelemetry(decision: MemorySemanticDecision | null)
     durability: decision.durability,
     model: decision.model,
     inputTokens: decision.inputTokens,
+    outputTokens: decision.outputTokens,
     latencyMs: decision.latencyMs,
   };
 }
@@ -445,7 +478,7 @@ async function recordJevDecision(
   details: unknown,
 ) {
   const metadata = details as { model: string; latencyMs: number; inputTokens: number };
-  await ctx.runMutation(internal.jev.record, {
+  return await ctx.runMutation(internal.jev.record, {
     spaceId: work.agent.spaceId,
     roomId: work.agent.roomId,
     jobId: work.job._id,

@@ -41,6 +41,11 @@ const workItem = v.object({
   job: jobDoc,
   messages: v.array(v.any()),
   memoryContext: v.string(),
+  requesterRole: v.union(v.literal("owner"), v.literal("member")),
+  memoryPolicyContext: v.object({
+    roomType: v.union(v.literal("private"), v.literal("shared"), v.literal("case")),
+    requesterOwnsPrivateRoom: v.boolean(),
+  }),
   nextSequence: v.number(),
   leaseId: v.string(),
 });
@@ -110,7 +115,8 @@ export const beginNext = internalMutation({
       await ctx.db.patch(agentId, { status: "idle", updatedAt: Date.now() });
       return null;
     }
-    if (!(await stillCanPrompt(ctx, agent, job.requestedBy))) {
+    const access = await promptAccess(ctx, agent, job.requestedBy);
+    if (!access) {
       const error = "Authorization expired before agent execution";
       await ctx.db.patch(job._id, { status: "failed", completedAt: Date.now(), error });
       await scheduleNextOrIdle(ctx, agentId, error);
@@ -139,6 +145,11 @@ export const beginNext = internalMutation({
       job: { ...job, status: "running" as const, startedAt, attempt, leaseId },
       messages: seeded,
       memoryContext,
+      requesterRole: access.membership.role,
+      memoryPolicyContext: {
+        roomType: access.room.type,
+        requesterOwnsPrivateRoom: access.room.type === "private" && access.room.personalOwnerId === job.requestedBy,
+      },
       nextSequence,
       leaseId,
     };
@@ -332,6 +343,10 @@ async function scheduleNextOrIdle(ctx: MutationCtx, agentId: Id<"agents">, error
 }
 
 async function stillCanPrompt(ctx: QueryCtx | MutationCtx, agent: Doc<"agents">, userId: Id<"users">) {
+  return (await promptAccess(ctx, agent, userId)) !== null;
+}
+
+async function promptAccess(ctx: QueryCtx | MutationCtx, agent: Doc<"agents">, userId: Id<"users">) {
   const [room, membership, roomMember] = await Promise.all([
     ctx.db.get(agent.roomId),
     ctx.db.query("memberships").withIndex("by_space_user", q =>
@@ -341,8 +356,9 @@ async function stillCanPrompt(ctx: QueryCtx | MutationCtx, agent: Doc<"agents">,
       q.eq("roomId", agent.roomId).eq("userId", userId),
     ).unique(),
   ]);
-  return room?.spaceId === agent.spaceId && membership?.status === "active" &&
-    (roomMember?.role === "manager" || roomMember?.role === "participant");
+  if (room?.spaceId !== agent.spaceId || membership?.status !== "active"
+    || (roomMember?.role !== "manager" && roomMember?.role !== "participant")) return null;
+  return { room, membership, roomMember };
 }
 
 function validateOperationId(value: string) {

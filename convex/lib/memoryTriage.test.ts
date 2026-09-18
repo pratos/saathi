@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   applyMemoryPolicy,
+  confirmedMemoryOperation,
   containsProhibitedSecret,
   memoryDecisionGuidance,
   safelyDecideMemory,
   shouldTriageMemoryRequest,
+  toolsAllowedByMemoryPolicy,
   type MemoryCategory,
   type MemoryOperation,
   type MemoryScope,
@@ -108,7 +110,8 @@ describe("deterministic memory policy", () => {
     expect(applyMemoryPolicy(decision, personalContext)).toMatchObject({ action: "confirm", operation: "remove" });
     expect(applyMemoryPolicy(decision, { ...personalContext, confirmedOperation: "remove" }))
       .toEqual({ action: "remove", scope: "person" });
-    expect(memoryDecisionGuidance(decision)).toMatch(/exact authorized deletion/i);
+    expect(memoryDecisionGuidance(applyMemoryPolicy(decision, { ...personalContext, confirmedOperation: "remove" })))
+      .toMatch(/authorized explicit removal/i);
   });
 
   test("fails closed on classifier failure and low confidence", async () => {
@@ -132,17 +135,33 @@ describe("deterministic memory policy", () => {
 
   test.each([
     "Remember our departure city",
+    "Change our saved departure city from Delhi to Pune",
     "यह बात याद रखो",
+    "सेव किया हुआ शहर बदलकर पुणे कर दो",
     "हे लक्षात ठेव",
+    "जतन केलेली नोंद त्याप्रमाणे बदल",
     "Yaad rakhna",
+    "Save my bank account number for later",
   ])("recognizes multilingual requests worth semantic triage: %s", text => {
     expect(shouldTriageMemoryRequest(text)).toBe(true);
   });
 
-  test("turns classified operations into bounded ephemeral guidance", () => {
+  test("derives confirmation only from explicit command language", () => {
+    expect(confirmedMemoryOperation("Remember that I prefer tea")).toBe("store");
+    expect(confirmedMemoryOperation("Change the saved city to Pune")).toBe("merge");
+    expect(confirmedMemoryOperation("जतन केलेली नोंद विसर")).toBe("remove");
+    expect(confirmedMemoryOperation("I remember taking the train")).toBe("store");
+    expect(confirmedMemoryOperation("Yes, do that")).toBeNull();
+  });
+
+  test("turns effective policy into bounded guidance and mutation-tool availability", () => {
     const store = classified({ originalText: "Remember that I prefer tea", operation: "store", explicitWrite: 0.95 });
-    expect(memoryDecisionGuidance(store)).toMatch(/explicit store request/i);
-    expect(memoryDecisionGuidance(classified({ originalText: "ordinary chat", operation: "none" }))).toBe("");
+    const allowed = applyMemoryPolicy(store, { ...personalContext, confirmedOperation: "store" });
+    expect(memoryDecisionGuidance(allowed)).toMatch(/authorized explicit store/i);
+    expect(toolsAllowedByMemoryPolicy(["recall", "remember", "forget_memory"], allowed))
+      .toEqual(["recall", "remember"]);
+    expect(toolsAllowedByMemoryPolicy(["recall", "remember", "forget_memory"], { action: "none", reason: "uncertain" }))
+      .toEqual(["recall"]);
   });
 });
 
@@ -171,6 +190,7 @@ function classified(overrides: {
     durability: 4,
     model: "test",
     inputTokens: 0,
+    outputTokens: 0,
     latencyMs: 1,
     status: "classified",
   };

@@ -223,12 +223,37 @@ export const record = internalMutation({
   }),
 });
 
+export const completeTurnToolRouting = internalMutation({
+  args: {
+    decisionId: v.id("jevDecisions"),
+    jobId: v.id("agentJobs"),
+    outcome: v.object({
+      selectedToolNames: v.array(v.string()),
+      metrics: v.any(),
+    }),
+  },
+  returns: v.null(),
+  handler: async (ctx, { decisionId, jobId, outcome }) => {
+    const decision = await ctx.db.get(decisionId);
+    if (!decision || decision.source !== "chat_turn" || decision.jobId !== jobId) return null;
+    const details = decision.details && typeof decision.details === "object" && !Array.isArray(decision.details)
+      ? decision.details as Record<string, unknown>
+      : {};
+    await ctx.db.patch(decisionId, { details: { ...details, toolRoutingOutcome: outcome } });
+    return null;
+  },
+});
+
 export const claimInboxClassification = internalMutation({
   args: { inboxItemId: v.id("inboxItems") },
   returns: v.boolean(),
   handler: async (ctx, { inboxItemId }) => {
     const item = await ctx.db.get(inboxItemId);
-    if (!item || item.agentmailMessageId.startsWith("gmail:") || item.jevDecisionId) return false;
+    if (!item || item.agentmailMessageId.startsWith("gmail:")) return false;
+    if (item.jevDecisionId) {
+      const existing = await ctx.db.get(item.jevDecisionId);
+      return existing?.artifactSource === "agentmail" && existing.classificationState === "pending";
+    }
     const decisionId = await ctx.db.insert("jevDecisions", {
       spaceId: item.spaceId,
       roomId: item.roomId,

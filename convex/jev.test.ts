@@ -2,6 +2,7 @@ import rateLimiter from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api.js";
+import type { Id } from "./_generated/dataModel.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
@@ -91,23 +92,40 @@ describe("Jev decision records", () => {
       });
       return { ownerId, spaceId, roomId, repliedJobId, silentJobId, failedJobId };
     });
+    let repliedDecisionId: Id<"jevDecisions"> | null = null;
     for (const [jobId, input] of [
       [seeded.repliedJobId, "Help me"],
       [seeded.silentJobId, "Family chat"],
       [seeded.failedJobId, "Search for me"],
     ] as const) {
-      await t.mutation(internal.jev.record, {
+      const decisionId = await t.mutation(internal.jev.record, {
         spaceId: seeded.spaceId, roomId: seeded.roomId, jobId, source: "chat_turn",
         inputPreview: input, decision: "answer", confidence: 0.9, details: {},
         model: "jev-latest", latencyMs: 20, inputTokens: 10,
       });
+      if (jobId === seeded.repliedJobId) repliedDecisionId = decisionId;
     }
+    if (!repliedDecisionId) throw new Error("Expected a Jev decision");
+    await t.mutation(internal.jev.completeTurnToolRouting, {
+      decisionId: repliedDecisionId,
+      jobId: seeded.repliedJobId,
+      outcome: {
+        selectedToolNames: ["search_public_web"],
+        metrics: { bundleRecall: 1, exactToolCoverage: true },
+      },
+    });
 
     const owner = t.withIdentity({ subject: String(seeded.ownerId) });
     const rows = await owner.query(api.jev.recent, { spaceId: seeded.spaceId });
     const byJob = new Map(rows.map(row => [row.jobId, row]));
     expect(byJob.get(seeded.repliedJobId)?.execution).toMatchObject({
       status: "complete", trigger: "automatic", responsePreview: "I can help with that.",
+    });
+    expect(byJob.get(seeded.repliedJobId)?.details).toMatchObject({
+      toolRoutingOutcome: {
+        selectedToolNames: ["search_public_web"],
+        metrics: { bundleRecall: 1, exactToolCoverage: true },
+      },
     });
     expect(byJob.get(seeded.silentJobId)?.execution).toMatchObject({ status: "complete", trigger: "ambient" });
     expect(byJob.get(seeded.silentJobId)?.execution?.responsePreview).toBeUndefined();

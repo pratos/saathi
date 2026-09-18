@@ -15,7 +15,7 @@ export const MEMORY_CATEGORIES = {
   preference: "A personal or household preference.",
   relationship: "A non-sensitive relationship between people or within a household.",
   household_rule: "A durable household rule, responsibility, or routine.",
-  plan: "A dated plan, promise, appointment, or commitment that may expire.",
+  plan: "A specific dated plan, promise, appointment, or commitment that may expire; not a reusable default such as a usual departure city.",
   episode: "The outcome of a past conversation, decision, or completed activity.",
   temporary: "Information useful only for the current turn or short-lived task.",
   excluded_sensitive: "A credential, OTP, authentication secret, payment credential, exact financial account or government identifier, or similarly prohibited secret.",
@@ -52,6 +52,7 @@ export type MemorySemanticDecision = {
   durability: number;
   model: string | null;
   inputTokens: number;
+  outputTokens: number;
   latencyMs: number;
   status: "classified" | "unavailable";
 };
@@ -108,7 +109,7 @@ export async function decideMemory(apiKey: string, input: {
       }, MEMORY_OPERATIONS),
       category: choice({
         question: "Which compact memory category best describes the information involved?",
-        focus: "Use excluded_sensitive whenever durable retention is prohibited, even when storage is explicitly requested.",
+        focus: "Use profile for reusable defaults such as a usual home or departure city. Use plan only for a specific event or dated commitment. Use excluded_sensitive whenever durable retention is prohibited, even when storage is explicitly requested.",
       }, MEMORY_CATEGORIES),
       requested_scope: choice({
         question: "What memory scope does the person explicitly request?",
@@ -124,7 +125,7 @@ export async function decideMemory(apiKey: string, input: {
         "Not relevant.", "Weakly related.", "Possibly useful.", "Directly useful.", "Required to answer correctly.",
       ]),
       durability: score("How durable should this information be if deterministic policy allowed retention?", [
-        "Must not be retained.", "Current turn only.", "Temporary until a date or event.", "Useful until changed.", "Stable until changed or removed.",
+        "Must not be retained.", "Current turn only.", "Temporary until a date or event.", "Useful but expected to change.", "A reusable default or stable fact retained until changed or removed.",
       ]),
     },
   });
@@ -141,6 +142,7 @@ export async function decideMemory(apiKey: string, input: {
     durability: response.answers.durability.score,
     model: response.model,
     inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
     latencyMs: Date.now() - startedAt,
     status: "classified",
   };
@@ -201,31 +203,48 @@ export function applyMemoryPolicy(
 }
 
 export function shouldTriageMemoryRequest(text: string) {
-  return /\b(?:remember|recall|forget|forgot|memory|memories|save this|saved fact|yaad|bhool)\b|(?:याद|भूल|लक्षात|विसर|आठव)/iu.test(text);
+  return /\b(?:remember|recall|forget|forgot|memory|memories|save|saved|store|stored|update|change|delete|remove|yaad|bhool)\b|(?:याद|भूल|सेव|बदल|हटा|मिटा|लक्षात|विसर|आठव|जतन|नोंद)/iu.test(text);
 }
 
-export function memoryDecisionGuidance(decision: MemorySemanticDecision | null) {
-  if (!decision || decision.status === "unavailable") return "";
-  const operation = decision.operation.value;
-  const confidentOperation = isConfident(decision.operation);
-  if (containsProhibitedSecret(decision.originalText)
-    || decision.category.value === "excluded_sensitive"
-    || decision.sensitive > MAX_SENSITIVE_CONFIDENCE) {
-    return operation === "remove" && confidentOperation
-      ? "Jev memory sidecar: the person is asking to remove sensitive retained data. Allow an exact authorized deletion, but do not repeat the sensitive value."
-      : "Jev memory sidecar: do not store or repeat the sensitive value. Explain briefly that Saathi cannot retain secrets.";
+export function confirmedMemoryOperation(text: string): MutableMemoryOperation | null {
+  if (/\b(?:forget|delete|remove)\b|(?:भूल|हटा|मिटा|विसर)/iu.test(text)) return "remove";
+  if (/\b(?:update|change|correct|replace)\b|(?:बदल|दुरुस्त)/iu.test(text)) return "merge";
+  if (/\b(?:remember|save|store)\b|(?:याद\s+रख|सेव\s+कर|लक्षात\s+ठेव|जतन\s+कर)/iu.test(text)) return "store";
+  return null;
+}
+
+export function memoryDecisionGuidance(decision: EffectiveMemoryDecision | null) {
+  if (!decision) return "";
+  if (decision.action === "reject") {
+    return decision.reason === "sensitive_data"
+      ? "Memory policy: do not store or repeat the sensitive value. Explain briefly that Saathi cannot retain secrets."
+      : "Memory policy: the requested memory scope is not authorized in this conversation. Do not write or delete memory.";
   }
-  if (!confidentOperation) return "";
-  if ((operation === "store" || operation === "merge") && decision.explicitWrite >= MIN_EXPLICIT_WRITE) {
-    return `Jev memory sidecar: this is an explicit ${operation} request in ${decision.requestedScope.value} scope. Use the normal authorized memory tool; do not widen its scope.`;
+  if (decision.action === "confirm") {
+    return `Memory policy: ask for explicit confirmation before the ${decision.operation} operation. Do not mutate memory yet.`;
   }
-  if (operation === "remove" && decision.explicitRemove >= MIN_EXPLICIT_REMOVE) {
-    return "Jev memory sidecar: this is an explicit removal request. Delete only the exact authorized memory target; ask a focused question if the target is ambiguous.";
+  if (decision.action === "store" || decision.action === "merge") {
+    return `Memory policy: this is an authorized explicit ${decision.action} request in ${decision.scope} scope. Use the remember tool for only the requested fact.`;
   }
-  if (operation === "recall" || operation === "relevance") {
-    return `Jev memory sidecar: this is a ${operation} request, not permission to write or delete memory.`;
+  if (decision.action === "remove") {
+    return "Memory policy: this is an authorized explicit removal request. Delete only the exact requested memory key; ask a focused question if the target is ambiguous.";
+  }
+  if (decision.action === "recall" || decision.action === "relevance") {
+    return `Memory policy: this is a ${decision.action} request, not permission to write or delete memory.`;
   }
   return "";
+}
+
+export function toolsAllowedByMemoryPolicy<T extends string>(
+  toolNames: readonly T[],
+  decision: EffectiveMemoryDecision | null,
+) {
+  if (!decision) return [...toolNames];
+  const allowRemember = decision.action === "store" || decision.action === "merge";
+  const allowForget = decision.action === "remove";
+  return toolNames.filter(name =>
+    (name !== "remember" || allowRemember) && (name !== "forget_memory" || allowForget),
+  );
 }
 
 export function containsProhibitedSecret(text: string) {
@@ -265,6 +284,7 @@ function unavailableMemoryDecision(originalText: string): MemorySemanticDecision
     durability: 0,
     model: null,
     inputTokens: 0,
+    outputTokens: 0,
     latencyMs: 0,
     status: "unavailable",
   };

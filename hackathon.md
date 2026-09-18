@@ -237,6 +237,8 @@ and outcome telemetry after extraction without delaying inbox readiness. Added
 shadow-only large-catalog routing across seven stable product bundles with
 fail-open thresholds and authorization intersection; Saathi's current 14-tool
 catalog still goes directly to Pi with the full tool set. No live routing was
-promoted or deployed (`convex/lib/memoryTriage.ts`, `convex/conversationActions.ts`,
+promoted to tool-list narrowing. A production-contract memory benchmark then
+passed all 36 English, Hindi/Hinglish, and Marathi cases at an estimated
+$0.00215 for the run (`convex/lib/memoryTriage.ts`, `convex/conversationActions.ts`,
 `convex/lib/inboxClassification.ts`, `convex/lib/toolBundleRouting.ts`,
 `convex/agentWorker.ts`).

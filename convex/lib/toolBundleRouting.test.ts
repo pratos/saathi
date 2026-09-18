@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { APPLICATION_ASSISTANT_TOOLS } from "./assistantCapabilities.js";
+import { APPLICATION_ASSISTANT_TOOLS, authorizedAssistantToolNames } from "./assistantCapabilities.js";
 import {
   BUNDLE_SELECTION_THRESHOLD,
   recommendToolBundles,
@@ -24,6 +24,13 @@ describe("shadow tool-bundle routing policy", () => {
     const bundled = Object.values(TOOL_BUNDLES).flatMap(bundle => [...bundle.tools]);
     expect(bundled.toSorted()).toEqual(APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name).toSorted());
     expect(new Set(bundled).size).toBe(bundled.length);
+  });
+
+  test("starts from deterministic caller authorization before bundle intersection", () => {
+    expect(authorizedAssistantToolNames("owner")).toHaveLength(APPLICATION_ASSISTANT_TOOLS.length);
+    expect(authorizedAssistantToolNames("member")).not.toContain("set_food_budget");
+    expect(authorizedAssistantToolNames("member")).not.toContain("set_model_tier");
+    expect(authorizedAssistantToolNames("member")).toContain("set_reading_language");
   });
 
   test("gives Direct Pi the complete authorized set at and below 30 tools", () => {

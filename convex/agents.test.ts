@@ -46,6 +46,11 @@ describe("durable family agent", () => {
       roomId, provider: "openrouter", model: "openai/gpt-5.6-luna", status: "running",
     });
     expect(snapshot?.jobs).toEqual(expect.arrayContaining([expect.objectContaining({ _id: jobId, status: "queued" })]));
+    const work = await t.mutation(internal.agents.beginNext, { agentId });
+    expect(work).toMatchObject({
+      requesterRole: "member",
+      memoryPolicyContext: { roomType: "shared", requesterOwnsPrivateRoom: false },
+    });
   });
 
   test("first agent job is seeded with recent room chat and shared file notes", async () => {
@@ -179,7 +184,7 @@ describe("durable family agent", () => {
       category: { value: "preference", confidence: 0.9, probabilities: { profile: 0.01, preference: 0.9, relationship: 0.01, household_rule: 0.01, plan: 0.01, episode: 0.01, temporary: 0.03, excluded_sensitive: 0.02 } },
       requestedScope: { value: "person", confidence: 0.9, probabilities: { person: 0.9, family: 0.04, current_room: 0.03, unspecified: 0.03 } },
       explicitWrite: 0.98, explicitRemove: 0, sensitive: 0, relevance: 2, durability: 4,
-      model: "jev-test", inputTokens: 100, latencyMs: 10, status: "classified",
+      model: "jev-test", inputTokens: 100, outputTokens: 10, latencyMs: 10, status: "classified",
     });
     expect(telemetry).toMatchObject({ operation: { value: "store" }, category: { value: "preference" } });
     expect(JSON.stringify(telemetry)).not.toContain("private preference verbatim");

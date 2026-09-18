@@ -151,6 +151,14 @@ export const APPLICATION_ASSISTANT_TOOLS = [
 export type ApplicationAssistantToolName = (typeof APPLICATION_ASSISTANT_TOOLS)[number]["name"];
 export type ConversationActionToolName = (typeof CONVERSATION_ACTION_TOOLS)[number]["name"];
 
+const OWNER_ONLY_TOOLS = new Set<ApplicationAssistantToolName>(["set_food_budget", "set_model_tier"]);
+
+export function authorizedAssistantToolNames(role: "owner" | "member") {
+  return APPLICATION_ASSISTANT_TOOLS
+    .map(tool => tool.name)
+    .filter(name => role === "owner" || !OWNER_ONLY_TOOLS.has(name));
+}
+
 export function assistantProviderTools() {
   return APPLICATION_ASSISTANT_TOOLS.map(({ label: _label, ...tool }) => tool);
 }

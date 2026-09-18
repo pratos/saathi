@@ -226,3 +226,17 @@ slower at p95 and only 5.7% cheaper. Removed tool-list narrowing and per-tool Je
 gates from text and voice while retaining pre-turn guidance and deterministic
 authorization (`scripts/jev-pi-e2e-benchmark.mjs`, `convex/agentWorker.ts`,
 `src/useLiveVoice.ts`, `src/LiveWorkspace.tsx`).
+
+### 2026-09-18 - Jev product slices
+Implemented Jev as bounded product assistance rather than a per-tool gate.
+Multilingual memory triage now detects recall, explicit writes, corrections,
+removals, relevance, and prohibited secrets; its guidance is ephemeral while
+deterministic handlers retain authorization, confirmation, scope, and secret
+enforcement. AgentMail artifacts receive advisory asynchronous classification
+and outcome telemetry after extraction without delaying inbox readiness. Added
+shadow-only large-catalog routing across seven stable product bundles with
+fail-open thresholds and authorization intersection; Saathi's current 14-tool
+catalog still goes directly to Pi with the full tool set. No live routing was
+promoted or deployed (`convex/lib/memoryTriage.ts`, `convex/conversationActions.ts`,
+`convex/lib/inboxClassification.ts`, `convex/lib/toolBundleRouting.ts`,
+`convex/agentWorker.ts`).

@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-16T12:00:00Z
+- **Last updated:** 2026-09-17T17:15:52Z
 
 ## Log
 
@@ -195,3 +195,34 @@ create up to 3 owned families. Chat PDFs upload up to 50 MB (Convex URL uploads 
 the 20 MB HTTP-action cap; images stay at 20 MB) and are parsed with Firecrawl.
 The mobile composer exposes Camera. Saathi jobs are seeded from recent room chat and
 shared-file notes so questions about a just-shared GIF or PDF can see it.
+
+### 2026-09-16 - 8d7df4b
+Added manual Gmail refresh, reliable Gmail PDF attachment reads, dual-currency
+receipt extraction, owner-visible family usage, OTP resend, persistent sessions,
+and write-contention fixes for concurrent Gmail sync (`convex/gmail.ts`,
+`convex/gmailData.ts`, `convex/inboxWorkflow.ts`, `src/LiveWorkspace.tsx`).
+
+### 2026-09-17 - 16e6743
+Simplified the workspace around conversations, unified text Pi and GPT-Live on
+one typed capability registry, and added deterministic handlers for multilingual
+settings, memory, family data, web research, image generation, and computer use.
+Improved voice handoffs and made Gmail attachment processing resilient
+(`convex/lib/assistantCapabilities.ts`, `convex/agentWorker.ts`,
+`convex/conversationActions.ts`, `src/useLiveVoice.ts`).
+
+### 2026-09-17 - 4e5c0ee
+Integrated TypeSafe/Jev as a multilingual pre-turn decision sidecar and private
+owner inspector, then added a 36-case English, Hindi/Hinglish, and Marathi memory
+benchmark covering store, recall, update, delete, scope, sensitivity, and
+durability. Image-provider errors now return safe, actionable messages
+(`convex/lib/jev.ts`, `convex/jev.ts`,
+`convex/lib/jev.memory.benchmark.test.ts`, `convex/lib/imageGeneration.ts`).
+
+### 2026-09-17 - f3d4357
+Compared direct Pi and Jev-assisted paths over 468 captured Luna responses with
+identical 15-tool and 200-tool conditions. The evidence did not support global
+Jev promotion: 200-tool accuracy held at 91.5%, but pre-turn routing was 10.2%
+slower at p95 and only 5.7% cheaper. Removed tool-list narrowing and per-tool Jev
+gates from text and voice while retaining pre-turn guidance and deterministic
+authorization (`scripts/jev-pi-e2e-benchmark.mjs`, `convex/agentWorker.ts`,
+`src/useLiveVoice.ts`, `src/LiveWorkspace.tsx`).

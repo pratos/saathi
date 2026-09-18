@@ -300,7 +300,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Inbox</span></button>
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
         <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
-        {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Lab</span></button>}
+        {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Debug</span></button>}
         {isBenchmarkAdmin && <button className={`rail-action ${benchmarkAdminOpen ? 'active' : ''}`} onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /><span>Benchmarks</span></button>}
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
@@ -421,7 +421,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
           {family.membership.role === 'owner' && <section><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
         </details>
         {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
-        {family.membership.role === 'owner' && <section className="jev-settings-card"><span>Jev decision lab</span><p>Test how Saathi routes a request and inspect recent chat, voice, and Gmail decisions without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Lab</button></section>}
+        {family.membership.role === 'owner' && <section className="jev-settings-card"><span>Jev debug</span><p>Preview routing and inspect recent chat, Voice, and Gmail decision logs without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Debug</button></section>}
         {isBenchmarkAdmin && <section className="jev-settings-card"><span>Private benchmark report</span><p>Review multilingual quality, routing safety, cost estimates, and prompt-cache tradeoffs.</p><button type="button" className="connect-gmail" onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /> Open benchmarks</button></section>}
         </div>
       </aside>
@@ -587,12 +587,20 @@ function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: ()
 
   return <div className="jev-lab-backdrop" role="presentation" onMouseDown={onClose}>
     <aside className="jev-lab-drawer" role="dialog" aria-modal="true" aria-labelledby="jev-lab-title" onMouseDown={event => event.stopPropagation()}>
-      <header><div><span><Sparkles /> Decision inspector</span><h2 id="jev-lab-title">How Saathi decided</h2><p>Jev recommends the next step. Pi or Voice then responds and uses tools.</p></div><button type="button" onClick={onClose} aria-label="Close decision inspector" autoFocus><X /></button></header>
+      <header><div><span><Sparkles /> Jev debug</span><h2 id="jev-lab-title">Routing and tool logs</h2><p>See where Jev runs and what Saathi did next.</p></div><button type="button" onClick={onClose} aria-label="Close Jev debug" autoFocus><X /></button></header>
       <div className="jev-flow" aria-label="How a request is handled">
         <span><b>1</b>Your request</span><i aria-hidden="true" />
         <span><b>2</b>Jev recommends</span><i aria-hidden="true" />
-        <span><b>3</b>Pi or Voice acts</span>
+        <span><b>3</b>Pi acts</span>
       </div>
+      <section className="jev-integration-note" aria-labelledby="jev-integration-title">
+        <div><strong id="jev-integration-title">Where Jev is integrated</strong><span>Debug visibility, not an execution gate</span></div>
+        <ul>
+          <li><b>Chat</b><span>Jev recommends a route before Pi. Large-catalog bundle selection is shadow-only, so Pi still sees the full authorized tool set.</span></li>
+          <li><b>Voice</b><span>GPT Live uses app tools directly. Jev separately controls browser navigation from page-derived safe actions; completed tool calls are logged without a generic per-tool gate.</span></li>
+          <li><b>Gmail</b><span>Jev classifies mail before private inbox extraction and retention rules continue separately.</span></li>
+        </ul>
+      </section>
       <form className="jev-test-form" onSubmit={submit}>
         <label htmlFor="jev-test-input">Preview a routing decision</label>
         <textarea id="jev-test-input" value={text} onChange={event => setText(event.target.value)} rows={4} maxLength={12_000} />
@@ -613,11 +621,11 @@ function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: ()
         <div className="jev-probabilities">{probabilities.map(([label, probability]) => <div key={label}><span>{jevDecisionLabel('lab', label)}</span><i><b style={{ width: `${Math.max(2, probability * 100)}%` }} /></i><strong>{Math.round(probability * 100)}%</strong></div>)}</div>
         <small>{result.model} · {result.inputTokens} input tokens</small>
       </section>}
-      <section className="jev-history"><div className="jev-section-title"><div><h3>Recent decisions and outcomes</h3><p>Chat decisions show what Pi did next. Older records may not have an outcome.</p></div><span>{recent?.length ?? 0}</span></div>
+      <section className="jev-history"><div className="jev-section-title"><div><h3>Recent debug logs</h3><p>Chat recommendations, completed Voice tool calls, and Gmail classifications. Older records may not have an outcome.</p></div><span>{recent?.length ?? 0}</span></div>
         {recent === undefined && <p>Loading decisions…</p>}
         {recent?.length === 0 && <p>No decisions yet. Inspect a route above or ask Saathi something.</p>}
         {recent?.map(item => {
-          const outcome = jevExecutionSummary(item.source, item.execution)
+          const outcome = jevExecutionSummary(item.source, item.execution, item.details)
           return <article key={item._id}>
             <div><span>{jevSourceLabel(item.source)}</span><time>{formatRelativeTime(item.createdAt)}</time></div>
             <strong>{jevDecisionLabel(item.source, item.decision)}</strong>
@@ -636,7 +644,7 @@ type JevSource = 'chat_turn' | 'chat_tool' | 'voice_tool' | 'voice_browser' | 'g
 function jevSourceLabel(source: JevSource) {
   if (source === 'chat_turn') return 'Chat recommendation'
   if (source === 'chat_tool') return 'Chat action check'
-  if (source === 'voice_tool') return 'Voice action check'
+  if (source === 'voice_tool') return 'Voice tool result'
   if (source === 'voice_browser') return 'Voice browser decision'
   if (source === 'gmail') return 'Email classification'
   return 'Routing preview'
@@ -652,6 +660,20 @@ const jevRouteLabels: Record<string, string> = {
   memory: 'Use memory',
   family_data: 'Read saved family data',
   multi_tool: 'Use multiple tools',
+  search_public_web: 'Search public web',
+  use_computer: 'Use computer',
+  generate_image: 'Generate image',
+  set_reading_language: 'Set reading language',
+  set_image_style: 'Set image style',
+  set_food_budget: 'Set food budget',
+  set_model_tier: 'Set thinking level',
+  remember: 'Remember fact',
+  recall: 'Recall fact',
+  forget_memory: 'Forget fact',
+  list_memories: 'List memories',
+  get_food_budget: 'Read food budget',
+  find_room_files: 'Find room files',
+  search_family_inbox: 'Search family inbox',
   execute: 'Allow the action',
   block: 'Stop the action',
   bills: 'Keep as a bill',
@@ -673,11 +695,23 @@ function jevExecutionSummary(
     responsePreview?: string
     error?: string
   },
+  details?: unknown,
 ) {
   if (!execution) {
     if (source === 'lab') return { tone: 'neutral', label: 'Preview only', detail: 'This did not start Pi or a tool.' }
     if (source === 'gmail') return { tone: 'neutral', label: 'Classification recorded', detail: 'Email processing continues separately.' }
-    if (source === 'voice_tool') return { tone: 'neutral', label: 'Recommendation sent to Voice', detail: 'Completion is not linked to this record yet.' }
+    if (source === 'voice_tool') {
+      const voice = details && typeof details === 'object'
+        ? details as { integration?: unknown; ok?: unknown; resultPreview?: unknown }
+        : null
+      if (voice?.integration !== 'voice_observation') {
+        return { tone: 'neutral', label: 'Voice recommendation recorded', detail: 'This older record is not linked to a tool result.' }
+      }
+      const detail = typeof voice?.resultPreview === 'string' ? voice.resultPreview : 'Voice completed the tool call.'
+      return voice?.ok === false
+        ? { tone: 'error', label: 'Voice tool failed', detail }
+        : { tone: 'success', label: 'Voice tool completed', detail }
+    }
     if (source === 'voice_browser') return { tone: 'neutral', label: 'Browser decision recorded', detail: 'Jev selected from page-derived safe actions.' }
     return { tone: 'neutral', label: 'Outcome not available', detail: 'This record was created before outcome tracking was added.' }
   }

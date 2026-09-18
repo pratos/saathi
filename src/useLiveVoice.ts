@@ -30,6 +30,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const searchVoiceWeb = useAction(api.liveVoice.searchPublicWeb)
   const executeVoiceComputer = useAction(api.voiceBrowser.useComputer)
   const executeConversationAction = useMutation(api.conversationActions.execute)
+  const logVoiceToolResult = useMutation(api.liveVoice.logToolResult)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
@@ -199,14 +200,27 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
         } else if (event.type === 'response.event') {
           const call = liveToolCall(event.raw)
           if (call) setActivities(current => addVoiceToolActivity(current, call))
+          const startedAt = Date.now()
+          const onToolFinished = (result: VoiceToolResult) => {
+            if (!call) return
+            setActivities(current => finishVoiceToolActivity(current, call.callId, result))
+            const activeSessionId = sessionIdRef.current
+            if (!activeSessionId) return
+            void logVoiceToolResult({
+              roomId,
+              sessionId: activeSessionId,
+              callId: call.callId,
+              toolName: call.name,
+              detail: voiceToolDetail(call),
+              ok: result.ok,
+              resultPreview: result.message,
+              latencyMs: Date.now() - startedAt,
+            }).catch(() => undefined)
+          }
           if (call?.name === 'generate_image') {
-            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError, onToolFinished)
           } else if (call?.name === 'search_public_web') {
-            void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({ roomId, query: stringArg(call.arguments, 'query') }), 'The public web search could not be completed.', setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({ roomId, query: stringArg(call.arguments, 'query') }), 'The public web search could not be completed.', setError, onToolFinished)
           } else if (call?.name === 'use_computer') {
             void fulfillVoiceExternalTool(channel, call.callId, () => executeVoiceComputer({
               roomId,
@@ -214,13 +228,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
               callId: call.callId,
               url: stringArg(call.arguments, 'url'),
               task: stringArg(call.arguments, 'task'),
-            }), 'The website task could not be completed.', setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            }), 'The website task could not be completed.', setError, onToolFinished)
           } else if (call) {
-            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, onToolFinished)
           }
         } else if (event.type === 'error') {
           setError(event.message || 'Saathi encountered a voice error.')
@@ -256,7 +266,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')
     }
-  }, [cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, persistKnownTranscript, roomId, searchVoiceWeb, status])
+  }, [cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, logVoiceToolResult, persistKnownTranscript, roomId, searchVoiceWeb, status])
 
   const end = useCallback(() => {
     const channel = channelRef.current
@@ -402,22 +412,21 @@ function optionalStringArg(args: Record<string, unknown>, key: string) {
 
 export function addVoiceToolActivity(current: VoiceToolActivity[], call: LiveToolCall): VoiceToolActivity[] {
   const tool = APPLICATION_ASSISTANT_TOOLS.find(candidate => candidate.name === call.name)
-  const args = call.name === 'generate_image' ? null : call.arguments
-  const detail = call.name === 'generate_image'
-    ? call.prompt
-    : call.name === 'search_public_web'
-      ? stringArg(args!, 'query')
-      : call.name === 'use_computer'
-        ? stringArg(args!, 'task')
-        : voiceActionDetail(call.name, args!)
   const activity: VoiceToolActivity = {
     id: call.callId,
     name: call.name,
     title: tool?.label ?? 'Saathi action',
-    detail,
+    detail: voiceToolDetail(call),
     status: 'running',
   }
   return [...current.filter(item => item.id !== call.callId), activity].slice(-6)
+}
+
+function voiceToolDetail(call: LiveToolCall) {
+  if (call.name === 'generate_image') return call.prompt
+  if (call.name === 'search_public_web') return stringArg(call.arguments, 'query')
+  if (call.name === 'use_computer') return stringArg(call.arguments, 'task')
+  return voiceActionDetail(call.name, call.arguments)
 }
 
 export function finishVoiceToolActivity(

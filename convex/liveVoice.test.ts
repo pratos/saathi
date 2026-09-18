@@ -88,6 +88,29 @@ describe("GPT-Live call summaries", () => {
       sessionId: "live_browser_session_789",
     })).resolves.toBeNull();
 
+    const voiceLog = {
+      roomId,
+      sessionId: "live_asymmetric_session_123",
+      callId: "call_voice_search_123",
+      toolName: "search_public_web",
+      detail: "Pune weather tomorrow",
+      ok: true,
+      resultPreview: "Sunny with a chance of rain.",
+      latencyMs: 142,
+    };
+    await expect(outsider.mutation(api.liveVoice.logToolResult, voiceLog)).rejects.toThrow(/does not belong/i);
+    await expect(owner.mutation(api.liveVoice.logToolResult, voiceLog)).resolves.toBeNull();
+    expect(await t.run(ctx => ctx.db.query("jevDecisions").collect())).toEqual([
+      expect.objectContaining({
+        source: "voice_tool",
+        decision: "search_public_web",
+        inputPreview: "Search public web — Pune weather tomorrow",
+        latencyMs: 142,
+        inputTokens: 0,
+        details: expect.objectContaining({ ok: true, jevGateApplied: false }),
+      }),
+    ]);
+
     await expect(outsider.mutation(internal.liveVoice.storeSummary, args)).rejects.toThrow(/does not belong/i);
     await expect(owner.mutation(internal.liveVoice.storeSummary, args)).resolves.toBe("saved");
     await expect(owner.mutation(internal.liveVoice.storeSummary, args)).resolves.toBe("already_saved");

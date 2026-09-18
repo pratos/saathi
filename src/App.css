@@ -1571,6 +1571,13 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .jev-flow span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .jev-flow span b { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; color: #fffdf8; background: #233f72; font-size: 9px; }
 .jev-flow i { height: 1px; background: #cfc7bb; }
+.jev-integration-note { margin-bottom: 18px; padding: 15px; border: 1px solid #cbd6e4; border-radius: 14px; background: #edf2f7; }
+.jev-integration-note > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.jev-integration-note strong { color: #233f72; font-size: 12px; }
+.jev-integration-note > div span { color: #697283; font-size: 9px; font-weight: 700; text-align: right; }
+.jev-integration-note ul { display: grid; gap: 9px; margin: 13px 0 0; padding: 0; list-style: none; }
+.jev-integration-note li { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 9px; color: #596779; font-size: 10px; line-height: 1.45; }
+.jev-integration-note li b { color: #9a4a2d; }
 .jev-test-form { display: grid; gap: 9px; padding: 17px; border: 1px solid #d8d2c8; border-radius: 14px; background: #fffdf8; }
 .jev-test-form label { font-size: 12px; font-weight: 800; }
 .jev-test-form textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid #d8d2c8; border-radius: 10px; outline: 0; color: #17233a; background: #fbfaf6; font: 14px/1.5 'Inter', sans-serif; }

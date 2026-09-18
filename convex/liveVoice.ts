@@ -2,8 +2,8 @@ import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, env, internalMutation, internalQuery, query } from "./_generated/server";
-import { assistantProviderTools } from "./lib/assistantCapabilities";
+import { action, env, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from "./lib/assistantCapabilities";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
 import { profileNameForUser, runFirecrawlComputerTask } from "./lib/firecrawlInteract";
@@ -262,6 +262,53 @@ export const prepareExternalTool = internalMutation({
     const { userId } = await requireRoomPermission(ctx, roomId, "post_message");
     const limit = await liveVoiceLimits.limit(ctx, "voiceWebSearch", { key: String(userId) });
     if (!limit.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: limit.retryAfter });
+    return null;
+  },
+});
+
+export const logToolResult = mutation({
+  args: {
+    roomId: v.id("rooms"),
+    sessionId: v.string(),
+    callId: v.string(),
+    toolName: v.string(),
+    detail: v.string(),
+    ok: v.boolean(),
+    resultPreview: v.string(),
+    latencyMs: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { userId, room } = await requireRoomPermission(ctx, args.roomId, "post_message");
+    const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q =>
+      q.eq("sessionId", args.sessionId),
+    ).unique();
+    if (!session || session.roomId !== args.roomId || session.startedBy !== userId || session.finishedAt) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "This voice session does not belong to you" });
+    }
+    const tool = APPLICATION_ASSISTANT_TOOLS.find(candidate => candidate.name === args.toolName);
+    const callId = args.callId.trim();
+    if (!tool || callId.length < 3 || callId.length > 200 || !Number.isFinite(args.latencyMs) || args.latencyMs < 0) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice tool result" });
+    }
+    await ctx.db.insert("jevDecisions", {
+      spaceId: room.spaceId,
+      roomId: room._id,
+      source: "voice_tool",
+      inputPreview: `${tool.label}${args.detail.trim() ? ` — ${args.detail.trim()}` : ""}`.slice(0, 500),
+      decision: tool.name,
+      details: {
+        integration: "voice_observation",
+        callId,
+        ok: args.ok,
+        resultPreview: args.resultPreview.replace(/\s+/g, " ").trim().slice(0, 500),
+        jevGateApplied: false,
+      },
+      model: "gpt-live-1",
+      latencyMs: Math.min(args.latencyMs, 30 * 60 * 1000),
+      inputTokens: 0,
+      createdAt: Date.now(),
+    });
     return null;
   },
 });

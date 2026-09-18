@@ -26,6 +26,14 @@ import {
 } from "./lib/jev";
 import { searchPublicWeb } from "./lib/publicWeb";
 import { isNoReplyText, SAATHI_IMAGE_MODEL, SAATHI_WEB_ACCESS_PROMPT } from "./lib/saathi";
+import {
+  decideToolBundles,
+  DIRECT_PI_TOOL_LIMIT,
+  estimatedJevCostUsd,
+  recommendToolBundles,
+  shadowRoutingMetrics,
+  type ToolBundleDecision,
+} from "./lib/toolBundleRouting";
 
 export { formatPublicWebResults as formatFirecrawlResults } from "./lib/publicWeb";
 
@@ -81,9 +89,51 @@ export const run = internalAction({
       const typesafeKey = env.TYPESAFE_API_KEY?.trim();
       const decisionInput = decisionInputForAgentJob(work.job.prompt);
       const decisionContext = decisionContextForAgentJob(work.messages as AgentMessage[]);
-      const turnDecision = typesafeKey ? await safeTurnDecision(typesafeKey, decisionInput, decisionContext) : null;
+      const authorizedToolNames = APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name);
+      const largeCatalog = authorizedToolNames.length > DIRECT_PI_TOOL_LIMIT;
+      const turnDecision = typesafeKey && !largeCatalog
+        ? await safeTurnDecision(typesafeKey, decisionInput, decisionContext)
+        : null;
+      const bundleAttempt = typesafeKey && largeCatalog
+        ? await safeBundleDecision(typesafeKey, decisionInput, decisionContext)
+        : { decision: null, latencyMs: 0, error: null };
+      const toolRouting = recommendToolBundles(authorizedToolNames, bundleAttempt.decision);
+      const toolRoutingDetails = {
+        ...toolRouting,
+        metrics: shadowRoutingMetrics(toolRouting),
+        classifier: bundleAttempt.decision,
+        classifierError: bundleAttempt.error,
+        classifierLatencyMs: bundleAttempt.decision?.latencyMs ?? bundleAttempt.latencyMs,
+        classifierInputTokens: bundleAttempt.decision?.inputTokens ?? 0,
+        classifierOutputTokens: bundleAttempt.decision?.outputTokens ?? 0,
+        classifierCostUsd: estimatedJevCostUsd(bundleAttempt.decision?.inputTokens ?? 0),
+        language: null,
+        multiTurn: decisionContext.length > 0,
+        languageAccuracy: null,
+        multiTurnAccuracy: null,
+        bundleRecall: null,
+        productionNarrowingApplied: false,
+      };
       if (turnDecision) {
-        await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, turnDecision);
+        await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, {
+          ...turnDecision,
+          toolRouting: toolRoutingDetails,
+        });
+      } else if (largeCatalog) {
+        await recordJevDecision(
+          ctx,
+          work,
+          "chat_turn",
+          decisionInput,
+          toolRouting.reason,
+          bundleAttempt.decision?.primaryConfidence ?? 0,
+          {
+            ...toolRoutingDetails,
+            model: bundleAttempt.decision?.model ?? "jev-unavailable",
+            latencyMs: bundleAttempt.decision?.latencyMs ?? bundleAttempt.latencyMs,
+            inputTokens: bundleAttempt.decision?.inputTokens ?? 0,
+          },
+        );
       }
       const ephemeralContext = [work.memoryContext, turnDecisionGuidance(turnDecision)].filter(Boolean).join("\n\n");
 
@@ -93,13 +143,15 @@ export const run = internalAction({
           systemPrompt: withWebAccessPrompt(work.agent.systemPrompt),
           model,
           thinkingLevel,
-          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey),
+          // Shadow mode intentionally exposes every already-authorized tool. The
+          // recommendation above is telemetry only until promotion gates pass.
+          tools: createTools(ctx, agentId, work.job._id, work.leaseId, openRouterKey, authorizedToolNames),
           messages: work.messages as AgentMessage[],
         },
         transformContext: async messages => withEphemeralTurnContext(messages, ephemeralContext),
         streamFn: models.streamSimple.bind(models),
         getApiKey: () => openRouterKey,
-        onPayload: payload => enableOpenRouterWebSearch(payload),
+        onPayload: payload => enableOpenRouterWebSearch(payload, authorizedToolNames.includes("search_public_web")),
         sessionId: String(agentId),
         shouldStopAfterTurn: () => ++turns >= 12,
       });
@@ -156,8 +208,10 @@ function createTools(
   jobId: Id<"agentJobs">,
   leaseId: string,
   openRouterKey: string,
+  authorizedToolNames: readonly ApplicationAssistantToolName[],
 ): AgentTool[] {
-  return APPLICATION_ASSISTANT_TOOLS.map(tool => ({
+  const authorized = new Set(authorizedToolNames);
+  return APPLICATION_ASSISTANT_TOOLS.filter(tool => authorized.has(tool.name)).map(tool => ({
     name: tool.name,
     label: tool.label,
     description: tool.description,
@@ -311,6 +365,25 @@ async function safeTurnDecision(apiKey: string, request: string, recentConversat
   } catch (error) {
     console.warn("JEV_TURN_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
     return null;
+  }
+}
+
+async function safeBundleDecision(
+  apiKey: string,
+  request: string,
+  recentConversation: string,
+): Promise<{ decision: ToolBundleDecision | null; latencyMs: number; error: string | null }> {
+  const startedAt = Date.now();
+  try {
+    return {
+      decision: await decideToolBundles(apiKey, request, recentConversation),
+      latencyMs: Date.now() - startedAt,
+      error: null,
+    };
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "unknown";
+    console.warn("JEV_BUNDLE_DECISION_FAILED", errorName);
+    return { decision: null, latencyMs: Date.now() - startedAt, error: errorName };
   }
 }
 

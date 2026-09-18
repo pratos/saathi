@@ -5,6 +5,11 @@ import { components, internal } from "./_generated/api";
 import { env, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { parsePublicDocument } from "./lib/firecrawlParse";
 import { attachmentHint, extractPasswordHints, findDocumentUrls, inferDirection } from "./lib/inboxExtract";
+import {
+  classifyInboxEmail,
+  inboxClassificationResultValidator,
+  type InboxClassificationResult,
+} from "./lib/inboxClassification";
 
 const category = v.union(
   v.literal("bills"),
@@ -56,6 +61,11 @@ export const processInboxItem = workflow
       documentParseStatus: documents.status,
       processingNotes: documents.notes || extraction.notes,
     }, { inline: true });
+    const claimed = await step.runMutation(internal.jev.claimInboxClassification, args, { inline: true });
+    if (claimed) {
+      const classification = await step.runAction(internal.inboxWorkflow.classifyForTelemetry, args);
+      await step.runMutation(internal.jev.completeInboxClassification, { ...args, result: classification }, { inline: true });
+    }
   });
 
 export const enqueue = internalMutation({
@@ -102,6 +112,26 @@ export const itemForExtraction = internalQuery({
       familyInboxId: space?.agentmailInboxId ?? null,
       agentmailMessageId: item.agentmailMessageId,
     };
+  },
+});
+
+export const classifyForTelemetry = internalAction({
+  args: { inboxItemId: v.id("inboxItems") },
+  returns: inboxClassificationResultValidator,
+  handler: async (ctx, args): Promise<InboxClassificationResult> => {
+    const item: {
+      subject: string;
+      originalText: string;
+      originalHtml: string | null;
+      sender: string;
+      familyInboxId: string | null;
+      agentmailMessageId: string;
+    } = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
+    return await classifyInboxEmail(env.TYPESAFE_API_KEY?.trim(), {
+      sender: item.sender,
+      subject: item.subject,
+      text: item.originalText,
+    });
   },
 });
 

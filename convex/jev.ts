@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import { action, env, internalMutation, query } from "./_generated/server";
 import { requireSpacePermission, requireUser } from "./lib/authz";
 import { decideAgentTurn } from "./lib/jev";
+import { inboxClassificationResultValidator, type InboxClassificationResult } from "./lib/inboxClassification";
 
 const BENCHMARK_ADMIN_EMAIL = "prathamesh.b.sarang@gmail.com";
 
@@ -33,7 +34,9 @@ const decisionView = v.object({
   spaceId: v.id("spaces"),
   roomId: v.optional(v.id("rooms")),
   jobId: v.optional(v.id("agentJobs")),
+  inboxItemId: v.optional(v.id("inboxItems")),
   source,
+  artifactSource: v.optional(v.literal("agentmail")),
   inputPreview: v.string(),
   decision: v.string(),
   confidence: v.optional(v.number()),
@@ -41,6 +44,8 @@ const decisionView = v.object({
   model: v.string(),
   latencyMs: v.number(),
   inputTokens: v.number(),
+  disposition: v.optional(v.string()),
+  classificationState: v.optional(v.union(v.literal("pending"), v.literal("complete"))),
   createdAt: v.number(),
   execution: v.optional(execution),
 });
@@ -199,6 +204,7 @@ export const record = internalMutation({
     spaceId: v.id("spaces"),
     roomId: v.optional(v.id("rooms")),
     jobId: v.optional(v.id("agentJobs")),
+    inboxItemId: v.optional(v.id("inboxItems")),
     source,
     inputPreview: v.string(),
     decision: v.string(),
@@ -207,6 +213,7 @@ export const record = internalMutation({
     model: v.string(),
     latencyMs: v.number(),
     inputTokens: v.number(),
+    disposition: v.optional(v.string()),
   },
   returns: v.id("jevDecisions"),
   handler: async (ctx, args) => ctx.db.insert("jevDecisions", {
@@ -215,3 +222,78 @@ export const record = internalMutation({
     createdAt: Date.now(),
   }),
 });
+
+export const claimInboxClassification = internalMutation({
+  args: { inboxItemId: v.id("inboxItems") },
+  returns: v.boolean(),
+  handler: async (ctx, { inboxItemId }) => {
+    const item = await ctx.db.get(inboxItemId);
+    if (!item || item.agentmailMessageId.startsWith("gmail:") || item.jevDecisionId) return false;
+    const decisionId = await ctx.db.insert("jevDecisions", {
+      spaceId: item.spaceId,
+      roomId: item.roomId,
+      inboxItemId,
+      source: "gmail",
+      artifactSource: "agentmail",
+      inputPreview: "Shared household inbox email",
+      decision: "pending",
+      details: {},
+      model: "jev-email",
+      latencyMs: 0,
+      inputTokens: 0,
+      disposition: "pending",
+      classificationState: "pending",
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(inboxItemId, { jevDecisionId: decisionId });
+    return true;
+  },
+});
+
+export const completeInboxClassification = internalMutation({
+  args: { inboxItemId: v.id("inboxItems"), result: inboxClassificationResultValidator },
+  returns: v.null(),
+  handler: async (ctx, { inboxItemId, result }) => {
+    const item = await ctx.db.get(inboxItemId);
+    if (!item?.jevDecisionId) return null;
+    const record = await ctx.db.get(item.jevDecisionId);
+    if (!record || record.classificationState === "complete") return null;
+    if (record.spaceId !== item.spaceId || record.artifactSource !== "agentmail") return null;
+    const telemetry = classificationTelemetry(result, item.category, item.status);
+    await ctx.db.patch(record._id, { ...telemetry, classificationState: "complete" });
+    return null;
+  },
+});
+
+function classificationTelemetry(
+  result: InboxClassificationResult,
+  downstreamCategory: string,
+  downstreamStatus: string,
+) {
+  if (result.kind === "classified") {
+    return {
+      decision: result.decision.category,
+      confidence: result.decision.confidence,
+      details: {
+        probabilities: result.decision.probabilities,
+        tracksHouseholdMoney: result.decision.tracksHouseholdMoney,
+        containsOtpOrLoginCode: result.decision.containsOtpOrLoginCode,
+        downstreamCategory,
+        downstreamStatus,
+      },
+      model: result.decision.model,
+      latencyMs: result.decision.latencyMs,
+      inputTokens: result.decision.inputTokens,
+      disposition: result.disposition,
+    };
+  }
+  return {
+    decision: "unavailable",
+    confidence: undefined,
+    details: { reason: result.reason, downstreamCategory, downstreamStatus },
+    model: result.model,
+    latencyMs: result.latencyMs,
+    inputTokens: result.inputTokens,
+    disposition: result.disposition,
+  };
+}

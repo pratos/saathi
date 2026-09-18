@@ -9,6 +9,7 @@ import { composioDownloadUrl, gmailAttachmentDescriptors, isPdfAttachment } from
 import { extractPasswordHints } from "./lib/inboxExtract";
 import { parsePublicDocument } from "./lib/firecrawlParse";
 import { decideEmail, type JevEmailDecision } from "./lib/jev";
+import { isConfidentEmailIgnore } from "./lib/inboxClassification";
 
 export const beginConnection = action({
   args: { spaceId: v.id("spaces") },
@@ -263,6 +264,7 @@ async function classifyEmail(
   const typesafeKey = env.TYPESAFE_API_KEY?.trim();
   const jev = typesafeKey ? await safeEmailDecision(typesafeKey, email) : null;
   if (jev) {
+    const ignored = shouldIgnoreEmail(jev);
     await ctx.runMutation(internal.jev.record, {
       spaceId: connection.spaceId,
       source: "gmail",
@@ -273,8 +275,9 @@ async function classifyEmail(
       model: jev.model,
       latencyMs: jev.latencyMs,
       inputTokens: jev.inputTokens,
+      disposition: ignored ? "ignored" : "retained_for_extraction",
     });
-    if (shouldIgnoreEmail(jev)) {
+    if (ignored) {
       return { useful: false, summary: "", category: "receipts" as const, amount: undefined, merchant: undefined };
     }
   }
@@ -319,9 +322,7 @@ async function classifyEmail(
 }
 
 export function shouldIgnoreEmail(decision: JevEmailDecision) {
-  return decision.category === "ignore"
-    && decision.confidence >= 0.65
-    && (decision.tracksHouseholdMoney <= 0.45 || decision.containsOtpOrLoginCode >= 0.65);
+  return isConfidentEmailIgnore(decision);
 }
 
 async function safeEmailDecision(apiKey: string, email: { sender: string; subject: string; text: string }) {

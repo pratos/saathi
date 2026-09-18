@@ -73,6 +73,7 @@ export default defineSchema({
     }))),
     actionStatus: v.optional(v.union(v.literal("suggested"), v.literal("confirmed"), v.literal("dismissed"))),
     heartbeatMessageId: v.optional(v.id("messages")),
+    jevDecisionId: v.optional(v.id("jevDecisions")),
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
     receivedAt: v.number(),
   }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]),
@@ -191,9 +192,13 @@ export default defineSchema({
     .searchIndex("search_summary", { searchField: "summary", filterFields: ["agentId"] }),
   jevDecisions: defineTable({
     spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")), jobId: v.optional(v.id("agentJobs")),
+    inboxItemId: v.optional(v.id("inboxItems")),
     source: v.union(v.literal("chat_turn"), v.literal("chat_tool"), v.literal("voice_tool"), v.literal("gmail"), v.literal("lab")),
+    artifactSource: v.optional(v.literal("agentmail")),
     inputPreview: v.string(), decision: v.string(), confidence: v.optional(v.number()),
-    details: v.any(), model: v.string(), latencyMs: v.number(), inputTokens: v.number(), createdAt: v.number(),
+    details: v.any(), model: v.string(), latencyMs: v.number(), inputTokens: v.number(),
+    disposition: v.optional(v.string()), classificationState: v.optional(v.union(v.literal("pending"), v.literal("complete"))),
+    createdAt: v.number(),
   }).index("by_space_created", ["spaceId", "createdAt"]),
   auditEvents: defineTable({
     spaceId: v.optional(v.id("spaces")), actorUserId: v.optional(v.id("users")),

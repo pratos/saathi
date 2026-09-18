@@ -8,6 +8,7 @@ import {
   type ApplicationAssistantToolName,
   type ConversationAction,
 } from '../convex/lib/assistantCapabilities'
+import { liveVoiceUsageSeconds } from '../convex/lib/liveVoiceUsage'
 
 export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
@@ -27,7 +28,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const finishSession = useAction(api.liveVoice.finishSession)
   const createVoiceImage = useAction(api.images.createFromVoice)
   const searchVoiceWeb = useAction(api.liveVoice.searchPublicWeb)
-  const executeVoiceComputer = useAction(api.liveVoice.useComputer)
+  const executeVoiceComputer = useAction(api.voiceBrowser.useComputer)
   const executeConversationAction = useMutation(api.conversationActions.execute)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
@@ -35,6 +36,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const [sessionId, setSessionId] = useState('')
   const [activities, setActivities] = useState<VoiceToolActivity[]>([])
   const [voiceLevel, setVoiceLevel] = useState(0)
+  const [voiceSeconds, setVoiceSeconds] = useState(0)
   const [savingSummary, setSavingSummary] = useState(false)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<RTCDataChannel | null>(null)
@@ -48,6 +50,8 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const generationRef = useRef(0)
+  const voiceSecondsRef = useRef(0)
+  const usageFinalizedRef = useRef(false)
   const computerTool = useQuery(api.liveVoice.computerToolState, sessionId ? { roomId, sessionId } : 'skip')
 
   const cleanup = useCallback(() => {
@@ -78,7 +82,10 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     try {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          await finishSession({ roomId, sessionId, turns })
+          const usage = voiceSecondsRef.current > 0
+            ? { voiceSeconds: voiceSecondsRef.current, voiceUsageFinalized: usageFinalizedRef.current }
+            : {}
+          await finishSession({ roomId, sessionId, turns, ...usage })
           break
         } catch (caught) {
           if (attempt === 1) throw caught
@@ -111,6 +118,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     fragmentsRef.current = []
     setFragments([])
     setActivities([])
+    voiceSecondsRef.current = 0
+    usageFinalizedRef.current = false
+    setVoiceSeconds(0)
     setError('')
     setStatus('requesting')
     try {
@@ -164,6 +174,11 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       channel.addEventListener('message', ({ data }) => {
         const event = parseLiveEvent(data)
         if (!event) return
+        const reportedSeconds = liveVoiceUsageSeconds(event.raw)
+        if (reportedSeconds !== null) {
+          voiceSecondsRef.current = reportedSeconds
+          setVoiceSeconds(reportedSeconds)
+        }
         if (event.type === 'session.started') {
           setStatus('live')
         } else if (event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta') {
@@ -177,6 +192,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           fragmentsRef.current = [...fragmentsRef.current, fragment]
           setFragments(fragmentsRef.current)
         } else if (event.type === 'session.closed') {
+          usageFinalizedRef.current = reportedSeconds !== null
           setStatus('ended')
           void persistKnownTranscript()
           cleanup()
@@ -256,7 +272,6 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       void persistKnownTranscript()
       cleanup()
       setStatus('ended')
-      setError('The voice connection ended before final usage was confirmed.')
     }, 15_000)
   }, [cleanup, persistKnownTranscript])
 
@@ -277,6 +292,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     activities,
     computerTool,
     voiceLevel,
+    voiceSeconds,
     summarizing: savingSummary || status === 'ending',
     start,
     end,

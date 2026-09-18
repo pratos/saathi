@@ -631,10 +631,13 @@ function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: ()
   </div>
 }
 
-function jevSourceLabel(source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab') {
+type JevSource = 'chat_turn' | 'chat_tool' | 'voice_tool' | 'voice_browser' | 'gmail' | 'lab'
+
+function jevSourceLabel(source: JevSource) {
   if (source === 'chat_turn') return 'Chat recommendation'
   if (source === 'chat_tool') return 'Chat action check'
   if (source === 'voice_tool') return 'Voice action check'
+  if (source === 'voice_browser') return 'Voice browser decision'
   if (source === 'gmail') return 'Email classification'
   return 'Routing preview'
 }
@@ -657,12 +660,12 @@ const jevRouteLabels: Record<string, string> = {
   ignore: 'Ignore this email',
 }
 
-function jevDecisionLabel(_source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab', decision: string) {
+function jevDecisionLabel(_source: JevSource, decision: string) {
   return jevRouteLabels[decision] ?? decision.replaceAll('_', ' ')
 }
 
 function jevExecutionSummary(
-  source: 'chat_turn' | 'chat_tool' | 'voice_tool' | 'gmail' | 'lab',
+  source: JevSource,
   execution?: {
     status: 'queued' | 'running' | 'complete' | 'failed'
     trigger?: 'mention' | 'ambient' | 'automatic'
@@ -675,6 +678,7 @@ function jevExecutionSummary(
     if (source === 'lab') return { tone: 'neutral', label: 'Preview only', detail: 'This did not start Pi or a tool.' }
     if (source === 'gmail') return { tone: 'neutral', label: 'Classification recorded', detail: 'Email processing continues separately.' }
     if (source === 'voice_tool') return { tone: 'neutral', label: 'Recommendation sent to Voice', detail: 'Completion is not linked to this record yet.' }
+    if (source === 'voice_browser') return { tone: 'neutral', label: 'Browser decision recorded', detail: 'Jev selected from page-derived safe actions.' }
     return { tone: 'neutral', label: 'Outcome not available', detail: 'This record was created before outcome tracking was added.' }
   }
   if (execution.status === 'queued') return { tone: 'working', label: 'Waiting for Pi', detail: 'The request is queued.' }
@@ -935,7 +939,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
               ? <article className="outgoing-message saved-voice-transcript" key={`message-${entry.item._id}`}><span>You · voice transcript · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
               : entry.item.voiceSpeaker === 'assistant'
                 ? <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
-                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p></div></article>
+                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p>{entry.item.voiceSeconds !== undefined && <small className="voice-call-cost">{formatVoiceDuration(entry.item.voiceSeconds)} · est. {formatVoiceCost(entry.item.voiceCostUsd ?? 0)} GPT‑Live{entry.item.voiceUsageFinalized === false ? ' · final usage unavailable' : ''}</small>}</div></article>
             : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
@@ -1040,6 +1044,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
         activities={voice.activities}
         computerTool={voice.computerTool}
         voiceLevel={voice.voiceLevel}
+        voiceSeconds={voice.voiceSeconds}
         onMute={voice.toggleMute}
         onEnd={voice.end}
       />}
@@ -1047,7 +1052,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   )
 }
 
-function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, onMute, onEnd }: {
+function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, voiceSeconds, onMute, onEnd }: {
   status: VoiceStatus
   turns: VoiceTurn[]
   activities: VoiceToolActivity[]
@@ -1056,8 +1061,13 @@ function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel,
     task: string
     liveViewUrl?: string
     interactiveLiveViewUrl?: string
+    phase?: string
+    selectedActionLabel?: string
+    decisionConfidence?: number
+    controller?: 'jev'
   } | null | undefined
   voiceLevel: number
+  voiceSeconds: number
   onMute: () => void
   onEnd: () => void
 }) {
@@ -1086,7 +1096,7 @@ function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel,
     <section className="voice-call-sheet">
       <header className="voice-call-header">
         <div><span>LIVE VOICE</span><h2 id="voice-call-title">Talking with Saathi</h2></div>
-        <span className={`voice-call-status ${status === 'muted' ? 'is-muted' : ''}`}><i />{statusText}</span>
+        <div className="voice-call-status-group"><span className={`voice-call-status ${status === 'muted' ? 'is-muted' : ''}`}><i />{statusText}</span><small>{formatVoiceDuration(voiceSeconds)} · est. {formatVoiceCost(voiceSeconds / 60 * 0.05)}</small></div>
       </header>
       <div className={`voice-call-body ${activities.length ? 'has-activity' : ''}`}>
         <div className="voice-call-presence">
@@ -1124,6 +1134,10 @@ function VoiceActivityPanel({ activities, computerTool }: {
     task: string
     liveViewUrl?: string
     interactiveLiveViewUrl?: string
+    phase?: string
+    selectedActionLabel?: string
+    decisionConfidence?: number
+    controller?: 'jev'
   } | null | undefined
 }) {
   const activityListRef = useRef<HTMLDivElement>(null)
@@ -1150,6 +1164,10 @@ function VoiceActivityPanel({ activities, computerTool }: {
             {activity.status === 'running' ? <i className="voice-activity-spinner" /> : activity.status === 'complete' ? <Check /> : <X />}
           </div>
           {!compact && activity.detail && <p className="voice-activity-detail">{activity.detail}</p>}
+          {computerTool?.callId === activity.id && computerTool.controller === 'jev' && <p className="voice-browser-decision">
+            <strong>Jev browser controller</strong>
+            <span>{voiceBrowserPhaseLabel(computerTool.phase)}{computerTool.selectedActionLabel ? ` · ${computerTool.selectedActionLabel}` : ''}</span>
+          </p>}
           {liveViewUrl && <div className="voice-computer-handoff">
             <div><Monitor /><span><strong>Your turn in the browser</strong><small>Sign in here if needed. Saathi never asks for your password.</small></span></div>
             <a href={liveViewUrl} target="_blank" rel="noreferrer">Open full browser</a>
@@ -1171,6 +1189,16 @@ function voiceActivityIcon(name: VoiceToolActivity['name']) {
   if (name === 'use_computer') return <Monitor />
   if (name === 'remember' || name === 'recall') return <Sparkles />
   return <Settings2 />
+}
+
+function voiceBrowserPhaseLabel(phase: string | undefined) {
+  if (phase === 'awaiting_human_login') return 'Waiting for you to sign in'
+  if (phase === 'awaiting_confirmation') return 'Waiting for confirmation'
+  if (phase === 'voice_handover') return 'Handed back to voice'
+  if (phase === 'observing') return 'Reading the page'
+  if (phase === 'deciding') return 'Choosing a safe action'
+  if (phase === 'executing') return 'Applying the selected action'
+  return 'Ready for your next instruction'
 }
 
 function isVoiceCallOpen(status: VoiceStatus) {
@@ -1310,8 +1338,8 @@ function ModelTierControls({ spaceId }: { spaceId: Id<'spaces'> }) {
     <div className="usage-ledger">
       <span>Usage ledger</span>
       {(usage?.rows ?? []).length === 0 && usage !== undefined && <p>No metered usage yet. Chat, images, and voice will appear here.</p>}
-      {(usage?.rows ?? []).length > 0 && <ul className="usage-list">{usage!.rows.map(row => <li key={`${row.provider}-${row.model}-${row.unit}-${row.costClass}`}><strong>{row.model}</strong><small>{formatUsageQuantity(row.quantity, row.unit)} · {row.costClass}</small></li>)}</ul>}
-      {(usage?.entries ?? []).length > 0 && <ul className="usage-entries">{usage!.entries.map(entry => <li key={entry._id}><strong>{entry.costClass}</strong><small>{formatUsageQuantity(entry.quantity, entry.unit)} · {entry.model} · {formatRelativeTime(entry.createdAt)}</small></li>)}</ul>}
+      {(usage?.rows ?? []).length > 0 && <ul className="usage-list">{usage!.rows.map(row => <li key={`${row.provider}-${row.model}-${row.unit}-${row.costClass}`}><strong>{row.model}</strong><small>{formatUsageQuantity(row.quantity, row.unit)}{row.costUsd !== undefined ? ` · est. ${formatVoiceCost(row.costUsd)}` : ''} · {row.costClass}</small></li>)}</ul>}
+      {(usage?.entries ?? []).length > 0 && <ul className="usage-entries">{usage!.entries.map(entry => <li key={entry._id}><strong>{entry.costClass}</strong><small>{formatUsageQuantity(entry.quantity, entry.unit)}{entry.costUsd !== undefined ? ` · est. ${formatVoiceCost(entry.costUsd)}` : ''} · {entry.model} · {formatRelativeTime(entry.createdAt)}</small></li>)}</ul>}
     </div>
   </div>
 }
@@ -1538,9 +1566,21 @@ function clearGmailCallback() {
 
 function formatUsageQuantity(quantity: number, unit: string) {
   if (unit === 'token') return `${Math.round(quantity)} tokens`
+  if (unit === 'second') return formatVoiceDuration(quantity)
   if (unit === 'audio_hour') return `${Math.max(1, Math.round(quantity * 60))} min audio`
   if (unit === 'request') return `${Math.round(quantity)} ${Math.round(quantity) === 1 ? 'request' : 'requests'}`
   return `${quantity.toFixed(quantity >= 10 ? 0 : 2)} ${unit}`
+}
+
+function formatVoiceDuration(seconds: number) {
+  const rounded = Math.max(0, Math.round(seconds))
+  const minutes = Math.floor(rounded / 60)
+  const remainder = rounded % 60
+  return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`
+}
+
+function formatVoiceCost(costUsd: number) {
+  return `$${costUsd.toFixed(4)}`
 }
 
 function formatRelativeTime(timestamp: number) {

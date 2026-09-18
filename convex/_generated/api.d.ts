@@ -29,6 +29,7 @@ import type * as lib_authz from "../lib/authz.js";
 import type * as lib_jev from "../lib/jev.js";
 import type * as lib_saathi from "../lib/saathi.js";
 import type * as liveVoice from "../liveVoice.js";
+import type * as voiceBrowser from "../voiceBrowser.js";
 import type * as mentions from "../mentions.js";
 import type * as messages from "../messages.js";
 import type * as rooms from "../rooms.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   "lib/jev": typeof lib_jev;
   "lib/saathi": typeof lib_saathi;
   liveVoice: typeof liveVoice;
+  voiceBrowser: typeof voiceBrowser;
   mentions: typeof mentions;
   messages: typeof messages;
   rooms: typeof rooms;

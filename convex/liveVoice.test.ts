@@ -95,6 +95,8 @@ describe("GPT-Live call summaries", () => {
       roomId,
       sessionId: "live_empty_session_456",
       turns: [],
+      voiceSeconds: 18,
+      voiceUsageFinalized: true,
     })).resolves.toBe("saved");
 
     const messages = await owner.query(api.rooms.messages, { roomId });
@@ -103,6 +105,14 @@ describe("GPT-Live call summaries", () => {
         "The family agreed that Saathi should reply in Marathi and confirm the travel time.",
         "Voice call completed with Saathi.",
       ]);
+    expect(messages.find(message => message.idempotencyKey === "live-summary:live_empty_session_456")).toMatchObject({
+      voiceSeconds: 18,
+      voiceCostUsd: 0.015,
+      voiceUsageFinalized: true,
+    });
+    expect(await t.run(ctx => ctx.db.query("usageLedger").collect())).toEqual([
+      expect.objectContaining({ provider: "openai", model: "gpt-live-1", unit: "second", quantity: 18, costUsd: 0.015, costClass: "voice" }),
+    ]);
     expect(await t.run(ctx => ctx.db.get(oldUserId))).toMatchObject({ originalText: "Existing caller transcript", voiceSpeaker: "user" });
     expect(await t.run(ctx => ctx.db.get(oldAssistantId))).toMatchObject({ originalText: "Existing assistant transcript", voiceSpeaker: "assistant" });
     expect(await t.run(ctx => ctx.db.query("agentJobs").collect())).toEqual([]);

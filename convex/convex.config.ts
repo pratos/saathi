@@ -17,6 +17,7 @@ const app = defineApp({
     OPENAI_API_KEY: v.optional(v.string()),
     OPENROUTER_API_KEY: v.string(),
     TYPESAFE_API_KEY: v.optional(v.string()),
+    JEV_VOICE_BROWSER_ENABLED: v.optional(v.string()),
     COMPOSIO_API_KEY: v.optional(v.string()),
     COMPOSIO_WEBHOOK_SECRET: v.optional(v.string()),
   },

@@ -16,6 +16,7 @@ const source = v.union(
   v.literal("chat_turn"),
   v.literal("chat_tool"),
   v.literal("voice_tool"),
+  v.literal("voice_browser"),
   v.literal("gmail"),
   v.literal("lab"),
 );

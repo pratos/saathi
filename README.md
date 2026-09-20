@@ -11,6 +11,8 @@ npm install
 npm run dev
 ```
 
+The Android client lives in [`mobile/`](./mobile). It talks to the same Convex backend. Build it with `cd mobile && bun run android` (development build; Expo Go cannot load live voice).
+
 The landing screen offers two explicit experiences. **Guided preview** replays seeded sample content without an account or personal data. **Live workspace** uses Convex Auth email OTP and reads and writes only authorized Convex family data. Live mode is disabled when `VITE_CONVEX_URL` is absent; there is no fake OTP or local-data fallback.
 
 To connect the backend, create or link a Convex development deployment and run:

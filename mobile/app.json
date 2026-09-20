@@ -1,0 +1,74 @@
+{
+  "expo": {
+    "name": "Saath",
+    "slug": "saath",
+    "scheme": "saath",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F1613"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "email.saath.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Saath uses the microphone so you can talk to Saathi.",
+        "NSCameraUsageDescription": "Saath uses the camera to photograph receipts and documents.",
+        "NSPhotoLibraryUsageDescription": "Saath uses your photos so you can share them with family."
+      }
+    },
+    "android": {
+      "package": "email.saath.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F1613",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CHANGE_NETWORK_STATE",
+        "android.permission.INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-image",
+      "expo-web-browser",
+      "expo-font",
+      "expo-dev-client",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0F1613",
+          "image": "./assets/splash-icon.png"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Saath uses your photos so you can share them with family.",
+          "cameraPermission": "Saath uses the camera to photograph receipts and documents."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

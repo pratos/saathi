@@ -170,7 +170,8 @@ export const accept = mutation({
 
     const now = Date.now();
     const membership = await ctx.db.query("memberships").withIndex("by_space_user", q => q.eq("spaceId", invitation.spaceId).eq("userId", userId)).unique();
-    const membershipRole = membership?.role === "owner" ? "owner" as const : invitation.role;
+    // Only an already-active owner keeps owner; a revoked former owner must not regain it from a member invite.
+    const membershipRole = membership?.status === "active" && membership.role === "owner" ? "owner" as const : invitation.role;
     if (membership) await ctx.db.patch(membership._id, { role: membershipRole, status: "active", joinedAt: now });
     else await ctx.db.insert("memberships", { spaceId: invitation.spaceId, userId, role: invitation.role, status: "active", joinedAt: now });
     const rooms = await ctx.db.query("rooms").withIndex("by_space", q => q.eq("spaceId", invitation.spaceId)).collect();

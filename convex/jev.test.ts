@@ -47,6 +47,9 @@ describe("Jev decision records", () => {
     await expect(member.query(api.jev.recent, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
     await expect(owner.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).resolves.toBeNull();
     await expect(member.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
+    await expect(owner.query(api.jev.canViewBenchmarks, {})).resolves.toBe(false);
+    await expect(member.query(api.jev.canViewBenchmarks, {})).resolves.toBe(false);
+    await expect(admin.query(api.jev.canViewBenchmarks, {})).resolves.toBe(true);
     await expect(owner.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
     await expect(member.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
     await expect(admin.query(api.jev.benchmarkReport, {})).resolves.toMatchObject({

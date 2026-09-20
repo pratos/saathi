@@ -41,6 +41,34 @@ describe("family inbox processing", () => {
     expect(messages.filter(message => message.idempotencyKey === `inbox-action:${seeded.inboxItemId}`)).toHaveLength(1);
   });
 
+  test("space members without a room grant cannot write a confirmation into the family chat", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const createdAt = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const memberId = await ctx.db.insert("users", { email: "member@example.test" });
+      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "family-inbox-room", createdAt });
+      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+      await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: createdAt });
+      const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family conversation", assistantMode: "mention", createdBy: ownerId, createdAt });
+      await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt });
+      const inboxItemId = await ctx.db.insert("inboxItems", {
+        spaceId, roomId, agentmailMessageId: "msg-room-grant", agentmailThreadId: "thread-room-grant",
+        sender: "billing@example.test", subject: "Invoice", originalText: "Pay later",
+        visibility: "space", category: "bills", status: "ready",
+        suggestedActions: [{ kind: "pay", label: "Review payment" }],
+        actionStatus: "suggested", receivedAt: createdAt,
+      });
+      return { memberId, inboxItemId, roomId };
+    });
+    const member = t.withIdentity({ subject: String(seeded.memberId) });
+    await member.mutation(api.inbox.confirmAction, { inboxItemId: seeded.inboxItemId });
+    const item = await t.run(ctx => ctx.db.get(seeded.inboxItemId));
+    expect(item?.actionStatus).toBe("confirmed");
+    const messages = await t.run(async ctx => ctx.db.query("messages").collect());
+    expect(messages.filter(message => message.roomId === seeded.roomId)).toEqual([]);
+  });
+
   test("extraction persistence stores direction, PDF status, heartbeat, and usage once", async () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {

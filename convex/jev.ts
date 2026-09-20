@@ -8,6 +8,10 @@ import { inboxClassificationResultValidator, type InboxClassificationResult } fr
 
 const BENCHMARK_ADMIN_EMAIL = "prathamesh.b.sarang@gmail.com";
 
+function isBenchmarkAdmin(email: string | undefined) {
+  return email?.trim().toLowerCase() === BENCHMARK_ADMIN_EMAIL;
+}
+
 const limits = new RateLimiter(components.rateLimiter, {
   lab: { kind: "fixed window", rate: 30, period: HOUR },
 });
@@ -87,12 +91,18 @@ const benchmarkReportView = v.object({
   recommendation: v.string(), projectedFromPostPiGateRun: v.boolean(),
 });
 
+export const canViewBenchmarks = query({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => isBenchmarkAdmin((await requireUser(ctx)).user.email),
+});
+
 export const benchmarkReport = query({
   args: {},
   returns: benchmarkReportView,
   handler: async (ctx) => {
     const { user } = await requireUser(ctx);
-    if (user.email?.trim().toLowerCase() !== BENCHMARK_ADMIN_EMAIL) {
+    if (!isBenchmarkAdmin(user.email)) {
       throw new ConvexError({ code: "FORBIDDEN", message: "You do not have permission to access benchmark reports" });
     }
     return {

@@ -29,11 +29,56 @@ export function assertSafeComputerUrl(url: string) {
   }
   if (parsed.protocol !== "https:") throw new Error("Computer use only opens https websites.");
   if (parsed.username || parsed.password) throw new Error("Do not put credentials in the website address.");
-  const host = parsed.hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".local") || host === "127.0.0.1") {
-    throw new Error("Computer use cannot open local addresses.");
+  if (isBlockedComputerHost(parsed.hostname.toLowerCase())) {
+    throw new Error("Computer use cannot open local or private addresses.");
   }
   return parsed.toString();
+}
+
+function isBlockedComputerHost(host: string) {
+  if (
+    host === "localhost"
+    || host === "localhost.localdomain"
+    || host === "metadata.google.internal"
+    || host.endsWith(".localhost")
+    || host.endsWith(".local")
+    || host.endsWith(".internal")
+    || host.endsWith(".arpa")
+  ) return true;
+  const ipv4 = parseIPv4(host);
+  if (ipv4) return isBlockedIPv4(ipv4);
+  if (host.includes(":")) return isBlockedIPv6(host);
+  return false;
+}
+
+function parseIPv4(host: string) {
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return null;
+  const parts = host.split(".").map(part => Number(part));
+  if (parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return null;
+  return parts as [number, number, number, number];
+}
+
+function isBlockedIPv4([a, b]: [number, number, number, number]) {
+  return a === 0
+    || a === 10
+    || a === 127
+    || a >= 224
+    || a === 169 && b === 254
+    || a === 172 && b >= 16 && b <= 31
+    || a === 192 && b === 168
+    || a === 100 && b >= 64 && b <= 127;
+}
+
+function isBlockedIPv6(host: string) {
+  const compact = host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (compact === "::" || compact === "::1" || compact === "0:0:0:0:0:0:0:1") return true;
+  if (compact.startsWith("fe80:") || compact.startsWith("fc") || compact.startsWith("fd")) return true;
+  const mapped = compact.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) {
+    const ipv4 = parseIPv4(mapped[1]);
+    return ipv4 ? isBlockedIPv4(ipv4) : true;
+  }
+  return compact.startsWith("::ffff:");
 }
 
 export function assertSafeComputerTask(task: string) {

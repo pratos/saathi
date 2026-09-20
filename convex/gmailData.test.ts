@@ -109,4 +109,43 @@ describe("private Gmail ingestion", () => {
     expect(persisted.messages).toHaveLength(2);
     expect(persisted.jobs).toEqual([]);
   });
+
+  test("a member without a family-room grant cannot share private Gmail into that room", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const createdAt = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const memberId = await ctx.db.insert("users", { email: "member@example.test" });
+      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "gmail-share-grant", createdAt });
+      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+      await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: createdAt });
+      const familyRoomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family conversation", assistantMode: "mention", createdBy: ownerId, createdAt });
+      await ctx.db.insert("roomMembers", { roomId: familyRoomId, userId: ownerId, role: "manager", createdAt });
+      const connectionId = await ctx.db.insert("gmailConnections", {
+        spaceId, userId: memberId, connectedAccountId: "ca_member_nogrant", alias: "Personal Gmail",
+        triggerId: "ti_member_nogrant", status: "active", createdAt,
+      });
+      return { connectionId, memberId, familyRoomId };
+    });
+    const member = t.withIdentity({ subject: String(seeded.memberId) });
+    const inboxItemId = await member.mutation(internal.gmailData.saveClassification, {
+      connectionId: seeded.connectionId,
+      threadId: "thread-nogrant",
+      receivedAt: 1_700_000_000_000,
+      category: "receipts",
+      externalMessageId: "useful-nogrant",
+      sender: "shop@example.test",
+      subject: "Receipt",
+      text: "Paid 200",
+      useful: true,
+      summary: "Receipt",
+      amount: "200",
+    });
+    await expect(member.mutation(api.gmailData.shareWithFamily, { inboxItemId: inboxItemId! })).rejects.toThrow(/permission/i);
+    const item = await t.run(ctx => ctx.db.get(inboxItemId!));
+    expect(item).toMatchObject({ visibility: "private" });
+    expect(item?.sharedAt).toBeUndefined();
+    const familyMessages = await t.run(async ctx => ctx.db.query("messages").collect());
+    expect(familyMessages.filter(message => message.roomId === seeded.familyRoomId)).toEqual([]);
+  });
 });

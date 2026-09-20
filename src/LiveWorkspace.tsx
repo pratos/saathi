@@ -59,7 +59,6 @@ const ACCEPTED_ATTACHMENTS = 'image/jpeg,image/png,image/webp,image/gif,image/he
 const SUPPORTED_ATTACHMENT_TYPES = new Set(ACCEPTED_ATTACHMENTS.split(','))
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
-const BENCHMARK_ADMIN_EMAIL = 'prathamesh.b.sarang@gmail.com'
 
 export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
@@ -194,6 +193,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
 }) {
   const { signOut } = useAuthActions()
   const user = useQuery(api.users.current)
+  const canViewBenchmarks = useQuery(api.jev.canViewBenchmarks)
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
   const ensurePersonalRoom = useMutation(api.rooms.ensurePersonal)
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
@@ -226,7 +226,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
   const selectedRoom = rooms?.flatMap(({ room }) => room ? [room] : []).find(room => room._id === selectedRoomId) ?? sharedRoom
   const initials = initialsFor(user?.displayName ?? user?.name ?? user?.email ?? 'Family member')
-  const isBenchmarkAdmin = user?.email?.trim().toLowerCase() === BENCHMARK_ADMIN_EMAIL
+  const isBenchmarkAdmin = canViewBenchmarks === true
 
   useEffect(() => {
     if (rooms === undefined || personalRoom) return

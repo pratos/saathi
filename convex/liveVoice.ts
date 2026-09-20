@@ -6,7 +6,7 @@ import { action, env, internalMutation, internalQuery, mutation, query } from ".
 import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from "./lib/assistantCapabilities";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
-import { profileNameForUser, runFirecrawlComputerTask } from "./lib/firecrawlInteract";
+import { assertSafeComputerTask, assertSafeComputerUrl, profileNameForUser, runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { gptLiveCostUsd } from "./lib/liveVoiceUsage";
 import { resolveOpenAiKey } from "./lib/providerKeys";
 import { searchPublicWeb as searchPublicWebWithFirecrawl } from "./lib/publicWeb";
@@ -125,14 +125,16 @@ export const useComputer = action({
   args: { roomId: v.id("rooms"), sessionId: v.string(), callId: v.string(), url: v.string(), task: v.string() },
   returns: v.object({ ok: v.boolean(), message: v.string() }),
   handler: async (ctx, { roomId, sessionId, callId, url, task }) => {
+    const safeUrl = assertSafeComputerUrl(url);
+    const safeTask = assertSafeComputerTask(task);
     const prepared: { profileName: string } = await ctx.runMutation(internal.liveVoice.prepareComputerTool, {
-      roomId, sessionId, callId, task,
+      roomId, sessionId, callId, task: safeTask,
     });
     try {
       const result = await runFirecrawlComputerTask({
         apiKey: env.FIRECRAWL_API_KEY,
-        url,
-        task,
+        url: safeUrl,
+        task: safeTask,
         profileName: prepared.profileName,
         onLiveView: async (view) => {
           await ctx.runMutation(internal.liveVoice.updateComputerView, {

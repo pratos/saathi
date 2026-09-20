@@ -19,8 +19,14 @@ describe("Firecrawl Interact computer use", () => {
 
   test("rejects checkout, local URLs, and secrets pasted into the task", () => {
     expect(() => assertSafeComputerUrl("http://example.com")).toThrow(/https/i);
-    expect(() => assertSafeComputerUrl("https://localhost/login")).toThrow(/local/i);
+    expect(() => assertSafeComputerUrl("https://localhost/login")).toThrow(/local or private/i);
     expect(() => assertSafeComputerUrl("https://user:pass@example.com")).toThrow(/credentials/i);
+    expect(() => assertSafeComputerUrl("https://127.0.0.1/login")).toThrow(/local or private/i);
+    expect(() => assertSafeComputerUrl("https://192.168.1.1/admin")).toThrow(/local or private/i);
+    expect(() => assertSafeComputerUrl("https://10.0.0.8/router")).toThrow(/local or private/i);
+    expect(() => assertSafeComputerUrl("https://169.254.169.254/latest/meta-data/")).toThrow(/local or private/i);
+    expect(() => assertSafeComputerUrl("https://[::1]/")).toThrow(/local or private/i);
+    expect(() => assertSafeComputerUrl("https://metadata.google.internal/")).toThrow(/local or private/i);
     expect(assertSafeComputerUrl("https://swiggy.com/my-account")).toBe("https://swiggy.com/my-account");
     expect(() => assertSafeComputerTask("Please checkout and place an order")).toThrow(/order/i);
     expect(() => assertSafeComputerTask("password: hunter2")).toThrow(/password/i);

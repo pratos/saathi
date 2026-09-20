@@ -24,6 +24,33 @@ describe("family invitations", () => {
     expect(await t.run(ctx => ctx.db.query("memberships").collect())).toHaveLength(2);
   });
 
+  test("a revoked former owner who accepts a member invite does not regain ownership", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const now = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const formerOwnerId = await ctx.db.insert("users", { email: "former@example.test" });
+      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "family-create-001", createdAt: now });
+      const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family conversation", assistantMode: "mention", createdBy: ownerId, createdAt: now });
+      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
+      await ctx.db.insert("memberships", { spaceId, userId: formerOwnerId, role: "owner", status: "revoked", joinedAt: now });
+      await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt: now });
+      await ctx.db.insert("roomMembers", { roomId, userId: formerOwnerId, role: "manager", createdAt: now });
+      const tokenHash = "b".repeat(64);
+      await ctx.db.insert("invitations", {
+        spaceId, tokenHash, targetEmail: "former@example.test", role: "member", createdBy: ownerId,
+        idempotencyKey: "invite-former-owner", createdAt: now, expiresAt: now + 60_000,
+      });
+      return { formerOwnerId, spaceId, roomId, tokenHash };
+    });
+    const former = t.withIdentity({ subject: String(seeded.formerOwnerId) });
+    await expect(former.mutation(api.invitations.accept, { tokenHash: seeded.tokenHash })).resolves.toEqual(seeded.spaceId);
+    const membership = await t.run(ctx => ctx.db.query("memberships").withIndex("by_space_user", q => q.eq("spaceId", seeded.spaceId).eq("userId", seeded.formerOwnerId)).unique());
+    const roomGrant = await t.run(ctx => ctx.db.query("roomMembers").withIndex("by_room_user", q => q.eq("roomId", seeded.roomId).eq("userId", seeded.formerOwnerId)).unique());
+    expect(membership).toMatchObject({ role: "member", status: "active" });
+    expect(roomGrant).toMatchObject({ role: "participant" });
+  });
+
   test("rejects expired invitations without granting family or room access", async () => {
     const t = convexTest(schema, modules);
     const seeded = await seedInvitation(t, Date.now() - 1);

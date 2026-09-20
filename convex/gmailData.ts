@@ -211,6 +211,7 @@ export const shareWithFamily = mutation({
     const familyRoom = await ctx.db.query("rooms").withIndex("by_space", q => q.eq("spaceId", item.spaceId))
       .filter(q => q.eq(q.field("type"), "shared")).first();
     if (!familyRoom) throw new ConvexError({ code: "NOT_FOUND", message: "This family does not have a shared conversation yet" });
+    await requireRoomPermission(ctx, familyRoom._id, "post_message");
     const now = Date.now();
     await ctx.db.patch(item._id, {
       visibility: "space", sharedAt: now, sharedByUserId: userId, roomId: familyRoom._id,

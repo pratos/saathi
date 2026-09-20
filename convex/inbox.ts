@@ -31,20 +31,23 @@ export const confirmAction = mutation({
     const familyRoom = item.roomId ?? (await ctx.db.query("rooms").withIndex("by_space", q => q.eq("spaceId", item.spaceId))
       .filter(q => q.eq(q.field("type"), "shared")).first())?._id;
     if (familyRoom) {
-      const action = item.suggestedActions?.[0];
-      await ctx.db.insert("messages", {
-        spaceId: item.spaceId,
-        roomId: familyRoom,
-        authorUserId: userId,
-        actorType: "assistant",
-        origin: "assistant",
-        originalText: action
-          ? `Confirmed family action: ${action.label}${action.detail ? ` — ${action.detail}` : ""}. Saathi will not send mail or change the account until a connected tool completes it.`
-          : `Confirmed the family inbox item “${item.subject}”.`,
-        language: "en",
-        idempotencyKey: `inbox-action:${item._id}`,
-        createdAt: Date.now(),
-      });
+      const grant = await ctx.db.query("roomMembers").withIndex("by_room_user", q => q.eq("roomId", familyRoom).eq("userId", userId)).unique();
+      if (grant && grant.role !== "viewer") {
+        const action = item.suggestedActions?.[0];
+        await ctx.db.insert("messages", {
+          spaceId: item.spaceId,
+          roomId: familyRoom,
+          authorUserId: userId,
+          actorType: "assistant",
+          origin: "assistant",
+          originalText: action
+            ? `Confirmed family action: ${action.label}${action.detail ? ` — ${action.detail}` : ""}. Saathi will not send mail or change the account until a connected tool completes it.`
+            : `Confirmed the family inbox item “${item.subject}”.`,
+          language: "en",
+          idempotencyKey: `inbox-action:${item._id}`,
+          createdAt: Date.now(),
+        });
+      }
     }
     await ctx.db.insert("auditEvents", {
       spaceId: item.spaceId, actorUserId: userId, action: "inbox.action_confirmed",

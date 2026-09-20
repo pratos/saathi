@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-17T17:15:52Z
+- **Last updated:** 2026-09-18T11:29:35Z
 
 ## Log
 
@@ -242,3 +242,11 @@ passed all 36 English, Hindi/Hinglish, and Marathi cases at an estimated
 $0.00215 for the run (`convex/lib/memoryTriage.ts`, `convex/conversationActions.ts`,
 `convex/lib/inboxClassification.ts`, `convex/lib/toolBundleRouting.ts`,
 `convex/agentWorker.ts`).
+
+### 2026-09-18 - Saathi reply latency
+Removed the blocking Jev pre-turn call from the current small catalog so Pi
+starts immediately. Memory triage still runs only for memory candidates, and
+large-catalog bundle routing stays pre-turn and shadow-only. After a successful
+small-catalog reply, 10% of turns schedule an asynchronous Jev shadow decision
+for product analytics without applying that guidance to the user reply
+(`convex/agentWorker.ts`, `convex/agents.ts`).

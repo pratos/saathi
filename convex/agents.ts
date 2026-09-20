@@ -162,16 +162,16 @@ export const finish = internalMutation({
     nextSequence: v.number(), messages: v.array(v.any()), error: v.optional(v.string()),
     inputTokens: v.optional(v.number()), outputTokens: v.optional(v.number()),
   },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
-    if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return null;
+    if (!job || job.agentId !== args.agentId || job.status !== "running" || job.leaseId !== args.leaseId) return false;
     const agent = await ctx.db.get(args.agentId);
     if (!agent || !(await stillCanPrompt(ctx, agent, job.requestedBy))) {
       const error = "Authorization expired before agent result commit";
       await ctx.db.patch(job._id, { status: "failed", completedAt: Date.now(), error, leaseId: undefined });
       if (agent) await scheduleNextOrIdle(ctx, args.agentId, error);
-      return null;
+      return false;
     }
     const responseText = lastAssistantText(args.messages);
     for (let index = 0; index < args.messages.length; index++) {
@@ -204,7 +204,7 @@ export const finish = internalMutation({
       });
     }
     await scheduleNextOrIdle(ctx, args.agentId, args.error);
-    return null;
+    return true;
   },
 });
 

@@ -19,12 +19,8 @@ import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { generateFamilyImageBytes } from "./lib/imageGeneration";
 import { resolveOpenRouterKey } from "./lib/providerKeys";
 import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
+import { decideAgentTurn } from "./lib/jev";
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
-import {
-  decideAgentTurn,
-  turnDecisionGuidance,
-  type JevTurnDecision,
-} from "./lib/jev";
 import {
   applyMemoryPolicy,
   confirmedMemoryOperation,
@@ -46,6 +42,8 @@ import {
 } from "./lib/toolBundleRouting";
 
 export { formatPublicWebResults as formatFirecrawlResults } from "./lib/publicWeb";
+
+export const SHADOW_ROUTING_SAMPLE_PERCENT = 10;
 
 const thinkingLevelMap = { off: "none" as const, minimal: null, low: "low" as const, medium: "medium" as const, high: "high" as const, xhigh: null, max: "max" as const };
 
@@ -102,10 +100,7 @@ export const run = internalAction({
       const authorizedToolNames = authorizedAssistantToolNames(work.requesterRole);
       const largeCatalog = authorizedToolNames.length > DIRECT_PI_TOOL_LIMIT;
       const memoryCandidate = shouldTriageMemoryRequest(decisionInput);
-      const [turnDecision, bundleAttempt, memoryDecision] = await Promise.all([
-        typesafeKey && !largeCatalog
-          ? safeTurnDecision(typesafeKey, decisionInput, decisionContext)
-          : Promise.resolve(null),
+      const [bundleAttempt, memoryDecision] = await Promise.all([
         typesafeKey && largeCatalog
           ? safeBundleDecision(typesafeKey, decisionInput, decisionContext)
           : Promise.resolve({ decision: null, latencyMs: 0, error: null }),
@@ -142,14 +137,7 @@ export const run = internalAction({
         productionNarrowingApplied: false,
       };
       let jevDecisionId: Id<"jevDecisions"> | null = null;
-      if (turnDecision) {
-        jevDecisionId = await recordJevDecision(ctx, work, "chat_turn", decisionInput, turnDecision.route, turnDecision.routeConfidence, {
-          ...turnDecision,
-          memoryTriage,
-          memoryPolicy,
-          toolRouting: toolRoutingDetails,
-        });
-      } else if (largeCatalog) {
+      if (largeCatalog) {
         jevDecisionId = await recordJevDecision(
           ctx,
           work,
@@ -178,7 +166,6 @@ export const run = internalAction({
       }
       const ephemeralContext = [
         work.memoryContext,
-        turnDecisionGuidance(turnDecision),
         memoryDecisionGuidance(memoryPolicy),
       ].filter(Boolean).join("\n\n");
 
@@ -247,16 +234,64 @@ export const run = internalAction({
       }
       const messages = makeConvexSafe(agent.state.messages.slice(work.messages.length));
       const usage = assistantUsage(agent.state.messages);
-      await ctx.runMutation(internal.agents.finish, {
+      const committed = await ctx.runMutation(internal.agents.finish, {
         agentId, jobId: work.job._id, leaseId: work.leaseId, nextSequence: work.nextSequence,
         messages, error: agent.state.errorMessage, inputTokens: usage.input, outputTokens: usage.output,
       });
+      if (committed && !agent.state.errorMessage && typesafeKey && !largeCatalog && !memoryCandidate
+        && shouldSampleShadowRouting(String(work.job._id))) {
+        await ctx.scheduler.runAfter(0, internal.agentWorker.shadowRoute, {
+          spaceId: work.agent.spaceId,
+          roomId: work.agent.roomId,
+          jobId: work.job._id,
+          request: decisionInput,
+          recentConversation: decisionContext,
+          selectedToolNames: [...selectedToolNames],
+        });
+      }
     } catch (error) {
       await ctx.runMutation(internal.agents.fail, {
         agentId, jobId: work.job._id, leaseId: work.leaseId,
         error: error instanceof Error ? error.message : "Agent worker failed",
       });
     }
+    return null;
+  },
+});
+
+export const shadowRoute = internalAction({
+  args: {
+    spaceId: v.id("spaces"),
+    roomId: v.id("rooms"),
+    jobId: v.id("agentJobs"),
+    request: v.string(),
+    recentConversation: v.string(),
+    selectedToolNames: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const apiKey = env.TYPESAFE_API_KEY?.trim();
+    if (!apiKey) return null;
+    const decision = await safeTurnDecision(apiKey, args.request, args.recentConversation);
+    if (!decision) return null;
+    await ctx.runMutation(internal.jev.record, {
+      spaceId: args.spaceId,
+      roomId: args.roomId,
+      jobId: args.jobId,
+      source: "chat_turn",
+      inputPreview: args.request,
+      decision: decision.route,
+      confidence: decision.routeConfidence,
+      details: {
+        ...decision,
+        shadowSamplePercent: SHADOW_ROUTING_SAMPLE_PERCENT,
+        guidanceApplied: false,
+        selectedToolNames: args.selectedToolNames,
+      },
+      model: decision.model,
+      latencyMs: decision.latencyMs,
+      inputTokens: decision.inputTokens,
+    });
     return null;
   },
 });
@@ -418,11 +453,22 @@ export function decisionContextForAgentJob(messages: AgentMessage[]) {
   return lines.join("\n").slice(-6_000);
 }
 
-async function safeTurnDecision(apiKey: string, request: string, recentConversation: string): Promise<JevTurnDecision | null> {
+export function shouldSampleShadowRouting(value: string, percent = SHADOW_ROUTING_SAMPLE_PERCENT) {
+  if (percent <= 0) return false;
+  if (percent >= 100) return true;
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0) % 100 < percent;
+}
+
+async function safeTurnDecision(apiKey: string, request: string, recentConversation: string) {
   try {
     return await decideAgentTurn(apiKey, request, recentConversation);
   } catch (error) {
-    console.warn("JEV_TURN_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
+    console.warn("JEV_SHADOW_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
     return null;
   }
 }

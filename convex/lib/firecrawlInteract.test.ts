@@ -3,6 +3,7 @@ import {
   assertSafeComputerTask,
   assertSafeComputerUrl,
   computerTaskPrompt,
+  parseCodeResult,
   parseInteractResult,
   parseScrapeId,
   profileNameForUser,
@@ -41,5 +42,19 @@ describe("Firecrawl Interact computer use", () => {
       output: "Logged-in dashboard is visible",
     });
     expect(parseInteractResult({ liveViewUrl: "javascript:alert(1)" }, "scrape_123").liveViewUrl).toBeUndefined();
+    expect(parseCodeResult({
+      success: true,
+      stdout: "@e1 [button] Search",
+      result: "ok",
+      exitCode: 0,
+      liveViewUrl: "https://liveview.firecrawl.dev/watch",
+    }, "scrape_123")).toMatchObject({
+      scrapeId: "scrape_123",
+      stdout: "@e1 [button] Search",
+      result: "ok",
+      liveViewUrl: "https://liveview.firecrawl.dev/watch",
+    });
+    expect(() => parseCodeResult({ success: false, stderr: "provider details" }, "scrape_123"))
+      .toThrow("remote browser command failed");
   });
 });

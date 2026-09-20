@@ -11,6 +11,7 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
    - `AGENTMAIL_WEBHOOK_SECRET`
    - `AGENTMAIL_AUTH_INBOX_ID`
    - `FIRECRAWL_API_KEY`
+   - `JEV_VOICE_BROWSER_ENABLED` (optional; keep `false` until the multilingual browser benchmark passes)
    - `FIRECRAWL_WEBHOOK_SECRET` (recommended for durable crawls)
    - `OPENAI_API_KEY` (required for GPT-Live voice conversations and inbox extraction)
    - `OPENROUTER_API_KEY` (durable Saathi agents using DeepSeek V4.1 Flash)

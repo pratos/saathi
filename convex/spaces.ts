@@ -169,7 +169,7 @@ export const usageBreakdown = query({
     tier: modelTier,
     model: v.string(),
     rows: v.array(v.object({
-      provider: v.string(), model: v.string(), unit: v.string(), quantity: v.number(), costClass: v.string(),
+      provider: v.string(), model: v.string(), unit: v.string(), quantity: v.number(), costUsd: v.optional(v.number()), costClass: v.string(),
     })),
     entries: v.array(v.object({
       _id: v.id("usageLedger"),
@@ -178,6 +178,7 @@ export const usageBreakdown = query({
       model: v.string(),
       unit: v.string(),
       quantity: v.number(),
+      costUsd: v.optional(v.number()),
       costClass: v.string(),
     })),
   }),
@@ -186,13 +187,15 @@ export const usageBreakdown = query({
     const space = await ctx.db.get(spaceId);
     const tier = resolveModelTier(space?.modelTier);
     const ledger = await ctx.db.query("usageLedger").withIndex("by_space_created", q => q.eq("spaceId", spaceId)).order("desc").take(200);
-    const grouped = new Map<string, { provider: string; model: string; unit: string; quantity: number; costClass: string }>();
+    const grouped = new Map<string, { provider: string; model: string; unit: string; quantity: number; costUsd?: number; costClass: string }>();
     for (const row of ledger) {
       const model = row.model ?? "unknown";
       const key = `${row.provider}|${model}|${row.unit}|${row.costClass}`;
       const existing = grouped.get(key);
-      if (existing) existing.quantity += row.quantity;
-      else grouped.set(key, { provider: row.provider, model, unit: row.unit, quantity: row.quantity, costClass: row.costClass });
+      if (existing) {
+        existing.quantity += row.quantity;
+        if (row.costUsd !== undefined) existing.costUsd = (existing.costUsd ?? 0) + row.costUsd;
+      } else grouped.set(key, { provider: row.provider, model, unit: row.unit, quantity: row.quantity, costUsd: row.costUsd, costClass: row.costClass });
     }
     return {
       tier: tier.id,
@@ -205,6 +208,7 @@ export const usageBreakdown = query({
         model: row.model ?? "unknown",
         unit: row.unit,
         quantity: row.quantity,
+        costUsd: row.costUsd,
         costClass: row.costClass,
       })),
     };

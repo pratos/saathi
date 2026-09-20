@@ -86,7 +86,9 @@ export default defineSchema({
       v.object({ kind: v.literal("assistant"), username: v.literal("saathi") }),
       v.object({ kind: v.literal("person"), username: v.string(), userId: v.id("users") }),
     ))),
-    voiceSpeaker: v.optional(v.union(v.literal("user"), v.literal("assistant"))), createdAt: v.number(),
+    voiceSpeaker: v.optional(v.union(v.literal("user"), v.literal("assistant"))),
+    voiceSeconds: v.optional(v.number()), voiceCostUsd: v.optional(v.number()),
+    voiceUsageFinalized: v.optional(v.boolean()), createdAt: v.number(),
   }).index("by_room_created", ["roomId", "createdAt"]).index("by_room_idempotency", ["roomId", "idempotencyKey"]),
   liveVoiceSessions: defineTable({
     sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
@@ -97,6 +99,26 @@ export default defineSchema({
     computerLiveViewUrl: v.optional(v.string()),
     computerInteractiveLiveViewUrl: v.optional(v.string()),
   }).index("by_session_id", ["sessionId"]),
+  voiceBrowserSessions: defineTable({
+    voiceSessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
+    scrapeId: v.optional(v.string()), profileName: v.string(), initialUrl: v.string(), currentUrl: v.string(),
+    goal: v.string(), latestInstruction: v.string(), latestCallId: v.string(),
+    phase: v.union(
+      v.literal("starting"), v.literal("awaiting_instruction"), v.literal("routing_utterance"),
+      v.literal("voice_handover"), v.literal("observing"), v.literal("deciding"),
+      v.literal("awaiting_confirmation"), v.literal("executing"), v.literal("awaiting_human_login"),
+      v.literal("complete"), v.literal("stopping"), v.literal("failed"),
+    ),
+    attempt: v.number(), leaseId: v.optional(v.string()), pageFingerprint: v.optional(v.string()),
+    selectedActionId: v.optional(v.string()), selectedActionLabel: v.optional(v.string()),
+    decisionConfidence: v.optional(v.number()),
+    liveViewUrl: v.optional(v.string()), interactiveLiveViewUrl: v.optional(v.string()),
+    recentActions: v.array(v.object({ actionId: v.string(), outcome: v.string() })),
+    remoteStartedAt: v.optional(v.number()), firecrawlSeconds: v.optional(v.number()), firecrawlCredits: v.optional(v.number()),
+    lastActiveAt: v.number(), expiresAt: v.number(), createdAt: v.number(),
+    completedAt: v.optional(v.number()), terminalReason: v.optional(v.string()),
+  }).index("by_voice_session", ["voiceSessionId"])
+    .index("by_expiry", ["expiresAt"]),
   gmailConnections: defineTable({
     spaceId: v.id("spaces"), userId: v.id("users"), connectedAccountId: v.string(),
     alias: v.string(), email: v.optional(v.string()), triggerId: v.string(),
@@ -193,7 +215,7 @@ export default defineSchema({
   jevDecisions: defineTable({
     spaceId: v.id("spaces"), roomId: v.optional(v.id("rooms")), jobId: v.optional(v.id("agentJobs")),
     inboxItemId: v.optional(v.id("inboxItems")),
-    source: v.union(v.literal("chat_turn"), v.literal("chat_tool"), v.literal("voice_tool"), v.literal("gmail"), v.literal("lab")),
+    source: v.union(v.literal("chat_turn"), v.literal("chat_tool"), v.literal("voice_tool"), v.literal("voice_browser"), v.literal("gmail"), v.literal("lab")),
     artifactSource: v.optional(v.literal("agentmail")),
     inputPreview: v.string(), decision: v.string(), confidence: v.optional(v.number()),
     details: v.any(), model: v.string(), latencyMs: v.number(), inputTokens: v.number(),
@@ -208,6 +230,7 @@ export default defineSchema({
     spaceId: v.id("spaces"),
     // Historical ledger rows may still carry the ID from the removed agentRuns table.
     runId: v.optional(v.string()), userId: v.id("users"),
-    provider: v.string(), model: v.optional(v.string()), unit: v.string(), quantity: v.number(), costClass: v.string(), createdAt: v.number(),
+    provider: v.string(), model: v.optional(v.string()), unit: v.string(), quantity: v.number(),
+    costUsd: v.optional(v.number()), costClass: v.string(), createdAt: v.number(),
   }).index("by_space_created", ["spaceId", "createdAt"]),
 });

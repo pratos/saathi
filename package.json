@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "benchmark:jev-memory": "RUN_JEV_MEMORY_BENCHMARK=1 vitest run convex/lib/jev.memory.benchmark.test.ts --reporter=verbose",
+    "benchmark:jev-browser": "RUN_JEV_VOICE_BROWSER_BENCHMARK=1 vitest run convex/lib/jev.voiceBrowser.benchmark.test.ts --reporter=verbose",
     "benchmark:jev-e2e:dry": "JEV_E2E_DRY_RUN=1 bun scripts/jev-pi-e2e-benchmark.mjs",
     "benchmark:jev-e2e": "bun scripts/jev-pi-e2e-benchmark.mjs",
     "preview": "vite preview",

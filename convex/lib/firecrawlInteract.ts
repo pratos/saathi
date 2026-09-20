@@ -9,6 +9,11 @@ export type FirecrawlLiveView = {
   output: string;
 };
 
+export type FirecrawlCodeResult = Omit<FirecrawlLiveView, "output"> & {
+  stdout: string;
+  result: string;
+};
+
 export function profileNameForUser(userId: string) {
   const compact = userId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
   if (!compact) throw new Error("A browser profile could not be created for this account.");
@@ -89,6 +94,51 @@ export async function runFirecrawlComputerTask(options: {
   }
 }
 
+/** Starts a scrape-bound browser without invoking Firecrawl's prompt agent. */
+export async function startFirecrawlCodeSession(options: {
+  apiKey: string;
+  url: string;
+  profileName: string;
+}) {
+  const url = assertSafeComputerUrl(options.url);
+  const profileName = options.profileName.trim();
+  if (!profileName) throw new Error("A browser profile is required.");
+  return {
+    scrapeId: await scrapeForInteract(options.apiKey, url, profileName.slice(0, 100)),
+  };
+}
+
+/** Runs application-created code only. Never pass model output into `code`. */
+export async function runFirecrawlCode(options: {
+  apiKey: string;
+  scrapeId: string;
+  code: string;
+  timeoutSeconds?: number;
+}): Promise<FirecrawlCodeResult> {
+  const scrapeId = assertScrapeId(options.scrapeId);
+  const code = options.code.trim();
+  if (!code || code.length > 100_000) throw new Error("Invalid browser command.");
+  const timeout = Math.min(Math.max(options.timeoutSeconds ?? 30, 1), 60);
+  const payload = await firecrawlFetch(options.apiKey, `/scrape/${encodeURIComponent(scrapeId)}/interact`, {
+    method: "POST",
+    timeoutMs: (timeout + 15) * 1_000,
+    body: { code, language: "bash", timeout, origin: "saathi-jev-browser" },
+  });
+  return parseCodeResult(payload, scrapeId);
+}
+
+export async function observeFirecrawlCodeSession(options: { apiKey: string; scrapeId: string }) {
+  return runFirecrawlCode({
+    ...options,
+    code: "printf '__SAATHI_URL__\\n'; agent-browser get url; printf '\\n__SAATHI_SNAPSHOT__\\n'; agent-browser snapshot -i",
+    timeoutSeconds: 20,
+  });
+}
+
+export async function stopFirecrawlCodeSession(apiKey: string, scrapeId: string) {
+  return stopInteract(apiKey, assertScrapeId(scrapeId));
+}
+
 export function computerTaskPrompt(task: string) {
   return `Complete this single browsing task on the current page: ${task}
 
@@ -98,6 +148,21 @@ Rules:
 - Never checkout, pay, place an order, or submit a purchase.
 - Stay on the same site unless the task requires one clearly related public page.
 - Return a concise result of what you saw or did.`;
+}
+
+export function parseCodeResult(payload: unknown, scrapeId: string): FirecrawlCodeResult {
+  if (!payload || typeof payload !== "object") throw new Error("The remote browser returned an invalid response.");
+  const root = payload as Record<string, unknown>;
+  if (root.success === false || root.killed === true || (typeof root.exitCode === "number" && root.exitCode !== 0)) {
+    throw new Error("The remote browser command failed.");
+  }
+  return {
+    scrapeId,
+    stdout: rawText(root.stdout, 100_000),
+    result: rawText(root.result, 20_000),
+    liveViewUrl: asHttpUrl(root.liveViewUrl),
+    interactiveLiveViewUrl: asHttpUrl(root.interactiveLiveViewUrl),
+  };
 }
 
 async function scrapeForInteract(apiKey: string, url: string, profileName: string) {
@@ -137,6 +202,12 @@ async function stopInteract(apiKey: string, scrapeId: string) {
   }
 }
 
+function assertScrapeId(value: string) {
+  const scrapeId = value.trim();
+  if (!/^[A-Za-z0-9_-]{3,200}$/.test(scrapeId)) throw new Error("Invalid browser session.");
+  return scrapeId;
+}
+
 async function firecrawlFetch(apiKey: string, path: string, options: { method: string; timeoutMs: number; body?: unknown }) {
   const response = await fetch(`${FIRECRAWL_API}${path}`, {
     method: options.method,
@@ -168,4 +239,8 @@ function firstText(...values: unknown[]) {
     if (typeof value === "string" && value.trim()) return value.replace(/\s+/g, " ").trim().slice(0, 8_000);
   }
   return "";
+}
+
+function rawText(value: unknown, maxLength: number) {
+  return typeof value === "string" ? value.slice(0, maxLength) : "";
 }

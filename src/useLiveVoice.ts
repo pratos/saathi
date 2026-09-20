@@ -8,6 +8,7 @@ import {
   type ApplicationAssistantToolName,
   type ConversationAction,
 } from '../convex/lib/assistantCapabilities'
+import { liveVoiceUsageSeconds } from '../convex/lib/liveVoiceUsage'
 
 export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
@@ -27,14 +28,16 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const finishSession = useAction(api.liveVoice.finishSession)
   const createVoiceImage = useAction(api.images.createFromVoice)
   const searchVoiceWeb = useAction(api.liveVoice.searchPublicWeb)
-  const executeVoiceComputer = useAction(api.liveVoice.useComputer)
+  const executeVoiceComputer = useAction(api.voiceBrowser.useComputer)
   const executeConversationAction = useMutation(api.conversationActions.execute)
+  const logVoiceToolResult = useMutation(api.liveVoice.logToolResult)
   const [status, setStatus] = useState<VoiceStatus>('idle')
   const [error, setError] = useState('')
   const [fragments, setFragments] = useState<VoiceFragment[]>([])
   const [sessionId, setSessionId] = useState('')
   const [activities, setActivities] = useState<VoiceToolActivity[]>([])
   const [voiceLevel, setVoiceLevel] = useState(0)
+  const [voiceSeconds, setVoiceSeconds] = useState(0)
   const [savingSummary, setSavingSummary] = useState(false)
   const peerRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<RTCDataChannel | null>(null)
@@ -48,6 +51,8 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const generationRef = useRef(0)
+  const voiceSecondsRef = useRef(0)
+  const usageFinalizedRef = useRef(false)
   const computerTool = useQuery(api.liveVoice.computerToolState, sessionId ? { roomId, sessionId } : 'skip')
 
   const cleanup = useCallback(() => {
@@ -78,7 +83,10 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     try {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          await finishSession({ roomId, sessionId, turns })
+          const usage = voiceSecondsRef.current > 0
+            ? { voiceSeconds: voiceSecondsRef.current, voiceUsageFinalized: usageFinalizedRef.current }
+            : {}
+          await finishSession({ roomId, sessionId, turns, ...usage })
           break
         } catch (caught) {
           if (attempt === 1) throw caught
@@ -111,6 +119,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     fragmentsRef.current = []
     setFragments([])
     setActivities([])
+    voiceSecondsRef.current = 0
+    usageFinalizedRef.current = false
+    setVoiceSeconds(0)
     setError('')
     setStatus('requesting')
     try {
@@ -164,6 +175,11 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       channel.addEventListener('message', ({ data }) => {
         const event = parseLiveEvent(data)
         if (!event) return
+        const reportedSeconds = liveVoiceUsageSeconds(event.raw)
+        if (reportedSeconds !== null) {
+          voiceSecondsRef.current = reportedSeconds
+          setVoiceSeconds(reportedSeconds)
+        }
         if (event.type === 'session.started') {
           setStatus('live')
         } else if (event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta') {
@@ -177,20 +193,34 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           fragmentsRef.current = [...fragmentsRef.current, fragment]
           setFragments(fragmentsRef.current)
         } else if (event.type === 'session.closed') {
+          usageFinalizedRef.current = reportedSeconds !== null
           setStatus('ended')
           void persistKnownTranscript()
           cleanup()
         } else if (event.type === 'response.event') {
           const call = liveToolCall(event.raw)
           if (call) setActivities(current => addVoiceToolActivity(current, call))
+          const startedAt = Date.now()
+          const onToolFinished = (result: VoiceToolResult) => {
+            if (!call) return
+            setActivities(current => finishVoiceToolActivity(current, call.callId, result))
+            const activeSessionId = sessionIdRef.current
+            if (!activeSessionId) return
+            void logVoiceToolResult({
+              roomId,
+              sessionId: activeSessionId,
+              callId: call.callId,
+              toolName: call.name,
+              detail: voiceToolDetail(call),
+              ok: result.ok,
+              resultPreview: result.message,
+              latencyMs: Date.now() - startedAt,
+            }).catch(() => undefined)
+          }
           if (call?.name === 'generate_image') {
-            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            void fulfillVoiceImage(channel, roomId, call, createVoiceImage, setError, onToolFinished)
           } else if (call?.name === 'search_public_web') {
-            void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({ roomId, query: stringArg(call.arguments, 'query') }), 'The public web search could not be completed.', setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            void fulfillVoiceExternalTool(channel, call.callId, () => searchVoiceWeb({ roomId, query: stringArg(call.arguments, 'query') }), 'The public web search could not be completed.', setError, onToolFinished)
           } else if (call?.name === 'use_computer') {
             void fulfillVoiceExternalTool(channel, call.callId, () => executeVoiceComputer({
               roomId,
@@ -198,13 +228,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
               callId: call.callId,
               url: stringArg(call.arguments, 'url'),
               task: stringArg(call.arguments, 'task'),
-            }), 'The website task could not be completed.', setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            }), 'The website task could not be completed.', setError, onToolFinished)
           } else if (call) {
-            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, (result) => {
-              setActivities(current => finishVoiceToolActivity(current, call.callId, result))
-            })
+            void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, onToolFinished)
           }
         } else if (event.type === 'error') {
           setError(event.message || 'Saathi encountered a voice error.')
@@ -240,7 +266,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')
     }
-  }, [cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, persistKnownTranscript, roomId, searchVoiceWeb, status])
+  }, [cleanup, createSession, createVoiceImage, executeConversationAction, executeVoiceComputer, logVoiceToolResult, persistKnownTranscript, roomId, searchVoiceWeb, status])
 
   const end = useCallback(() => {
     const channel = channelRef.current
@@ -256,7 +282,6 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       void persistKnownTranscript()
       cleanup()
       setStatus('ended')
-      setError('The voice connection ended before final usage was confirmed.')
     }, 15_000)
   }, [cleanup, persistKnownTranscript])
 
@@ -277,6 +302,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     activities,
     computerTool,
     voiceLevel,
+    voiceSeconds,
     summarizing: savingSummary || status === 'ending',
     start,
     end,
@@ -386,22 +412,21 @@ function optionalStringArg(args: Record<string, unknown>, key: string) {
 
 export function addVoiceToolActivity(current: VoiceToolActivity[], call: LiveToolCall): VoiceToolActivity[] {
   const tool = APPLICATION_ASSISTANT_TOOLS.find(candidate => candidate.name === call.name)
-  const args = call.name === 'generate_image' ? null : call.arguments
-  const detail = call.name === 'generate_image'
-    ? call.prompt
-    : call.name === 'search_public_web'
-      ? stringArg(args!, 'query')
-      : call.name === 'use_computer'
-        ? stringArg(args!, 'task')
-        : voiceActionDetail(call.name, args!)
   const activity: VoiceToolActivity = {
     id: call.callId,
     name: call.name,
     title: tool?.label ?? 'Saathi action',
-    detail,
+    detail: voiceToolDetail(call),
     status: 'running',
   }
   return [...current.filter(item => item.id !== call.callId), activity].slice(-6)
+}
+
+function voiceToolDetail(call: LiveToolCall) {
+  if (call.name === 'generate_image') return call.prompt
+  if (call.name === 'search_public_web') return stringArg(call.arguments, 'query')
+  if (call.name === 'use_computer') return stringArg(call.arguments, 'task')
+  return voiceActionDetail(call.name, call.arguments)
 }
 
 export function finishVoiceToolActivity(

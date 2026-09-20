@@ -40,6 +40,7 @@ type Env = {
   readonly OPENROUTER_API_KEY: string;
   readonly SARVAM_API_KEY: string;
   readonly SITE_URL: string;
+  readonly JEV_VOICE_BROWSER_ENABLED: string | undefined;
   readonly TYPESAFE_API_KEY: string | undefined;
 };
 

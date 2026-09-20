@@ -2,11 +2,12 @@ import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, env, internalMutation, internalQuery, query } from "./_generated/server";
-import { assistantProviderTools } from "./lib/assistantCapabilities";
+import { action, env, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from "./lib/assistantCapabilities";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
 import { profileNameForUser, runFirecrawlComputerTask } from "./lib/firecrawlInteract";
+import { gptLiveCostUsd } from "./lib/liveVoiceUsage";
 import { resolveOpenAiKey } from "./lib/providerKeys";
 import { searchPublicWeb as searchPublicWebWithFirecrawl } from "./lib/publicWeb";
 
@@ -155,12 +156,31 @@ export const computerToolState = query({
     task: v.string(),
     liveViewUrl: v.optional(v.string()),
     interactiveLiveViewUrl: v.optional(v.string()),
+    phase: v.optional(v.string()),
+    selectedActionLabel: v.optional(v.string()),
+    decisionConfidence: v.optional(v.number()),
+    controller: v.optional(v.literal("jev")),
   }), v.null()),
   handler: async (ctx, { roomId, sessionId }) => {
     const { userId } = await requireRoomPermission(ctx, roomId, "post_message");
     const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
-    if (!session || session.roomId !== roomId || session.startedBy !== userId || session.finishedAt
-      || session.activity !== "using_computer" || !session.activeToolCallId || !session.computerTask) return null;
+    if (!session || session.roomId !== roomId || session.startedBy !== userId || session.finishedAt) return null;
+    const browser = await ctx.db.query("voiceBrowserSessions").withIndex("by_voice_session", q =>
+      q.eq("voiceSessionId", sessionId),
+    ).unique();
+    if (browser && browser.roomId === roomId && browser.startedBy === userId && !browser.completedAt) {
+      return {
+        callId: browser.latestCallId,
+        task: browser.latestInstruction,
+        liveViewUrl: browser.liveViewUrl,
+        interactiveLiveViewUrl: browser.interactiveLiveViewUrl,
+        phase: browser.phase,
+        selectedActionLabel: browser.selectedActionLabel,
+        decisionConfidence: browser.decisionConfidence,
+        controller: "jev" as const,
+      };
+    }
+    if (session.activity !== "using_computer" || !session.activeToolCallId || !session.computerTask) return null;
     return {
       callId: session.activeToolCallId,
       task: session.computerTask,
@@ -246,10 +266,59 @@ export const prepareExternalTool = internalMutation({
   },
 });
 
+export const logToolResult = mutation({
+  args: {
+    roomId: v.id("rooms"),
+    sessionId: v.string(),
+    callId: v.string(),
+    toolName: v.string(),
+    detail: v.string(),
+    ok: v.boolean(),
+    resultPreview: v.string(),
+    latencyMs: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { userId, room } = await requireRoomPermission(ctx, args.roomId, "post_message");
+    const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q =>
+      q.eq("sessionId", args.sessionId),
+    ).unique();
+    if (!session || session.roomId !== args.roomId || session.startedBy !== userId || session.finishedAt) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "This voice session does not belong to you" });
+    }
+    const tool = APPLICATION_ASSISTANT_TOOLS.find(candidate => candidate.name === args.toolName);
+    const callId = args.callId.trim();
+    if (!tool || callId.length < 3 || callId.length > 200 || !Number.isFinite(args.latencyMs) || args.latencyMs < 0) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice tool result" });
+    }
+    await ctx.db.insert("jevDecisions", {
+      spaceId: room.spaceId,
+      roomId: room._id,
+      source: "voice_tool",
+      inputPreview: `${tool.label}${args.detail.trim() ? ` — ${args.detail.trim()}` : ""}`.slice(0, 500),
+      decision: tool.name,
+      details: {
+        integration: "voice_observation",
+        callId,
+        ok: args.ok,
+        resultPreview: args.resultPreview.replace(/\s+/g, " ").trim().slice(0, 500),
+        jevGateApplied: false,
+      },
+      model: "gpt-live-1",
+      latencyMs: Math.min(args.latencyMs, 30 * 60 * 1000),
+      inputTokens: 0,
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const finishSession = action({
   args: {
     roomId: v.id("rooms"),
     sessionId: v.string(),
+    voiceSeconds: v.optional(v.number()),
+    voiceUsageFinalized: v.optional(v.boolean()),
     turns: v.array(v.object({
       role: v.union(v.literal("user"), v.literal("assistant")),
       text: v.string(),
@@ -257,8 +326,11 @@ export const finishSession = action({
     })),
   },
   returns: v.union(v.literal("saved"), v.literal("already_saved")),
-  handler: async (ctx, { roomId, sessionId, turns }): Promise<"saved" | "already_saved"> => {
+  handler: async (ctx, { roomId, sessionId, turns, voiceSeconds, voiceUsageFinalized }): Promise<"saved" | "already_saved"> => {
     if (!/^live_[A-Za-z0-9_-]{3,120}$/.test(sessionId)) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice session" });
+    if (voiceSeconds !== undefined && (!Number.isFinite(voiceSeconds) || voiceSeconds < 0 || voiceSeconds > 3_600)) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice usage" });
+    }
     if (turns.length > 100) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Voice transcript is too long" });
     const cleanedTurns = turns.map(turn => ({ ...turn, text: turn.text.trim() })).filter(turn => turn.text);
     if (cleanedTurns.some(turn => turn.text.length > 20_000 || !Number.isFinite(turn.startMs) || turn.startMs < 0)
@@ -267,13 +339,24 @@ export const finishSession = action({
     }
     const prepared: { alreadyFinished: boolean } = await ctx.runQuery(internal.liveVoice.prepareFinish, { roomId, sessionId });
     if (prepared.alreadyFinished) return "already_saved";
+    try {
+      await ctx.runAction(internal.voiceBrowser.stopForVoiceSession, { roomId, voiceSessionId: sessionId });
+    } catch {
+      console.warn("VOICE_BROWSER_CLEANUP_FAILED");
+    }
     const transcript = cleanedTurns.map(turn => `${turn.role === "user" ? "Caller" : "Saathi"}: ${turn.text}`).join("\n");
     const space: { spaceId: Id<"spaces"> } | null = await ctx.runQuery(internal.liveVoice.spaceForRoom, { roomId });
     const apiKey = space ? await resolveOpenAiKey(ctx, space.spaceId) : env.OPENAI_API_KEY?.trim();
     const summary = transcript
       ? await summarizeCall(transcript, apiKey)
       : "Voice call completed with Saathi.";
-    return await ctx.runMutation(internal.liveVoice.storeSummary, { roomId, sessionId, summary });
+    return await ctx.runMutation(internal.liveVoice.storeSummary, {
+      roomId,
+      sessionId,
+      summary,
+      voiceSeconds,
+      voiceUsageFinalized,
+    });
   },
 });
 
@@ -300,15 +383,26 @@ export const prepareFinish = internalQuery({
 });
 
 export const storeSummary = internalMutation({
-  args: { roomId: v.id("rooms"), sessionId: v.string(), summary: v.string() },
+  args: {
+    roomId: v.id("rooms"),
+    sessionId: v.string(),
+    summary: v.string(),
+    voiceSeconds: v.optional(v.number()),
+    voiceUsageFinalized: v.optional(v.boolean()),
+  },
   returns: v.union(v.literal("saved"), v.literal("already_saved")),
-  handler: async (ctx, { roomId, sessionId, summary }) => {
+  handler: async (ctx, { roomId, sessionId, summary, voiceSeconds, voiceUsageFinalized }) => {
     const { room, userId } = await requireRoomPermission(ctx, roomId, "post_message");
     const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
     if (!session || session.roomId !== roomId || session.startedBy !== userId) {
       throw new ConvexError({ code: "FORBIDDEN", message: "This voice session does not belong to you" });
     }
     if (session.finishedAt) return "already_saved";
+    const elapsedSeconds = Math.max(0, (Date.now() - session.createdAt) / 1_000);
+    const recordedSeconds = voiceSeconds === undefined
+      ? undefined
+      : Math.min(voiceSeconds, elapsedSeconds + 30, 3_600);
+    const voiceCostUsd = recordedSeconds === undefined ? undefined : gptLiveCostUsd(recordedSeconds);
     await ctx.db.insert("messages", {
       spaceId: room.spaceId,
       roomId,
@@ -318,8 +412,24 @@ export const storeSummary = internalMutation({
       originalText: summary.trim().slice(0, 2_000),
       language: "en",
       idempotencyKey: `live-summary:${sessionId}`,
+      voiceSeconds: recordedSeconds,
+      voiceCostUsd,
+      voiceUsageFinalized,
       createdAt: Date.now(),
     });
+    if (recordedSeconds !== undefined) {
+      await ctx.db.insert("usageLedger", {
+        spaceId: room.spaceId,
+        userId,
+        provider: "openai",
+        model: "gpt-live-1",
+        unit: "second",
+        quantity: recordedSeconds,
+        costUsd: voiceCostUsd,
+        costClass: "voice",
+        createdAt: Date.now(),
+      });
+    }
     const completedAt = Date.now();
     const agent = await ctx.db.query("agents").withIndex("by_room", q => q.eq("roomId", roomId)).first();
     if (agent) {

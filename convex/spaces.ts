@@ -57,10 +57,19 @@ export const prepareInboxCreation = internalQuery({
   },
 });
 
+export const aliasTaken = internalQuery({
+  args: { username: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { username }) => {
+    const existing = await ctx.db.query("spaces").withIndex("by_agentmail_inbox", q => q.eq("agentmailInboxId", username)).unique();
+    return existing !== null;
+  },
+});
+
 export const attachCreatedInbox = internalMutation({
-  args: { spaceId: v.id("spaces"), inboxId: v.string() },
+  args: { spaceId: v.id("spaces"), inboxId: v.string(), email: v.optional(v.string()) },
   returns: v.null(),
-  handler: async (ctx, { spaceId, inboxId }) => {
+  handler: async (ctx, { spaceId, inboxId, email }) => {
     const { userId } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
     const space = await ctx.db.get(spaceId);
     if (!space) throw new ConvexError({ code: "NOT_FOUND", message: "Family space not found" });
@@ -72,7 +81,7 @@ export const attachCreatedInbox = internalMutation({
       .withIndex("by_agentmail_inbox", q => q.eq("agentmailInboxId", inboxId))
       .unique();
     if (existing) throw new ConvexError({ code: "INBOX_ALREADY_CONNECTED", message: "This inbox belongs to another family space" });
-    await ctx.db.patch(spaceId, { agentmailInboxId: inboxId });
+    await ctx.db.patch(spaceId, { agentmailInboxId: inboxId, agentmailEmail: email });
     await ctx.db.insert("auditEvents", {
       spaceId,
       actorUserId: userId,

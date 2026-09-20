@@ -997,7 +997,8 @@ button { border: 0; background: none; color: inherit; }
 .pending-invitation small { margin-top: 3px; color: var(--text-soft); font-size: 10px; text-transform: capitalize; }
 .pending-invitation button { min-height: 34px !important; flex: 0 0 auto; color: #f2b3a4; font-size: 11px; }
 .gmail-connections > p { margin: 7px 0 12px; color: var(--text-soft); font-size: 12px; line-height: 1.45; }
-.gmail-account { display: grid; grid-template-columns: 28px minmax(0, 1fr) 18px; gap: 9px; align-items: center; padding: 9px 10px; border-radius: 12px; background: #202b25; }
+.gmail-account { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 9px 10px; border-radius: 12px; background: #202b25; }
+.gmail-disable { min-height: 32px !important; padding: 0 8px; border-radius: 8px; color: var(--text-soft); background: #2a352e; font-size: 11px; font-weight: 700; }
 .gmail-account + .gmail-account { margin-top: 6px; }
 .gmail-account > svg:first-child { width: 19px; color: #efb869; }
 .gmail-account > svg:last-child { width: 16px; color: var(--aqua); }
@@ -1017,7 +1018,12 @@ button { border: 0; background: none; color: inherit; }
 .food-budget form input { width: 100%; }
 .food-budget input { min-width: 0; height: 40px; padding: 0 10px; border: 0; border-radius: 10px; color: var(--text-warm); background: #202b25; }
 .food-budget button { min-height: 40px !important; padding: 0 12px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
-.share-family-mail { min-height: 36px !important; margin-top: 12px; padding: 0 12px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
+.share-family-mail-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.share-family-mail { min-height: 36px !important; margin-top: 0; padding: 0 12px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
+.alias-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-size: 13px; }
+.family-alias-fields { display: grid; gap: 6px; margin: 8px 0 12px; }
+.family-alias-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.family-alias-row button { min-height: 40px !important; padding: 0 12px; border-radius: 10px; background: #2a352e; font-size: 12px; font-weight: 700; }
 .status-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .status-actions button { min-height: 46px; padding: 0 16px; border-radius: 12px; }
 .family-dialog-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(6,10,8,.72); }

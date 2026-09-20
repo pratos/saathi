@@ -150,7 +150,10 @@ function UsernameSetup({ onExit }: { onExit: () => void }) {
 
 function CreateFirstFamily({ onExit }: { onExit: () => void }) {
   const createSpace = useMutation(api.spaces.create)
+  const createInbox = useAction(api.agentmailInboxes.createForFamily)
   const [name, setName] = useState('')
+  const [wantInbox, setWantInbox] = useState(true)
+  const [alias, setAlias] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -159,7 +162,14 @@ function CreateFirstFamily({ onExit }: { onExit: () => void }) {
     setBusy(true)
     setError('')
     try {
-      await createSpace({ name, creationKey: crypto.randomUUID().replaceAll('-', '') })
+      const spaceId = await createSpace({ name, creationKey: crypto.randomUUID().replaceAll('-', '') })
+      if (wantInbox) {
+        try {
+          await createInbox({ spaceId, username: alias.trim() || undefined })
+        } catch (caught) {
+          setError(familyInboxError(caught))
+        }
+      }
     } catch {
       setError('We could not create this family space. Please try again.')
       setBusy(false)
@@ -175,7 +185,9 @@ function CreateFirstFamily({ onExit }: { onExit: () => void }) {
         <p>Each family keeps its conversations, inbox, members, and Saathi context separate.</p>
         <form onSubmit={submit}>
           <label htmlFor="family-name">What should we call this family?</label>
-          <input id="family-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="For example, Parents’ home" minLength={2} maxLength={80} required autoFocus />
+          <input id="family-name" value={name} onChange={(event) => { setName(event.target.value); if (!alias || alias === suggestFamilyAliasFromName(name)) setAlias(suggestFamilyAliasFromName(event.target.value)) }} placeholder="For example, Parents’ home" minLength={2} maxLength={80} required autoFocus />
+          <label className="alias-toggle"><input type="checkbox" checked={wantInbox} onChange={event => setWantInbox(event.target.checked)} /> Create a family email address</label>
+          {wantInbox && <FamilyAliasFields alias={alias} onAlias={setAlias} />}
           <button className="primary large" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create private family space'} <Plus /></button>
         </form>
         {error && <p className="form-error" role="alert">{error}</p>}
@@ -200,6 +212,9 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
   const foodBudget = useQuery(api.budget.food, { spaceId: family.space._id })
   const setFoodLimit = useMutation(api.budget.setFoodLimit)
   const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
+  const reusableGmail = useQuery(api.gmailData.reusable, { spaceId: family.space._id })
+  const enableGmailHere = useMutation(api.gmailData.enableForSpace)
+  const disableGmailHere = useMutation(api.gmailData.disableForSpace)
   const [budgetDraft, setBudgetDraft] = useState('')
   const [budgetCurrency, setBudgetCurrency] = useState<'INR' | 'USD'>('INR')
   const [budgetBusy, setBudgetBusy] = useState(false)
@@ -344,7 +359,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       ) : pane === 'files' ? (
         <FamilyFiles family={family} files={spaceFiles} onBack={openHome} onOpenRoom={openRoom} />
       ) : selectedRoom ? (
-        <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} onBack={openHome} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
+        <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} onBack={openHome} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
       )}
@@ -386,8 +401,9 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
             : <small className="gmail-status">You already own 3 families.</small>)}
         </section>
         <section><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
-        <section className="gmail-connections"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi. Other family members cannot see your connected accounts.</p>
-          {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><Check /></div>)}
+        <section className="gmail-connections"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi in the families you allow. Other family members cannot see your connected accounts.</p>
+          {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><button type="button" className="gmail-disable" onClick={() => { setGmailBusy(true); void disableGmailHere({ spaceId: family.space._id, connectedAccountId: connection.connectedAccountId }).then(() => setGmailMessage('Removed from this family. Mail stays in other families you enabled.')).catch(() => setGmailMessage('Could not update Gmail for this family.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}>Remove here</button></div>)}
+          {(reusableGmail ?? []).map(account => <button type="button" className="connect-gmail" key={account.connectedAccountId} disabled={gmailBusy} onClick={() => { setGmailBusy(true); void enableGmailHere({ spaceId: family.space._id, connectedAccountId: account.connectedAccountId }).then(() => setGmailMessage(`Added ${account.email ?? account.alias} to this family.`)).catch(() => setGmailMessage('Could not add that Gmail to this family.')).finally(() => setGmailBusy(false)) }}><Plus /> Use {account.email ?? account.alias} here</button>)}
           <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
           {(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary" onClick={() => {
             setGmailBusy(true)
@@ -413,7 +429,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <details className="settings-disclosure">
           <summary><span>Advanced settings</span><small>Family inbox address, AI model, and provider keys</small></summary>
           <section><span>Family inbox</span>{family.space.agentmailInboxId
-          ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy ID'}</button></div>
+          ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailEmail ?? family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailEmail ?? family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy'}</button></div>
           : family.membership.role === 'owner'
             ? <ConnectInbox spaceId={family.space._id} />
             : <p>Ask a family owner to connect AgentMail.</p>}</section>
@@ -731,9 +747,10 @@ function jevExecutionSummary(
   return { tone: 'warning', label: 'Finished without a reply', detail: 'Pi completed the run but produced no visible answer.' }
 }
 
-function LiveRoom({ room, family, onBack, onInvite }: {
+function LiveRoom({ room, family, families, onBack, onInvite }: {
   room: Doc<'rooms'>
   family: FamilyRow
+  families: FamilyRow[]
   onBack: () => void
   onInvite?: () => void
 }) {
@@ -748,6 +765,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
   const submitAttachment = useMutation(api.attachments.submit)
   const pendingMoney = useQuery(api.gmailData.pendingForRoom, room.type === 'private' ? { roomId: room._id } : 'skip')
   const shareMoney = useMutation(api.gmailData.shareWithFamily)
+  const shareMoneyWithSpace = useMutation(api.gmailData.shareWithSpace)
   const [message, setMessage] = useState('')
   const [imageDraft, setImageDraft] = useState('')
   const [imageOpen, setImageOpen] = useState(false)
@@ -978,7 +996,7 @@ function LiveRoom({ room, family, onBack, onInvite }: {
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
-                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <button type="button" className="share-family-mail" onClick={() => { const match = pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey); if (match) void shareMoney({ inboxItemId: match._id }) }}>Share with family inbox</button>}</div></div>
+                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
               </article>)}
         {voice.summarizing && (
           <article className="person-message assistant-message saathi-stream" aria-live="polite">
@@ -1286,13 +1304,30 @@ function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove 
   </Card>
 }
 
+function ShareFamilyMailButtons({ item, family, families, onShareHere, onShareThere }: {
+  item: Doc<'inboxItems'>
+  family: FamilyRow
+  families: FamilyRow[]
+  onShareHere: (inboxItemId: Id<'inboxItems'>) => void
+  onShareThere: (inboxItemId: Id<'inboxItems'>, spaceId: Id<'spaces'>) => void
+}) {
+  const others = families.filter(row => row.space._id !== family.space._id && !item.forwardedSpaceIds?.includes(row.space._id))
+  return <div className="share-family-mail-row">
+    {!item.sharedAt && <button type="button" className="share-family-mail" onClick={() => onShareHere(item._id)}>Share with {family.space.name}</button>}
+    {others.map(row => <button type="button" className="share-family-mail" key={row.space._id} onClick={() => onShareThere(item._id, row.space._id)}>Also share with {row.space.name}</button>)}
+  </div>
+}
+
 function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
   ownedCount: number
   onClose: () => void
   onCreated: (spaceId: Id<'spaces'>) => void
   createSpace: (args: { name: string; creationKey: string }) => Promise<Id<'spaces'>>
 }) {
+  const createInbox = useAction(api.agentmailInboxes.createForFamily)
   const [name, setName] = useState('')
+  const [wantInbox, setWantInbox] = useState(true)
+  const [alias, setAlias] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const submit = async (event: FormEvent) => {
@@ -1301,6 +1336,13 @@ function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
     setError('')
     try {
       const spaceId = await createSpace({ name, creationKey: crypto.randomUUID().replaceAll('-', '') })
+      if (wantInbox) {
+        try {
+          await createInbox({ spaceId, username: alias.trim() || undefined })
+        } catch (caught) {
+          setError(familyInboxError(caught))
+        }
+      }
       onCreated(spaceId)
     } catch (caught) {
       setError(convexErrorCode(caught) === 'FAMILY_LIMIT'
@@ -1315,7 +1357,9 @@ function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
       <p>You own {ownedCount} of 3 families. Each family keeps its chats, inbox, and Saathi separate.</p>
       <form className="dark-connect-card" onSubmit={submit}>
         <label htmlFor="new-family-name">Family name</label>
-        <input id="new-family-name" value={name} onChange={event => setName(event.target.value)} minLength={2} maxLength={80} required autoFocus />
+        <input id="new-family-name" value={name} onChange={event => { setName(event.target.value); if (!alias || alias === suggestFamilyAliasFromName(name)) setAlias(suggestFamilyAliasFromName(event.target.value)) }} minLength={2} maxLength={80} required autoFocus />
+        <label className="alias-toggle"><input type="checkbox" checked={wantInbox} onChange={event => setWantInbox(event.target.checked)} /> Create a family email address</label>
+        {wantInbox && <FamilyAliasFields alias={alias} onAlias={setAlias} />}
         <button type="submit" disabled={busy || name.trim().length < 2}>{busy ? 'Creating…' : 'Create family'}</button>
         {error && <small role="alert">{error}</small>}
       </form>
@@ -1325,6 +1369,7 @@ function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
 
 function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
   const createInbox = useAction(api.agentmailInboxes.createForFamily)
+  const [alias, setAlias] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -1333,21 +1378,44 @@ function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
     setBusy(true)
     setError('')
     try {
-      await createInbox({ spaceId })
+      await createInbox({ spaceId, username: alias.trim() || undefined })
     } catch (caught) {
-      const code = convexErrorCode(caught)
-      setError(code === 'AGENTMAIL_PERMISSION'
-        ? 'The AgentMail key needs organization-level inbox creation access.'
-        : code === 'AGENTMAIL_AUTH'
-          ? 'AgentMail rejected the configured API key.'
-          : code === 'AGENTMAIL_RATE_LIMIT'
-            ? 'AgentMail is busy. Please wait a moment and try again.'
-            : 'We could not create the inbox. Check AgentMail setup and try again.')
+      setError(familyInboxError(caught))
       setBusy(false)
     }
   }
 
-  return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Create a private email address for this family.</p><button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</button>{error && <small role="alert">{error}</small>}</form>
+  return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Choose an unused alias, then create a private address for this family.</p><FamilyAliasFields alias={alias} onAlias={setAlias} /><button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</button>{error && <small role="alert">{error}</small>}</form>
+}
+
+function FamilyAliasFields({ alias, onAlias }: { alias: string; onAlias: (value: string) => void }) {
+  const checkAlias = useAction(api.agentmailInboxes.checkAlias)
+  const [status, setStatus] = useState('')
+  const [checking, setChecking] = useState(false)
+  const check = async () => {
+    if (!alias.trim()) return
+    setChecking(true)
+    setStatus('')
+    try {
+      const result = await checkAlias({ username: alias })
+      setStatus(result.available ? `${result.username} is available.` : `${result.username} is already taken.`)
+    } catch (caught) {
+      setStatus(convexErrorCode(caught) === 'ALIAS_INVALID'
+        ? 'Use 3–32 lowercase letters, numbers, and single hyphens.'
+        : 'Could not check that address. Try again.')
+    } finally {
+      setChecking(false)
+    }
+  }
+  return <div className="family-alias-fields">
+    <label htmlFor="family-alias">Family email alias</label>
+    <div className="family-alias-row">
+      <input id="family-alias" value={alias} onChange={event => onAlias(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="kapoor-family" minLength={3} maxLength={32} />
+      <button type="button" onClick={() => void check()} disabled={checking || alias.trim().length < 3}>{checking ? 'Checking…' : 'Check'}</button>
+    </div>
+    <small>We’ll ask AgentMail if this address is free before creating it.</small>
+    {status && <small role="status">{status}</small>}
+  </div>
 }
 
 function ModelTierControls({ spaceId }: { spaceId: Id<'spaces'> }) {
@@ -1646,6 +1714,20 @@ function canReadGmailPdf(item: Doc<'inboxItems'>) {
   if (item.status === 'processing' || item.status === 'failed' || !item.agentmailMessageId.startsWith('gmail:')) return false
   if (item.documentParseStatus === undefined) return true
   return item.documentParseStatus === 'none' && Boolean(item.processingNotes?.includes('no public document link'))
+}
+
+function suggestFamilyAliasFromName(name: string) {
+  return name.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32).replace(/-+$/g, '')
+}
+
+function familyInboxError(error: unknown) {
+  const code = convexErrorCode(error)
+  if (code === 'ALIAS_TAKEN') return 'That family email is already used. Try another alias.'
+  if (code === 'ALIAS_INVALID') return 'Use 3–32 lowercase letters, numbers, and single hyphens.'
+  if (code === 'AGENTMAIL_PERMISSION') return 'The AgentMail key needs organization-level inbox creation access.'
+  if (code === 'AGENTMAIL_AUTH') return 'AgentMail rejected the configured API key.'
+  if (code === 'AGENTMAIL_RATE_LIMIT') return 'AgentMail is busy. Please wait a moment and try again.'
+  return 'We could not create the inbox. Check AgentMail setup and try again.'
 }
 
 function convexErrorCode(error: unknown) {

@@ -24,6 +24,7 @@ export default defineSchema({
   spaces: defineTable({
     name: v.string(),
     agentmailInboxId: v.optional(v.string()),
+    agentmailEmail: v.optional(v.string()),
     createdBy: v.id("users"),
     creationKey: v.string(),
     createdAt: v.number(),
@@ -75,8 +76,9 @@ export default defineSchema({
     heartbeatMessageId: v.optional(v.id("messages")),
     jevDecisionId: v.optional(v.id("jevDecisions")),
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
+    forwardedSpaceIds: v.optional(v.array(v.id("spaces"))),
     receivedAt: v.number(),
-  }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]),
+  }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_agentmail_message", ["spaceId", "agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]),
   messages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), authorUserId: v.optional(v.id("users")),
     actorType: v.union(v.literal("user"), v.literal("assistant"), v.literal("email_guest"), v.literal("voice_transcript")),
@@ -126,7 +128,8 @@ export default defineSchema({
     // Kept for compatibility with connections synced before operational state was split out.
     createdAt: v.number(), lastSyncedAt: v.optional(v.number()),
   }).index("by_space_user", ["spaceId", "userId"])
-    .index("by_connected_account", ["connectedAccountId"]),
+    .index("by_connected_account", ["connectedAccountId"])
+    .index("by_connected_account_space", ["connectedAccountId", "spaceId"]),
   gmailConnectionSyncStates: defineTable({
     connectionId: v.id("gmailConnections"), lastSyncedAt: v.number(),
   }).index("by_connection_id", ["connectionId"]),

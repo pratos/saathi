@@ -1,11 +1,31 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, env } from "./_generated/server";
+import { validateFamilyAlias } from "./lib/familyAlias";
+
+export const checkAlias = action({
+  args: { username: v.string() },
+  returns: v.object({ available: v.boolean(), username: v.string() }),
+  handler: async (ctx, args): Promise<{ available: boolean; username: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Sign in required" });
+    const username = validateFamilyAlias(args.username);
+    const taken: boolean = await ctx.runQuery(internal.spaces.aliasTaken, { username });
+    if (taken) return { available: false, username };
+    try {
+      await agentmailRequest(`/inboxes/${encodeURIComponent(username)}`);
+      return { available: false, username };
+    } catch (error) {
+      if (error instanceof AgentMailRequestError && error.status === 404) return { available: true, username };
+      throw providerError(error);
+    }
+  },
+});
 
 export const createForFamily = action({
-  args: { spaceId: v.id("spaces") },
+  args: { spaceId: v.id("spaces"), username: v.optional(v.string()) },
   returns: v.object({ inboxId: v.string(), email: v.string() }),
-  handler: async (ctx, { spaceId }): Promise<{ inboxId: string; email: string }> => {
+  handler: async (ctx, { spaceId, username }): Promise<{ inboxId: string; email: string }> => {
     const family: { name: string; existingInboxId: string | null } = await ctx.runQuery(
       internal.spaces.prepareInboxCreation,
       { spaceId },
@@ -19,18 +39,28 @@ export const createForFamily = action({
       }
     }
 
+    const alias = username ? validateFamilyAlias(username) : undefined;
+    if (alias) {
+      const taken: boolean = await ctx.runQuery(internal.spaces.aliasTaken, { username: alias });
+      if (taken) throw new ConvexError({ code: "ALIAS_TAKEN", message: "That family email is already used" });
+    }
+
     try {
       const created = await agentmailRequest("/inboxes", {
         method: "POST",
         body: JSON.stringify({
+          ...(alias ? { username: alias } : {}),
           display_name: `${family.name} family inbox`,
           client_id: `saathi-family-${spaceId}`,
         }),
       });
       const inbox = parseInbox(created);
-      await ctx.runMutation(internal.spaces.attachCreatedInbox, { spaceId, inboxId: inbox.inboxId });
+      await ctx.runMutation(internal.spaces.attachCreatedInbox, { spaceId, inboxId: inbox.inboxId, email: inbox.email });
       return inbox;
     } catch (error) {
+      if (error instanceof AgentMailRequestError && (error.status === 409 || error.status === 422)) {
+        throw new ConvexError({ code: "ALIAS_TAKEN", message: "That family email is already used" });
+      }
       throw providerError(error);
     }
   },

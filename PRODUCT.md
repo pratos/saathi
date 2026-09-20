@@ -60,11 +60,11 @@ The visual system is warm and dignified: deep green-black surfaces, restrained t
 
 One account can create or join multiple family spaces—for example, a household, a parent’s household, and a resident group. The user chooses an active space from a switcher; switching changes the complete authorization and data scope rather than applying a client-side filter.
 
-Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, follow-ups, model context, and email routing are forbidden. Email addresses must resolve to one space before content is processed.
+Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, follow-ups, and model context are forbidden. A personal Gmail mailbox belongs to one Saath user. That user may opt a family in to receive private copies in My Saathi; sharing into a family inbox is explicit per space and can be repeated for another family. A family AgentMail address is chosen when the family is created, or later by an owner, and must be unused.
 
 ## Family inbox
 
-Each family space receives one AgentMail-powered address, for example `kapoor-family@saath.email`. Members can use it as a subscription contact or forward existing email into it.
+Each family space can receive one AgentMail-powered address, for example `kapoor-family@saath.email`. Owners pick the alias when creating the family (availability is checked first) or connect it later. Members can use it as a subscription contact or forward existing email into it.
 
 Incoming items are classified into views such as:
 

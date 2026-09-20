@@ -38,10 +38,20 @@ export const confirmConnection = action({
   handler: async (ctx, { spaceId, connectedAccountId }): Promise<Id<"gmailConnections">> => {
     if (!/^ca_[A-Za-z0-9_-]{3,200}$/.test(connectedAccountId)) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid Gmail connection" });
     const { userId }: { userId: Id<"users"> } = await ctx.runQuery(internal.gmailData.prepareConnect, { spaceId });
-    const prior: Doc<"gmailConnections"> | null = await ctx.runQuery(internal.gmailData.connectionForAccount, { connectedAccountId });
-    if (prior) {
-      if (prior.userId !== userId || prior.spaceId !== spaceId) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is assigned elsewhere" });
-      return prior._id;
+    const priors: Doc<"gmailConnections">[] = await ctx.runQuery(internal.gmailData.connectionsForAccount, { connectedAccountId });
+    if (priors.some(row => row.userId !== userId)) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is assigned elsewhere" });
+    const here = priors.find(row => row.spaceId === spaceId);
+    if (here) return here._id;
+    const sibling = priors.find(row => row.userId === userId && row.status === "active");
+    if (sibling) {
+      return await ctx.runMutation(internal.gmailData.register, {
+        spaceId,
+        userId,
+        connectedAccountId,
+        alias: sibling.alias,
+        email: sibling.email,
+        triggerId: sibling.triggerId,
+      });
     }
     const composio = composioClient();
     const accounts = await composio.connectedAccounts.list({ userIds: [composioUserId(userId)], toolkitSlugs: ["gmail"], statuses: ["ACTIVE"] });
@@ -210,11 +220,33 @@ export const processIncoming = internalAction({
   args: { connectedAccountId: v.string(), eventId: v.string(), payload: v.any(), attempt: v.optional(v.number()) },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const connection: Doc<"gmailConnections"> | null = await ctx.runQuery(internal.gmailData.connectionForAccount, { connectedAccountId: args.connectedAccountId });
-    if (!connection || connection.status !== "active") return null;
+    const connections: Doc<"gmailConnections">[] = await ctx.runQuery(internal.gmailData.connectionsForAccount, { connectedAccountId: args.connectedAccountId });
+    const active = connections.filter(connection => connection.status === "active");
+    if (active.length === 0) return null;
     try {
-      await processCandidate(ctx, connection, args.payload);
-      await ctx.runMutation(internal.gmailData.touchSynced, { connectionId: connection._id });
+      const parsed = parseIncomingMessage(args.payload);
+      if (!parsed) return null;
+      const classification = await classifyEmail(ctx, active[0], {
+        sender: parsed.sender, subject: parsed.subject, text: `${parsed.text}\n${parsed.html}`.trim(),
+      });
+      for (const connection of active) {
+        await ctx.runMutation(internal.gmailData.saveClassification, {
+          connectionId: connection._id,
+          externalMessageId: parsed.externalMessageId,
+          threadId: parsed.threadId,
+          sender: parsed.sender,
+          subject: parsed.subject,
+          text: parsed.text,
+          html: parsed.html || undefined,
+          receivedAt: parsed.receivedAt,
+          useful: classification.useful,
+          summary: classification.summary,
+          category: classification.category,
+          amount: classification.amount,
+          merchant: classification.merchant,
+        });
+        await ctx.runMutation(internal.gmailData.touchSynced, { connectionId: connection._id });
+      }
     } catch (error) {
       const attempt = args.attempt ?? 0;
       if (attempt < 2) {
@@ -227,10 +259,10 @@ export const processIncoming = internalAction({
   },
 });
 
-async function processCandidate(ctx: ActionCtx, connection: Doc<"gmailConnections">, raw: unknown) {
+function parseIncomingMessage(raw: unknown) {
   const record = normalizeToolData(raw);
   const externalMessageId = findString(record, ["messageId", "message_id", "id"]);
-  if (!externalMessageId) return;
+  if (!externalMessageId) return null;
   const subject = findString(record, ["subject"]) || "No subject";
   const sender = findString(record, ["sender", "from"]) || "Unknown sender";
   const text = findString(record, ["messageText", "message_text", "body", "text", "snippet", "preview"]) || "";
@@ -238,16 +270,30 @@ async function processCandidate(ctx: ActionCtx, connection: Doc<"gmailConnection
   const threadId = findString(record, ["threadId", "thread_id"]) || externalMessageId;
   const timestamp = findString(record, ["messageTimestamp", "message_timestamp", "internalDate", "date"]);
   const parsedTimestamp = timestamp && /^\d{11,}$/.test(timestamp) ? Number(timestamp) : Date.parse(timestamp);
-  const classification = await classifyEmail(ctx, connection, { sender, subject, text: `${text}\n${html}`.trim() });
-  await ctx.runMutation(internal.gmailData.saveClassification, {
-    connectionId: connection._id,
+  return {
     externalMessageId,
     threadId,
     sender: sender.slice(0, 500),
     subject: subject.slice(0, 1_000),
     text: text.slice(0, 20_000),
-    html: html.slice(0, 40_000) || undefined,
+    html: html.slice(0, 40_000),
     receivedAt: Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now(),
+  };
+}
+
+async function processCandidate(ctx: ActionCtx, connection: Doc<"gmailConnections">, raw: unknown) {
+  const parsed = parseIncomingMessage(raw);
+  if (!parsed) return;
+  const classification = await classifyEmail(ctx, connection, { sender: parsed.sender, subject: parsed.subject, text: `${parsed.text}\n${parsed.html}`.trim() });
+  await ctx.runMutation(internal.gmailData.saveClassification, {
+    connectionId: connection._id,
+    externalMessageId: parsed.externalMessageId,
+    threadId: parsed.threadId,
+    sender: parsed.sender,
+    subject: parsed.subject,
+    text: parsed.text,
+    html: parsed.html || undefined,
+    receivedAt: parsed.receivedAt,
     useful: classification.useful,
     summary: classification.summary,
     category: classification.category,

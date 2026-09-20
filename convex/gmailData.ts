@@ -34,10 +34,11 @@ export const prepareConnect = internalQuery({
   },
 });
 
-export const connectionForAccount = internalQuery({
+export const connectionsForAccount = internalQuery({
   args: { connectedAccountId: v.string() },
+  returns: v.array(v.any()),
   handler: async (ctx, { connectedAccountId }) => ctx.db.query("gmailConnections")
-    .withIndex("by_connected_account", q => q.eq("connectedAccountId", connectedAccountId)).unique(),
+    .withIndex("by_connected_account", q => q.eq("connectedAccountId", connectedAccountId)).take(20),
 });
 
 export const attachmentSource = internalQuery({
@@ -55,9 +56,9 @@ export const attachmentSource = internalQuery({
     const source = parseGmailSourceKey(item.agentmailMessageId);
     if (!source) return null;
     const connection = await ctx.db.query("gmailConnections")
-      .withIndex("by_connected_account", q => q.eq("connectedAccountId", source.connectedAccountId))
+      .withIndex("by_connected_account_space", q => q.eq("connectedAccountId", source.connectedAccountId).eq("spaceId", item.spaceId))
       .unique();
-    if (!connection || connection.status !== "active" || connection.spaceId !== item.spaceId
+    if (!connection || connection.status !== "active"
       || (item.privateOwnerId && connection.userId !== item.privateOwnerId)) return null;
     return {
       ...source,
@@ -77,10 +78,14 @@ export const register = internalMutation({
   handler: async (ctx, args) => {
     const principal = await requireSpacePermission(ctx, args.spaceId, "read");
     if (principal.userId !== args.userId) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail connection belongs to another user" });
-    const existing = await ctx.db.query("gmailConnections").withIndex("by_connected_account", q => q.eq("connectedAccountId", args.connectedAccountId)).unique();
+    const existing = await ctx.db.query("gmailConnections").withIndex("by_connected_account_space", q => q.eq("connectedAccountId", args.connectedAccountId).eq("spaceId", args.spaceId)).unique();
     if (existing) {
-      if (existing.userId !== args.userId || existing.spaceId !== args.spaceId) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is already assigned elsewhere" });
+      if (existing.userId !== args.userId) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is already assigned elsewhere" });
       return existing._id;
+    }
+    const siblings = await ctx.db.query("gmailConnections").withIndex("by_connected_account", q => q.eq("connectedAccountId", args.connectedAccountId)).take(20);
+    if (siblings.some(row => row.userId !== args.userId)) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is already assigned elsewhere" });
     }
     await ensurePersonalRoomForUser(ctx, args.spaceId, args.userId);
     const connectionId = await ctx.db.insert("gmailConnections", { ...args, status: "active", createdAt: Date.now() });
@@ -101,6 +106,73 @@ const gmailConnectionDoc = v.object({
   status: v.union(v.literal("active"), v.literal("error")),
   createdAt: v.number(),
   lastSyncedAt: v.optional(v.number()),
+});
+
+export const reusable = query({
+  args: { spaceId: v.id("spaces") },
+  returns: v.array(v.object({
+    connectedAccountId: v.string(),
+    email: v.optional(v.string()),
+    alias: v.string(),
+  })),
+  handler: async (ctx, { spaceId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "read");
+    const here = await ctx.db.query("gmailConnections").withIndex("by_space_user", q => q.eq("spaceId", spaceId).eq("userId", userId)).take(20);
+    const hereIds = new Set(here.map(row => row.connectedAccountId));
+    const memberships = await ctx.db.query("memberships").withIndex("by_user_status", q => q.eq("userId", userId).eq("status", "active")).take(20);
+    const found = new Map<string, { connectedAccountId: string; email?: string; alias: string }>();
+    for (const membership of memberships) {
+      if (membership.spaceId === spaceId) continue;
+      const rows = await ctx.db.query("gmailConnections").withIndex("by_space_user", q => q.eq("spaceId", membership.spaceId).eq("userId", userId)).take(20);
+      for (const row of rows) {
+        if (row.status !== "active" || hereIds.has(row.connectedAccountId) || found.has(row.connectedAccountId)) continue;
+        found.set(row.connectedAccountId, { connectedAccountId: row.connectedAccountId, email: row.email, alias: row.alias });
+      }
+    }
+    return [...found.values()];
+  },
+});
+
+export const enableForSpace = mutation({
+  args: { spaceId: v.id("spaces"), connectedAccountId: v.string() },
+  returns: v.id("gmailConnections"),
+  handler: async (ctx, { spaceId, connectedAccountId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "read");
+    if (!/^ca_[A-Za-z0-9_-]{3,200}$/.test(connectedAccountId)) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid Gmail connection" });
+    }
+    const existing = await ctx.db.query("gmailConnections").withIndex("by_connected_account_space", q => q.eq("connectedAccountId", connectedAccountId).eq("spaceId", spaceId)).unique();
+    if (existing) {
+      if (existing.userId !== userId) throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is already assigned elsewhere" });
+      return existing._id;
+    }
+    const siblings = await ctx.db.query("gmailConnections").withIndex("by_connected_account", q => q.eq("connectedAccountId", connectedAccountId)).take(20);
+    const template = siblings.find(row => row.userId === userId && row.status === "active");
+    if (!template) throw new ConvexError({ code: "NOT_FOUND", message: "Connect Gmail once before adding it to another family" });
+    if (siblings.some(row => row.userId !== userId)) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "This Gmail account is already assigned elsewhere" });
+    }
+    await ensurePersonalRoomForUser(ctx, spaceId, userId);
+    const connectionId = await ctx.db.insert("gmailConnections", {
+      spaceId, userId, connectedAccountId,
+      alias: template.alias, email: template.email, triggerId: template.triggerId,
+      status: "active", createdAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.gmail.backfill, { connectionId });
+    return connectionId;
+  },
+});
+
+export const disableForSpace = mutation({
+  args: { spaceId: v.id("spaces"), connectedAccountId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { spaceId, connectedAccountId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "read");
+    const existing = await ctx.db.query("gmailConnections").withIndex("by_connected_account_space", q => q.eq("connectedAccountId", connectedAccountId).eq("spaceId", spaceId)).unique();
+    if (!existing || existing.userId !== userId) return null;
+    await ctx.db.delete(existing._id);
+    return null;
+  },
 });
 
 export const mineInternal = internalQuery({
@@ -195,7 +267,7 @@ export const pendingForRoom = query({
     const { userId, room } = await requireRoomPermission(ctx, roomId, "read");
     if (room.type !== "private" || room.personalOwnerId !== userId) return [];
     const items = await ctx.db.query("inboxItems").withIndex("by_space_received", q => q.eq("spaceId", room.spaceId)).order("desc").take(40);
-    return items.filter(item => item.visibility === "private" && item.privateOwnerId === userId && item.roomId === roomId && !item.sharedAt);
+    return items.filter(item => item.privateOwnerId === userId && parseGmailSourceKey(item.agentmailMessageId));
   },
 });
 
@@ -260,6 +332,101 @@ export const shareWithFamily = mutation({
     return item._id;
   },
 });
+
+export const shareWithSpace = mutation({
+  args: { inboxItemId: v.id("inboxItems"), spaceId: v.id("spaces") },
+  returns: v.id("inboxItems"),
+  handler: async (ctx, { inboxItemId, spaceId }) => {
+    const { userId, item } = await requireInboxItemPermission(ctx, inboxItemId, "read");
+    if (item.privateOwnerId !== userId || !parseGmailSourceKey(item.agentmailMessageId)) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "Only you can share this email with another family" });
+    }
+    if (spaceId === item.spaceId) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Share this email into the current family inbox from My Saathi" });
+    }
+    if (item.forwardedSpaceIds?.includes(spaceId)) {
+      const existing = await ctx.db.query("inboxItems").withIndex("by_space_agentmail_message", q => q.eq("spaceId", spaceId).eq("agentmailMessageId", item.agentmailMessageId)).unique();
+      if (existing) return existing._id;
+    }
+    const { room: familyRoom } = await requireFamilyShareRoom(ctx, spaceId);
+    const duplicate = await ctx.db.query("inboxItems").withIndex("by_space_agentmail_message", q => q.eq("spaceId", spaceId).eq("agentmailMessageId", item.agentmailMessageId)).unique();
+    if (duplicate) {
+      await ctx.db.patch(item._id, { forwardedSpaceIds: uniqueSpaceIds([...(item.forwardedSpaceIds ?? []), spaceId]) });
+      return duplicate._id;
+    }
+    const now = Date.now();
+    const copyId = await ctx.db.insert("inboxItems", {
+      spaceId,
+      roomId: familyRoom._id,
+      agentmailMessageId: item.agentmailMessageId,
+      agentmailThreadId: item.agentmailThreadId,
+      sender: item.sender,
+      subject: item.subject,
+      originalText: item.originalText,
+      originalHtml: item.originalHtml,
+      detectedLanguage: item.detectedLanguage,
+      visibility: "space",
+      category: item.category,
+      status: item.status === "failed" ? "received" : item.status,
+      extractedAmount: item.extractedAmount,
+      extractedDueAt: item.extractedDueAt,
+      extractedMerchant: item.extractedMerchant,
+      extractedPeriod: item.extractedPeriod,
+      extractedAmountInr: item.extractedAmountInr,
+      extractedAmountUsd: item.extractedAmountUsd,
+      direction: item.direction,
+      processingNotes: item.processingNotes,
+      documentParseStatus: item.documentParseStatus,
+      suggestedActions: item.suggestedActions,
+      actionStatus: item.actionStatus,
+      sharedAt: now,
+      sharedByUserId: userId,
+      receivedAt: item.receivedAt,
+    });
+    await ctx.db.insert("messages", {
+      spaceId,
+      roomId: familyRoom._id,
+      actorType: "email_guest",
+      origin: "assistant",
+      originalText: `Shared from My Saathi\n\n${item.subject}\nFrom ${item.sender}${item.extractedAmount ? `\nAmount: ${item.extractedAmount}` : ""}`,
+      language: "en",
+      idempotencyKey: `gmail-shared:${spaceId}:${item.agentmailMessageId}`,
+      createdAt: now,
+    });
+    if (isFoodMerchant(item.sender, item.subject, item.originalText) && item.extractedAmount) {
+      const amount = parseAmount(item.extractedAmount);
+      if (amount !== null) {
+        const existingSpend = await ctx.db.query("familySpend").withIndex("by_source_inbox", q => q.eq("sourceInboxItemId", copyId)).unique();
+        if (!existingSpend) {
+          await ctx.db.insert("familySpend", {
+            spaceId, category: "food", amount, currency: "INR",
+            merchant: foodMerchantName(item.sender, item.subject),
+            sourceInboxItemId: copyId, createdBy: userId, spentAt: item.receivedAt,
+          });
+        }
+      }
+    }
+    await ctx.db.patch(item._id, { forwardedSpaceIds: uniqueSpaceIds([...(item.forwardedSpaceIds ?? []), spaceId]) });
+    await ctx.db.insert("auditEvents", {
+      spaceId, actorUserId: userId, action: "gmail.shared_with_family",
+      resourceType: "inboxItem", resourceId: String(copyId), createdAt: now,
+    });
+    return copyId;
+  },
+});
+
+async function requireFamilyShareRoom(ctx: Parameters<typeof requireRoomPermission>[0], spaceId: import("./_generated/dataModel").Id<"spaces">) {
+  await requireSpacePermission(ctx, spaceId, "read");
+  const rooms = await ctx.db.query("rooms").withIndex("by_space", q => q.eq("spaceId", spaceId)).take(40);
+  const familyRoom = rooms.find(room => room.type === "shared" && !room.archivedAt);
+  if (!familyRoom) throw new ConvexError({ code: "NOT_FOUND", message: "This family does not have a shared conversation yet" });
+  await requireRoomPermission(ctx, familyRoom._id, "post_message");
+  return { room: familyRoom };
+}
+
+function uniqueSpaceIds(ids: Array<import("./_generated/dataModel").Id<"spaces">>) {
+  return [...new Set(ids)];
+}
 
 function moneyReviewText(args: { sender: string; subject: string; summary: string; category: "bills" | "receipts" | "bank"; amount?: string; merchant?: string }) {
   const kind = args.category === "bills" ? "Bill" : args.category === "bank" ? "Bank notice" : "Purchase";

@@ -95,7 +95,9 @@ describe("private Gmail ingestion", () => {
     await expect(owner.mutation(api.gmailData.shareWithFamily, { inboxItemId: pending[0]._id })).rejects.toThrow(/permission/i);
     await member.mutation(api.gmailData.shareWithFamily, { inboxItemId: pending[0]._id });
     expect(await owner.query(api.inbox.list, { spaceId })).toHaveLength(1);
-    expect(await member.query(api.gmailData.pendingForRoom, { roomId: personalRoom!._id })).toEqual([]);
+    expect(await member.query(api.gmailData.pendingForRoom, { roomId: personalRoom!._id })).toEqual([
+      expect.objectContaining({ _id: pending[0]._id, sharedAt: expect.any(Number) }),
+    ]);
 
     const persisted = await t.run(async ctx => ({
       markers: await ctx.db.query("gmailProcessedMessages").collect(),
@@ -147,5 +149,55 @@ describe("private Gmail ingestion", () => {
     expect(item?.sharedAt).toBeUndefined();
     const familyMessages = await t.run(async ctx => ctx.db.query("messages").collect());
     expect(familyMessages.filter(message => message.roomId === seeded.familyRoomId)).toEqual([]);
+  });
+
+  test("the same Gmail can be enabled in another family and shared there independently", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const createdAt = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const firstSpaceId = await ctx.db.insert("spaces", { name: "Home", createdBy: ownerId, creationKey: "gmail-home", createdAt });
+      const secondSpaceId = await ctx.db.insert("spaces", { name: "Parents", createdBy: ownerId, creationKey: "gmail-parents", createdAt });
+      await ctx.db.insert("memberships", { spaceId: firstSpaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+      await ctx.db.insert("memberships", { spaceId: secondSpaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+      const firstRoomId = await ctx.db.insert("rooms", { spaceId: firstSpaceId, type: "shared", title: "Family conversation", assistantMode: "mention", createdBy: ownerId, createdAt });
+      const secondRoomId = await ctx.db.insert("rooms", { spaceId: secondSpaceId, type: "shared", title: "Family conversation", assistantMode: "mention", createdBy: ownerId, createdAt });
+      await ctx.db.insert("roomMembers", { roomId: firstRoomId, userId: ownerId, role: "manager", createdAt });
+      await ctx.db.insert("roomMembers", { roomId: secondRoomId, userId: ownerId, role: "manager", createdAt });
+      const connectionId = await ctx.db.insert("gmailConnections", {
+        spaceId: firstSpaceId, userId: ownerId, connectedAccountId: "ca_owner_multi", alias: "Personal Gmail",
+        triggerId: "ti_owner_multi", status: "active", createdAt,
+      });
+      return { connectionId, ownerId, firstSpaceId, secondSpaceId, secondRoomId };
+    });
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+    await expect(owner.query(api.gmailData.reusable, { spaceId: seeded.secondSpaceId })).resolves.toEqual([
+      expect.objectContaining({ connectedAccountId: "ca_owner_multi" }),
+    ]);
+    await expect(owner.mutation(api.gmailData.enableForSpace, {
+      spaceId: seeded.secondSpaceId, connectedAccountId: "ca_owner_multi",
+    })).resolves.toEqual(expect.any(String));
+    const inboxItemId = await owner.mutation(internal.gmailData.saveClassification, {
+      connectionId: seeded.connectionId,
+      threadId: "thread-multi",
+      receivedAt: 1_700_000_000_000,
+      category: "bills",
+      externalMessageId: "useful-multi",
+      sender: "billing@example.test",
+      subject: "Invoice",
+      text: "Pay 900",
+      useful: true,
+      summary: "Invoice",
+      amount: "900",
+    });
+    await owner.mutation(api.gmailData.shareWithFamily, { inboxItemId: inboxItemId! });
+    const copyId = await owner.mutation(api.gmailData.shareWithSpace, { inboxItemId: inboxItemId!, spaceId: seeded.secondSpaceId });
+    await expect(owner.mutation(api.gmailData.shareWithSpace, { inboxItemId: inboxItemId!, spaceId: seeded.secondSpaceId })).resolves.toEqual(copyId);
+    const copy = await t.run(ctx => ctx.db.get(copyId));
+    expect(copy).toMatchObject({ spaceId: seeded.secondSpaceId, visibility: "space", agentmailMessageId: "gmail:ca_owner_multi:useful-multi" });
+    const source = await t.run(ctx => ctx.db.get(inboxItemId!));
+    expect(source?.forwardedSpaceIds).toContain(seeded.secondSpaceId);
+    const parentMessages = await t.run(async ctx => ctx.db.query("messages").collect());
+    expect(parentMessages.filter(message => message.roomId === seeded.secondRoomId)).toHaveLength(1);
   });
 });

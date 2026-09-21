@@ -47,6 +47,7 @@ import { Card } from './components/ui/card'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from './components/ui/select'
 import { AdminDashboard } from './AdminDashboard'
 import { VoiceBlob } from './VoiceBlob'
+import { emailBodyHtml } from './emailFormatting'
 import { useLiveVoice, type VoiceStatus, type VoiceToolActivity, type VoiceTurn } from './useLiveVoice'
 import './LiveTools.css'
 import './Access.css'
@@ -423,7 +424,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         <div className="family-switcher" role="group" aria-labelledby="family-switcher-label">
           {families.map(({ space }) => (
             <button type="button" key={space._id} className={space._id === family.space._id ? 'selected' : ''} onClick={() => onSelectFamily(space._id)}>
-              {space.name}
+              <span>{space.name}</span><FamilyUnreadBadge spaceId={space._id} />
             </button>
           ))}
         </div>
@@ -437,7 +438,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         ))}
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
         <span className="list-heading section-gap">Family activity</span>
-        <button className={`conversation-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => openPane('updates')}><i /><span>Family inbox</span><b>{inboxItems?.length ?? 0}</b></button>
+        <button className={`conversation-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => openPane('updates')}><i /><span>Family inbox</span><FamilyUnreadBadge spaceId={family.space._id} /></button>
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
@@ -1577,11 +1578,25 @@ function LiveStatus({ message }: { message: string }) {
   return <main className="centered-status"><div className="status-spinner" /><p>{message}</p></main>
 }
 
+function FamilyUnreadBadge({ spaceId }: { spaceId: Id<'spaces'> }) {
+  const unreadCount = useQuery(api.inbox.unreadCount, { spaceId })
+  if (!unreadCount) return null
+  const label = `${unreadCount} unread family inbox ${unreadCount === 1 ? 'item' : 'items'}`
+  return <b className="notification-badge" aria-label={label}>{unreadCount > 99 ? '99+' : unreadCount}</b>
+}
+
 function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Doc<'inboxItems'>[] | undefined; onBack: () => void }) {
   const confirmAction = useMutation(api.inbox.confirmAction)
   const dismissAction = useMutation(api.inbox.dismissAction)
   const reprocess = useMutation(api.inbox.reprocess)
+  const markSeen = useMutation(api.inbox.markSeen)
   const [openItem, setOpenItem] = useState<Doc<'inboxItems'> | null>(null)
+
+  useEffect(() => {
+    if (!items?.[0]) return
+    void markSeen({ inboxItemId: items[0]._id })
+  }, [items, markSeen])
+
   return <section className="conversation-pane inbox-pane">
     <header className="conversation-header live-room-header">
       <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
@@ -1675,7 +1690,7 @@ function EmailDetailDialog({ item, onClose }: { item: Doc<'inboxItems'>; onClose
 }
 
 function buildSafeEmailDocument(item: Doc<'inboxItems'>, loadRemoteImages: boolean) {
-  const raw = item.originalHtml?.trim() || `<p>${escapeHtml(item.originalText)}</p>`
+  const raw = emailBodyHtml(item.originalHtml, item.originalText)
   const sanitized = DOMPurify.sanitize(raw, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option'],
@@ -1698,10 +1713,6 @@ function buildSafeEmailDocument(item: Doc<'inboxItems'>, loadRemoteImages: boole
   const imageSources = loadRemoteImages ? 'data: blob: https: http:' : 'data: blob:'
   const emailStyles = Array.from(parsed.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>html{color:#273246;background:#fffdf8;font:16px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}body{max-width:760px;margin:0 auto;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[data-remote-image-blocked]{display:none}a{color:#234d86;text-decoration:underline}table{max-width:100%;border-collapse:collapse}pre{white-space:pre-wrap}</style>${emailStyles}</head><body>${parsed.body.innerHTML}</body></html>`
-}
-
-function escapeHtml(value: string) {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;').replaceAll('\n', '<br>')
 }
 
 function FamilyFiles({ family, files, onBack, onOpenRoom }: {

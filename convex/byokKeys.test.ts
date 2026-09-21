@@ -11,6 +11,8 @@ afterEach(() => vi.unstubAllEnvs());
 describe("family BYOK", () => {
   test("only owners can save a key, members see last four, and the secret is never returned", async () => {
     vi.stubEnv("BYOK_ENCRYPTION_KEY", "test-only-byok-encryption-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("OPENAI_API_KEY", "");
     const t = convexTest(schema, modules);
     const { spaceId, ownerId, memberId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });

@@ -6,6 +6,55 @@ import schema from "./schema.js";
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
 describe("family inbox processing", () => {
+  test("tracks unread family inbox items independently for each member and family", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const createdAt = 1_800_000_000_000;
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const memberId = await ctx.db.insert("users", { email: "member@example.test" });
+      const outsiderId = await ctx.db.insert("users", { email: "outsider@example.test" });
+      const firstSpaceId = await ctx.db.insert("spaces", { name: "First family", createdBy: ownerId, creationKey: "unread-first", createdAt });
+      const secondSpaceId = await ctx.db.insert("spaces", { name: "Second family", createdBy: outsiderId, creationKey: "unread-second", createdAt });
+      await ctx.db.insert("memberships", { spaceId: firstSpaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+      await ctx.db.insert("memberships", { spaceId: firstSpaceId, userId: memberId, role: "member", status: "active", joinedAt: createdAt });
+      await ctx.db.insert("memberships", { spaceId: secondSpaceId, userId: outsiderId, role: "owner", status: "active", joinedAt: createdAt });
+      const olderId = await ctx.db.insert("inboxItems", {
+        spaceId: firstSpaceId, agentmailMessageId: "message-older", agentmailThreadId: "thread-older",
+        sender: "alerts@example.test", subject: "Older update", originalText: "Family update",
+        visibility: "space", category: "home", status: "ready", receivedAt: createdAt + 1,
+      });
+      const newestId = await ctx.db.insert("inboxItems", {
+        spaceId: firstSpaceId, agentmailMessageId: "message-newest", agentmailThreadId: "thread-newest",
+        sender: "alerts@example.test", subject: "Newest update", originalText: "Family update",
+        visibility: "space", category: "home", status: "ready", receivedAt: createdAt + 2,
+      });
+      const outsiderItemId = await ctx.db.insert("inboxItems", {
+        spaceId: secondSpaceId, agentmailMessageId: "message-outsider", agentmailThreadId: "thread-outsider",
+        sender: "alerts@example.test", subject: "Other family", originalText: "Private family update",
+        visibility: "space", category: "home", status: "ready", receivedAt: createdAt + 3,
+      });
+      return { ownerId, memberId, firstSpaceId, olderId, newestId, outsiderItemId };
+    });
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+    const member = t.withIdentity({ subject: String(seeded.memberId) });
+
+    await expect(owner.query(api.inbox.unreadCount, { spaceId: seeded.firstSpaceId })).resolves.toBe(2);
+    await expect(member.query(api.inbox.unreadCount, { spaceId: seeded.firstSpaceId })).resolves.toBe(2);
+    await owner.mutation(api.inbox.markSeen, { inboxItemId: seeded.newestId });
+    await owner.mutation(api.inbox.markSeen, { inboxItemId: seeded.olderId });
+    await expect(owner.query(api.inbox.unreadCount, { spaceId: seeded.firstSpaceId })).resolves.toBe(0);
+    await expect(member.query(api.inbox.unreadCount, { spaceId: seeded.firstSpaceId })).resolves.toBe(2);
+    await expect(owner.mutation(api.inbox.markSeen, { inboxItemId: seeded.outsiderItemId })).rejects.toThrow(/permission/i);
+
+    await t.run(ctx => ctx.db.insert("inboxItems", {
+      spaceId: seeded.firstSpaceId, agentmailMessageId: "message-latest", agentmailThreadId: "thread-latest",
+      sender: "alerts@example.test", subject: "Latest update", originalText: "Another family update",
+      visibility: "space", category: "home", status: "ready", receivedAt: 1_800_000_000_004,
+    }));
+    await expect(owner.query(api.inbox.unreadCount, { spaceId: seeded.firstSpaceId })).resolves.toBe(1);
+    await expect(member.query(api.inbox.unreadCount, { spaceId: seeded.firstSpaceId })).resolves.toBe(3);
+  });
+
   test("owners can confirm a suggested action once and members cannot read another family's item", async () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {

@@ -7,16 +7,54 @@ export const list = query({
   args: { spaceId: v.id("spaces"), limit: v.optional(v.number()) },
   handler: async (ctx, { spaceId, limit }) => {
     await requireSpacePermission(ctx, spaceId, "read");
-    const candidates = await ctx.db.query("inboxItems").withIndex("by_space_received", q => q.eq("spaceId", spaceId)).order("desc").take(Math.min(Math.max(limit ?? 50, 1), 100));
-    const allowed = [];
-    for (const item of candidates) {
-      if (item.visibility !== "space") continue;
-      try {
-        await requireInboxItemPermission(ctx, item._id, "read");
-        allowed.push(item);
-      } catch { /* Deliberately omit unauthorized private/room items. */ }
+    return ctx.db.query("inboxItems")
+      .withIndex("by_space_visibility_received", q => q.eq("spaceId", spaceId).eq("visibility", "space"))
+      .order("desc")
+      .take(Math.min(Math.max(limit ?? 50, 1), 100));
+  },
+});
+
+export const unreadCount = query({
+  args: { spaceId: v.id("spaces") },
+  returns: v.number(),
+  handler: async (ctx, { spaceId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "read");
+    const state = await ctx.db.query("inboxReadStates")
+      .withIndex("by_space_user", q => q.eq("spaceId", spaceId).eq("userId", userId))
+      .unique();
+    const items = await ctx.db.query("inboxItems")
+      .withIndex("by_space_visibility_received", q => q.eq("spaceId", spaceId).eq("visibility", "space"))
+      .order("desc")
+      .take(20);
+    if (!state) return items.length;
+    return items.filter(item => item.receivedAt > state.lastSeenReceivedAt
+      || (item.receivedAt === state.lastSeenReceivedAt && item._creationTime > state.lastSeenCreationTime)).length;
+  },
+});
+
+export const markSeen = mutation({
+  args: { inboxItemId: v.id("inboxItems") },
+  returns: v.id("inboxReadStates"),
+  handler: async (ctx, { inboxItemId }) => {
+    const { userId, item } = await requireInboxItemPermission(ctx, inboxItemId, "read");
+    if (item.visibility !== "space") throw new ConvexError({ code: "FORBIDDEN", message: "Only shared family inbox items can be marked seen" });
+    const existing = await ctx.db.query("inboxReadStates")
+      .withIndex("by_space_user", q => q.eq("spaceId", item.spaceId).eq("userId", userId))
+      .unique();
+    if (existing && (existing.lastSeenReceivedAt > item.receivedAt
+      || (existing.lastSeenReceivedAt === item.receivedAt && existing.lastSeenCreationTime >= item._creationTime))) {
+      return existing._id;
     }
-    return allowed;
+    const values = {
+      lastSeenReceivedAt: item.receivedAt,
+      lastSeenCreationTime: item._creationTime,
+      updatedAt: Date.now(),
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, values);
+      return existing._id;
+    }
+    return ctx.db.insert("inboxReadStates", { spaceId: item.spaceId, userId, ...values });
   },
 });
 

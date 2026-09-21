@@ -104,6 +104,9 @@
 
 .live-conversation-workspace .family-switcher button {
   min-height: 36px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   padding: 0 12px;
   border: 1px solid #d4d3cb;
   color: #3d494b;
@@ -117,6 +120,23 @@
   color: #fff;
   background: var(--workspace-pine);
 }
+
+.notification-badge {
+  min-width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--workspace-coral);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.family-switcher button.selected .notification-badge { color: var(--workspace-ink); background: #fff; }
+.conversation-link .notification-badge { color: #fff; }
 
 .live-conversation-workspace .list-heading.section-gap { margin-top: 26px; }
 .live-conversation-workspace .conversation-link {

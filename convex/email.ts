@@ -12,9 +12,20 @@ const inboundMessage = z.object({
   subject: z.string().optional(),
   preview: z.string().optional(),
   text: z.string().optional(),
+  html: z.string().optional(),
   extracted_text: z.string().optional(),
+  extracted_html: z.string().optional(),
   timestamp: z.string(),
 });
+
+type InboundMessage = z.infer<typeof inboundMessage>;
+
+export function inboundMessageBodies(message: InboundMessage) {
+  return {
+    text: message.extracted_text ?? message.text ?? message.preview ?? "",
+    html: message.extracted_html ?? message.html,
+  };
+}
 
 export const onMessageReceived = internalMutation({
   args: { message: v.any(), thread: v.any(), eventId: v.string() },
@@ -31,13 +42,15 @@ export const onMessageReceived = internalMutation({
     if (existing) return existing._id;
 
     const timestamp = Date.parse(message.timestamp);
+    const bodies = inboundMessageBodies(message);
     const inboxItemId = await ctx.db.insert("inboxItems", {
       spaceId: space._id,
       agentmailMessageId: message.message_id,
       agentmailThreadId: message.thread_id,
       sender: message.from,
       subject: message.subject?.trim() || "No subject",
-      originalText: message.extracted_text ?? message.text ?? message.preview ?? "",
+      originalText: bodies.text,
+      originalHtml: bodies.html,
       visibility: "space",
       category: "needs_review",
       status: "received",

@@ -86,7 +86,14 @@ export default defineSchema({
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
     forwardedSpaceIds: v.optional(v.array(v.id("spaces"))),
     receivedAt: v.number(),
-  }).index("by_agentmail_message", ["agentmailMessageId"]).index("by_space_agentmail_message", ["spaceId", "agentmailMessageId"]).index("by_space_received", ["spaceId", "receivedAt"]),
+  }).index("by_agentmail_message", ["agentmailMessageId"])
+    .index("by_space_agentmail_message", ["spaceId", "agentmailMessageId"])
+    .index("by_space_received", ["spaceId", "receivedAt"])
+    .index("by_space_visibility_received", ["spaceId", "visibility", "receivedAt"]),
+  inboxReadStates: defineTable({
+    spaceId: v.id("spaces"), userId: v.id("users"),
+    lastSeenReceivedAt: v.number(), lastSeenCreationTime: v.number(), updatedAt: v.number(),
+  }).index("by_space_user", ["spaceId", "userId"]),
   messages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), authorUserId: v.optional(v.id("users")),
     actorType: v.union(v.literal("user"), v.literal("assistant"), v.literal("email_guest"), v.literal("voice_transcript")),

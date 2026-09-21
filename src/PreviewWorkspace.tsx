@@ -102,7 +102,7 @@ const chapters: Chapter[] = [
 const traces: Record<ChapterId, Array<{ title: string; detail: string; state: 'done' | 'active' | 'held' }>> = {
   inbox: [
     { title: 'Inbound verified', detail: 'AgentMail message ID deduplicated', state: 'done' },
-    { title: 'Fields extracted', detail: '₹18,500 · 24 Sep · school', state: 'active' },
+    { title: 'Fields extracted', detail: '₹18,500 · 24 Sep · school', state: 'done' },
     { title: 'Action held', detail: 'Nothing is sent automatically', state: 'held' },
   ],
   language: [
@@ -160,17 +160,17 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
   return (
     <main className="preview-showroom">
       <header className="preview-tourbar">
-        <button className="preview-back" type="button" onClick={onExit}><ArrowLeft /> <span>Exit preview</span></button>
+        <button className="preview-back" type="button" onClick={onExit}><ArrowLeft /> <span>Exit workspace</span></button>
         <div className="preview-tour-title">
-          <span><Sparkles /> Interactive preview</span>
+          <span><Sparkles /> Agent workspace</span>
           <strong>{active.label}</strong>
-          <small>{activeIndex + 1} of {chapters.length}</small>
+          <small>{String(activeIndex + 1).padStart(2, '0')} / {String(chapters.length).padStart(2, '0')}</small>
         </div>
         <div className="preview-tour-progress" aria-hidden="true"><i style={{ transform: `scaleX(${(activeIndex + 1) / chapters.length})` }} /></div>
         <div className="preview-tour-actions">
-          <button type="button" onClick={() => move(-1)} aria-label="Previous capability"><ChevronLeft /></button>
-          <button type="button" className="preview-play" onClick={() => setIsPlaying((value) => !value)}>{isPlaying ? <Pause /> : <Play fill="currentColor" />}<span>{isPlaying ? 'Pause tour' : 'Play tour'}</span></button>
-          <button type="button" onClick={() => move(1)} aria-label="Next capability"><ChevronRight /></button>
+          <button type="button" onClick={() => move(-1)} aria-label="Previous workflow"><ChevronLeft /></button>
+          <button type="button" className="preview-play" onClick={() => setIsPlaying((value) => !value)}>{isPlaying ? <Pause /> : <Play fill="currentColor" />}<span>{isPlaying ? 'Pause run' : 'Run workflow'}</span></button>
+          <button type="button" onClick={() => move(1)} aria-label="Next workflow"><ChevronRight /></button>
         </div>
       </header>
 
@@ -205,7 +205,10 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
               <p>{active.description}</p>
               <div className="preview-mobile-proof"><span>{active.proof}</span><small>{active.providers.join(' · ')}</small></div>
             </div>
-            <span className="preview-seeded"><Sparkles /> Seeded preview</span>
+            <span className={`preview-run-state ${isPlaying ? 'running' : ''}`} role="status">
+              <i aria-hidden="true" />
+              {isPlaying ? 'Agent run active' : 'Run ready'}
+            </span>
           </header>
           <div className="preview-stage-body" key={activeId}>
             {activeId === 'inbox' && <InboxScene />}
@@ -218,7 +221,11 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
         </section>
 
         <aside className="preview-proof" aria-label="How this capability works">
-          <header><h2>What happened under the hood</h2><p>{active.proof}</p></header>
+          <header><span>Agent run</span><h2>{isPlaying ? 'Running workflow' : 'Ready to inspect'}</h2><p>{active.proof}</p></header>
+          <div className="preview-run-meta" aria-label="Preview run status">
+            <span><small>State</small><strong>{isPlaying ? 'RUNNING' : 'READY'}</strong></span>
+            <span><small>Step</small><strong>{String(activeIndex + 1).padStart(2, '0')} / {String(chapters.length).padStart(2, '0')}</strong></span>
+          </div>
           <div className="preview-trace">
             {traces[activeId].map((item, index) => <div className={`preview-trace-row ${item.state}`} key={item.title}>
               <span className="trace-index">{item.state === 'done' ? <Check /> : item.state === 'held' ? <CircleStop /> : <i />}</span>
@@ -259,6 +266,14 @@ function InboxScene() {
       </> : <div className="preview-processing"><i /><i /><i /></div>}
       <button type="button" onClick={() => { setProcessed(false); window.setTimeout(() => setProcessed(true), 900) }} disabled={!processed}>{processed ? 'Replay processing' : 'Processing safely…'}</button>
     </article>
+    <section className="scene-run-log" aria-label="Agent run log">
+      <header><span>Run log</span><strong>agentmail.inbound → inbox.extract → action.hold</strong></header>
+      <ol>
+        <li><time>09:14:02</time><i className="complete" /><span><strong>Inbound verified</strong><small>Message ID accepted and deduplicated</small></span></li>
+        <li><time>09:14:03</time><i className="complete" /><span><strong>Fields extracted</strong><small>Amount, due date, and category validated</small></span></li>
+        <li><time>09:14:04</time><i /><span><strong>Awaiting command</strong><small>External action remains held for review</small></span></li>
+      </ol>
+    </section>
   </div>
 }
 

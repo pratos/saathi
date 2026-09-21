@@ -1218,3 +1218,140 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   .settings-scroll > section, .settings-disclosure { border-radius: 12px; }
   .demo-controls { border-color: #d8d2c8; background: #fffdf8; }
 }
+
+/* 2026 agent workspace: precise, operational, status-forward. */
+.welcome-page {
+  grid-template-columns: minmax(390px, 38%) minmax(600px, 1fr);
+  color: #14212b;
+  background: #f3f5f7;
+}
+.welcome-story {
+  position: relative;
+  min-height: 100dvh;
+  padding: clamp(32px, 4vw, 64px);
+  color: #f5f8fa;
+  background: #101c25;
+}
+.welcome-story::before {
+  position: absolute;
+  inset: 0;
+  opacity: .22;
+  pointer-events: none;
+  content: '';
+  background-image: linear-gradient(rgba(255,255,255,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.055) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(to bottom right, #000, transparent 72%);
+}
+.welcome-story > * { position: relative; }
+.welcome-story .auth-brand { font: 700 17px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -.02em; }
+.welcome-story .brand-mark, .auth-brand.dark .brand-mark { border-radius: 7px; color: #092c27; background: #61d6bd; }
+.welcome-copy { margin: auto 0; }
+.welcome-copy::before { display: block; width: fit-content; margin-bottom: 20px; padding: 6px 8px; border: 1px solid #36505e; border-radius: 6px; color: #78dec8; content: 'SAATHI / FAMILY AGENT'; font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .1em; }
+.welcome-copy h1 { max-width: 520px; margin: 0 0 22px; color: #f7fafb; font: 680 clamp(40px, 4.2vw, 58px)/1.02 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.055em; }
+.welcome-copy > p { max-width: 520px; color: #b5c1c8; font-size: clamp(15px, 1.2vw, 18px); line-height: 1.55; }
+.trust-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 34px; overflow: hidden; border: 1px solid #2c3e49; border-radius: 9px; background: #2c3e49; }
+.trust-list span { min-height: 76px; align-items: flex-start; flex-direction: column; padding: 12px; color: #d6dfe3; background: #14232d; font-size: 11px; line-height: 1.35; }
+.trust-list svg { color: #61d6bd; }
+.language-line { color: #718692; font: 600 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; }
+.mode-panel { padding: clamp(32px, 6vw, 96px); background: #f3f5f7; }
+.mode-picker { width: min(760px, 100%); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mode-picker::before { display: block; margin-bottom: 10px; color: #397064; content: 'WORKSPACE ACCESS'; font: 750 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .12em; }
+.mode-picker::before, .mode-picker h2, .mode-picker > p, .mode-picker > .pwa-install-card { grid-column: 1 / -1; }
+.mode-picker h2 { margin: 0 0 8px; color: #14212b; font: 700 clamp(36px, 4vw, 50px)/1.05 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.045em; }
+.mode-intro { margin-bottom: 26px; color: #61707a; font-size: 15px; }
+.mode-card, .mode-card.live-card {
+  min-height: 174px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-content: start;
+  margin: 0;
+  padding: 19px;
+  border: 1px solid #cfd6db;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16,28,37,.04);
+}
+.mode-card > svg { display: none; }
+.mode-card-copy { align-self: start; }
+.mode-icon { width: 44px; height: 44px; }
+.mode-card:hover { border-color: #81909a; background: #fff; box-shadow: 0 8px 24px rgba(16,28,37,.07); transform: translateY(-1px); }
+.mode-card.live-card:not(:disabled) { color: #fff; border-color: #152630; background: #152630; }
+.mode-card.live-card:not(:disabled) .mode-card-copy strong { color: #fff; }
+.mode-card.live-card:not(:disabled) .mode-card-copy small { color: #b9c5cb; }
+.mode-card.live-card:not(:disabled) .mode-card-copy em { color: #74d9c4; }
+.mode-icon { border-radius: 8px; color: #0c302b; background: #61d6bd; }
+.preview-card .mode-icon { color: #224c79; background: #dcecff; }
+.mode-card-copy strong { color: #14212b; font-size: 16px; }
+.mode-card-copy small { margin-top: 5px; color: #61707a; font-size: 13px; }
+.privacy-note { justify-content: flex-start; color: #61707a; font-size: 12px; }
+
+.live-auth-page, .onboarding-page {
+  position: relative;
+  background: #eef1f3;
+  background-image: linear-gradient(#dfe4e7 1px, transparent 1px), linear-gradient(90deg, #dfe4e7 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.live-auth-card, .onboarding-card {
+  width: min(540px, 100%);
+  padding: clamp(28px, 4vw, 46px);
+  border: 1px solid #cbd3d8;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(16,28,37,.1);
+}
+.auth-brand.dark { margin-bottom: 28px; color: #14212b; font: 700 17px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.mode-badge { border-radius: 5px; }
+.mode-badge.live { color: #176050; background: #e1f4ef; }
+.live-auth-card h1, .onboarding-card h1 { color: #14212b; font: 700 clamp(30px, 4vw, 40px)/1.08 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.04em; }
+.live-auth-card > p, .onboarding-card > p { color: #61707a; }
+.field-with-icon, .onboarding-card input { border-color: #cbd3d8; border-radius: 7px; background: #f8fafb; }
+.field-with-icon:focus-within, .onboarding-card input:focus { border-color: #317d70; box-shadow: 0 0 0 3px rgba(49,125,112,.11); }
+.primary { border-radius: 7px; background: #163f38; }
+.primary:hover { background: #0f5549; }
+.security-note { border: 1px solid #d8e4e1; border-radius: 7px; color: #52635f; background: #f0f7f5; }
+.security-note strong { color: #245d52; }
+.back-link { border-radius: 6px; color: #4d5d67; }
+
+@media (max-width: 700px) {
+  .welcome-page { display: block; }
+  .welcome-story { min-height: 310px; padding: 22px 20px 28px; }
+  .welcome-copy { margin-top: 42px; }
+  .welcome-copy::before { margin-bottom: 12px; }
+  .welcome-copy h1 { margin-bottom: 13px; font-size: clamp(36px, 11vw, 48px); }
+  .trust-list, .language-line { display: none; }
+  .mode-panel { padding: 28px 14px 36px; }
+  .mode-picker { grid-template-columns: 1fr; }
+  .mode-picker h2 { font-size: 34px; }
+  .mode-card, .mode-card.live-card { min-height: 108px; grid-template-columns: 44px minmax(0, 1fr); padding: 15px; }
+  .live-auth-page, .onboarding-page { align-items: start; padding: 70px 12px 20px; }
+  .live-auth-card, .onboarding-card { width: 100%; padding: 26px 20px; border-radius: 9px; }
+}
+
+/* Focused density pass: remove landing-page softness. */
+.welcome-page { grid-template-columns: minmax(360px, 34%) minmax(640px, 1fr); background: #eef1f3; }
+.welcome-story { padding: clamp(28px, 3.4vw, 52px); background: #0c1821; }
+.welcome-copy { margin: auto 0 12%; }
+.welcome-copy::before { margin-bottom: 14px; border-radius: 3px; }
+.welcome-copy h1 { max-width: 470px; margin-bottom: 16px; font-size: clamp(36px, 3.6vw, 50px); line-height: 1.01; }
+.welcome-copy > p { max-width: 450px; font-size: 15px; line-height: 1.48; }
+.trust-list { margin-top: 24px; border-radius: 4px; }
+.trust-list span { min-height: 64px; padding: 10px; }
+.mode-panel { padding: clamp(28px, 4.5vw, 72px); background: #eef1f3; }
+.mode-picker { width: min(820px, 100%); gap: 8px; }
+.mode-picker::before { margin-bottom: 4px; }
+.mode-picker h2 { font-size: clamp(32px, 3.2vw, 42px); }
+.mode-intro { max-width: 540px; margin-bottom: 16px; font-size: 14px; }
+.mode-card, .mode-card.live-card { min-height: 142px; padding: 16px; border-radius: 4px; }
+.mode-icon { border-radius: 4px; }
+.privacy-note { margin-top: 12px; }
+.live-auth-page, .onboarding-page { background-color: #e9edef; background-size: 32px 32px; }
+.live-auth-card, .onboarding-card { border-radius: 5px; box-shadow: 0 12px 36px rgba(16,28,37,.11); }
+.mode-badge, .field-with-icon, .onboarding-card input, .primary, .security-note, .back-link { border-radius: 4px; }
+
+@media (max-width: 700px) {
+  .welcome-page { display: block; }
+  .welcome-story { min-height: 276px; }
+  .welcome-copy { margin: 32px 0 0; }
+  .welcome-copy h1 { font-size: clamp(34px, 10vw, 44px); }
+  .mode-panel { padding-top: 24px; }
+  .mode-card, .mode-card.live-card { min-height: 102px; border-radius: 4px; }
+}

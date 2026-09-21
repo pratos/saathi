@@ -160,3 +160,38 @@
 @media (prefers-reduced-motion: reduce) {
   .generated-image-open img, .generated-image-open > span { transition: none; }
 }
+
+/* Signal-grid overlays and operational dialogs. */
+.mention-menu { border-color: #cbd4d9; border-radius: 8px; color: #14212b; background: #fff; box-shadow: 0 16px 44px rgba(10,21,28,.16); }
+.mention-menu button { border-radius: 6px; }
+.mention-menu button:hover, .mention-menu button.active { background: #e7f2ef; }
+.mention-menu button > b { border-radius: 6px; background: #163f38; }
+.chat-mention { border-radius: 3px; color: #176050; background: #dff1ec; }
+.email-detail-backdrop { background: rgba(10,21,28,.7); backdrop-filter: blur(3px); }
+.email-detail-dialog { border-color: #cbd4d9; border-radius: 9px; color: #14212b; background: #fff; box-shadow: 0 28px 90px rgba(10,21,28,.32); }
+.email-detail-dialog > header { padding: 16px 16px 14px 19px; }
+.email-detail-dialog > header h2 { color: #14212b; font: 720 21px/1.2 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.email-detail-dialog > header button { border-radius: 6px; background: #eef2f4; }
+.email-detail-controls { color: #64737c; background: #f1f4f5; }
+.email-detail-controls button { border-radius: 5px; color: #153f38; background: #fff; }
+.image-lightbox-panel { border-radius: 9px; color: #14212b; background: #f3f5f7; }
+
+@media (max-width: 600px) {
+  .email-detail-dialog { border-radius: 10px 10px 0 0; }
+}
+
+/* Focused operational density pass. */
+.mention-menu,
+.email-detail-dialog,
+.image-lightbox-panel { border-radius: 4px; }
+.mention-menu button,
+.mention-menu button > b,
+.email-detail-dialog > header button,
+.email-detail-controls button { border-radius: 3px; }
+.email-detail-dialog > header { padding: 12px 13px 11px 16px; }
+.email-detail-dialog > header h2 { font-size: 18px; }
+.email-detail-controls { min-height: 40px; }
+
+@media (max-width: 600px) {
+  .email-detail-dialog { height: calc(100dvh - 10px); border-radius: 5px 5px 0 0; }
+}

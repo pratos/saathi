@@ -1,0 +1,376 @@
+/* Mobbin-informed live workspace: compact structure, warm household tone. */
+.live-conversation-workspace {
+  --workspace-ink: #19272b;
+  --workspace-muted: #6c7777;
+  --workspace-line: #dddcd4;
+  --workspace-canvas: #faf9f5;
+  --workspace-panel: #f3f1eb;
+  --workspace-card: #fffefa;
+  --workspace-pine: #173f3a;
+  --workspace-pine-hover: #24544e;
+  --workspace-coral: #c75c3f;
+  --workspace-coral-soft: #f7e5de;
+  --workspace-gold-soft: #f8edcf;
+  grid-template-columns: 88px 292px minmax(0, 1fr);
+  color: var(--workspace-ink);
+  background: var(--workspace-canvas);
+}
+
+.live-conversation-workspace h1,
+.live-conversation-workspace h2,
+.live-conversation-workspace h3 {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  letter-spacing: -.02em;
+}
+
+/* Primary rail */
+.live-conversation-workspace .workspace-rail {
+  gap: 8px;
+  padding: 18px 10px 14px;
+  border-right: 0;
+  color: #f7f4eb;
+  background: var(--workspace-pine);
+}
+
+.live-conversation-workspace .workspace-logo {
+  width: 46px;
+  height: 46px;
+  margin: 0 0 14px;
+  border-radius: 14px;
+  color: var(--workspace-pine);
+  background: #f3be68;
+  box-shadow: 0 8px 24px rgba(8, 42, 37, .22);
+  font-size: 25px;
+}
+
+.live-conversation-workspace .rail-action {
+  width: 68px;
+  min-height: 62px !important;
+  gap: 5px;
+  border-radius: 14px;
+  color: #c7d8d3;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.live-conversation-workspace .rail-action svg { width: 21px; height: 21px; }
+.live-conversation-workspace .rail-action:hover { color: #fff; background: rgba(255,255,255,.09); }
+.live-conversation-workspace .rail-action.active {
+  color: #fff;
+  background: rgba(255,255,255,.14);
+  box-shadow: inset 3px 0 #f3be68;
+}
+
+.live-conversation-workspace .rail-profile {
+  width: 46px;
+  height: 46px;
+  min-height: 46px !important;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 50%;
+  color: #173f3a;
+  background: #f7e5de;
+}
+
+.live-conversation-workspace .session-menu {
+  bottom: 2px;
+  border: 1px solid var(--workspace-line);
+  border-radius: 14px;
+  color: var(--workspace-ink);
+  background: var(--workspace-card);
+}
+
+/* Conversation index */
+.live-conversation-workspace .conversation-list {
+  padding: 25px 16px 18px;
+  border-right: 1px solid var(--workspace-line);
+  background: var(--workspace-panel);
+}
+
+.live-conversation-workspace .family-select-label,
+.live-conversation-workspace .list-heading {
+  margin-right: 8px;
+  margin-left: 8px;
+  color: #7b827f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.live-conversation-workspace .family-switcher {
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.live-conversation-workspace .family-switcher button {
+  min-height: 36px !important;
+  padding: 0 12px;
+  border: 1px solid #d4d3cb;
+  color: #3d494b;
+  background: rgba(255,255,255,.55);
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.live-conversation-workspace .family-switcher button.selected {
+  border-color: var(--workspace-pine);
+  color: #fff;
+  background: var(--workspace-pine);
+}
+
+.live-conversation-workspace .list-heading.section-gap { margin-top: 26px; }
+.live-conversation-workspace .conversation-link {
+  min-height: 54px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: #334043;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.live-conversation-workspace .conversation-link:hover { background: rgba(255,255,255,.72); }
+.live-conversation-workspace .conversation-link.selected {
+  color: #173f3a;
+  background: #e1ebe7;
+  box-shadow: inset 0 0 0 1px #b9d1c9;
+}
+.live-conversation-workspace .conversation-link i { background: var(--workspace-coral); }
+.live-conversation-workspace .personal-chat-link svg { color: var(--workspace-pine); }
+.live-conversation-workspace .personal-chat-link small { margin-top: 2px; color: #78817f; font-size: 11px; }
+.live-conversation-workspace .dark-sign-out { margin-top: auto; color: #727b79; }
+
+/* Main pane */
+.live-conversation-workspace .conversation-pane { background: var(--workspace-canvas); }
+.live-conversation-workspace .conversation-header {
+  min-height: 82px;
+  padding: 15px 28px;
+  border-bottom: 1px solid var(--workspace-line);
+  background: rgba(250,249,245,.92);
+  box-shadow: none;
+  backdrop-filter: blur(16px);
+}
+.live-conversation-workspace .conversation-header h2 {
+  color: var(--workspace-ink);
+  font-size: clamp(21px, 2vw, 27px);
+  font-weight: 720;
+}
+.live-conversation-workspace .conversation-header p { margin-top: 4px; color: var(--workspace-muted); font-size: 13px; }
+.live-conversation-workspace .live-label {
+  padding: 4px 8px;
+  border: 0;
+  color: #376a58;
+  background: #e7f0eb;
+  font-size: 10px;
+}
+.live-conversation-workspace .header-invite {
+  min-height: 40px !important;
+  border: 1px solid #cbd3ce;
+  border-radius: 11px;
+  color: var(--workspace-pine);
+  background: var(--workspace-card);
+}
+.live-conversation-workspace .participant-stack span {
+  width: 34px;
+  height: 34px;
+  border-color: var(--workspace-canvas);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.live-conversation-workspace .conversation-feed {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 28px clamp(22px, 4vw, 52px) 34px;
+}
+.live-conversation-workspace .person-message { grid-template-columns: 40px minmax(0, 1fr); gap: 12px; margin-bottom: 24px; }
+.live-conversation-workspace .message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  font-size: 13px;
+}
+.live-conversation-workspace .person-message h3 { margin: 1px 0 8px; font-size: 14px; font-weight: 720; }
+.live-conversation-workspace .person-message h3 small { color: #808987; font-size: 11px; }
+.live-conversation-workspace .translation-card,
+.live-conversation-workspace .assistant-card,
+.live-conversation-workspace .simple-message {
+  border: 1px solid #e2e0d8;
+  border-radius: 16px;
+  color: #2f3b3d;
+  background: var(--workspace-card);
+  box-shadow: 0 1px 2px rgba(28,40,38,.035);
+}
+.live-conversation-workspace .assistant-card {
+  border-color: #d7ddd7 !important;
+  background: #f7f8f4;
+}
+.live-conversation-workspace .outgoing-message { width: min(78%, 600px); }
+.live-conversation-workspace .outgoing-message > p {
+  border-radius: 18px 18px 5px 18px;
+  color: #173d38;
+  background: #dfece8;
+}
+.live-conversation-workspace .assistant-message .assistant-card { border-radius: 5px 18px 18px 18px; }
+.live-conversation-workspace .card-actions button { border-color: #cad2cd; color: var(--workspace-pine); border-radius: 10px; }
+.live-conversation-workspace .conversation-starter { max-width: 580px; margin: clamp(40px, 9vh, 100px) auto 0; }
+.live-conversation-workspace .starter-prompts button { border-radius: 999px; color: var(--workspace-pine); background: #fff; }
+
+/* AICSS thinking state, placed in a Saathi status pill. */
+.live-conversation-workspace .agent-activity {
+  width: fit-content;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  border: 1px solid #d9dfda;
+  border-radius: 999px;
+  color: #697673;
+  background: #fffefa;
+  box-shadow: 0 2px 6px rgba(23,63,58,.05);
+  font-size: 12px;
+}
+.live-conversation-workspace .agent-activity > span:first-child { color: #2f655c; }
+
+/* Composer inspired by compact AI inputs rather than a floating card. */
+.live-conversation-workspace .conversation-composer {
+  padding: 8px clamp(22px, 4vw, 52px) 16px;
+  border-top: 0;
+  background: linear-gradient(180deg, rgba(250,249,245,0), var(--workspace-canvas) 18%);
+}
+.live-conversation-workspace .conversation-composer > * { width: min(816px, 100%); margin-right: auto; margin-left: auto; }
+.live-conversation-workspace .conversation-composer form {
+  min-height: 66px;
+  border: 1px solid #cfd3ce;
+  border-radius: 18px;
+  background: var(--workspace-card);
+  box-shadow: 0 8px 26px rgba(34,48,44,.08);
+}
+.live-conversation-workspace .composer-send {
+  min-height: 48px !important;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--workspace-pine);
+}
+.live-conversation-workspace .composer-send:hover { background: var(--workspace-pine-hover); }
+.live-conversation-workspace .composer-guidance { min-height: 32px; }
+.live-conversation-workspace .composer-guidance button,
+.live-conversation-workspace .composer-more > summary,
+.live-conversation-workspace .composer-attachment { color: var(--workspace-pine); }
+
+/* Inbox reads like a calm mail list, while retaining the shared conversation model. */
+.live-conversation-workspace .inbox-feed { width: min(880px, 100%); display: grid; align-content: start; gap: 10px; }
+.live-conversation-workspace .inbox-card { margin: 0; padding: 16px; border: 1px solid var(--workspace-line); border-radius: 16px; background: var(--workspace-card); }
+.live-conversation-workspace .inbox-card .message-avatar { margin-top: 2px; color: #7b432d; background: var(--workspace-coral-soft); }
+.live-conversation-workspace .inbox-card > div > h3 { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.live-conversation-workspace .inbox-subject-button { color: var(--workspace-ink); text-decoration: none; }
+.live-conversation-workspace .inbox-subject-button:hover { color: var(--workspace-pine); text-decoration: underline; }
+.live-conversation-workspace .inbox-message-card { padding: 0; border: 0; background: transparent; }
+.live-conversation-workspace .inbox-message-card p { margin: 4px 0; color: #566260; font-size: 13px; }
+.live-conversation-workspace .inbox-message-card .inbox-sender { color: #2f3b3d; font-weight: 700; }
+.live-conversation-workspace .inbox-actions button { min-height: 38px; border-radius: 10px; background: var(--workspace-pine); }
+.live-conversation-workspace .inbox-actions button.secondary { border: 1px solid #d2d5cf; color: var(--workspace-pine); background: #f7f5ef; }
+
+/* Settings */
+.live-conversation-workspace .conversation-context { color: var(--workspace-ink); background: var(--workspace-canvas); }
+.live-conversation-workspace .context-title { width: min(780px, 100%); min-height: 88px; margin: 0 auto; padding: 24px 10px 14px; align-items: center; }
+.live-conversation-workspace .context-title h2 { color: var(--workspace-ink); font-size: 28px; font-weight: 740; }
+.live-conversation-workspace .context-title button { border-color: #d2d3cd; border-radius: 10px; background: var(--workspace-card); }
+.live-conversation-workspace .settings-scroll { gap: 14px; padding-top: 8px; }
+.live-conversation-workspace .settings-scroll > section,
+.live-conversation-workspace .settings-disclosure {
+  border: 1px solid var(--workspace-line) !important;
+  border-radius: 16px;
+  color: var(--workspace-ink);
+  background: var(--workspace-card);
+  box-shadow: 0 1px 2px rgba(28,40,38,.025);
+}
+.live-conversation-workspace .settings-intro { border-color: #d8dfd9 !important; background: #edf3ef; }
+.live-conversation-workspace .settings-intro > svg { color: #fff; background: var(--workspace-pine); }
+.live-conversation-workspace .settings-disclosure > summary::after { color: var(--workspace-coral); }
+.live-conversation-workspace .settings-disclosure[open] > summary { background: #f5f3ed; }
+.live-conversation-workspace .language-setting button.selected,
+.live-conversation-workspace .chip-row button.selected,
+.live-conversation-workspace .model-tier-picker button.selected,
+.live-conversation-workspace .connect-gmail,
+.live-conversation-workspace .agentmail-id button,
+.live-conversation-workspace .byok-card form button,
+.live-conversation-workspace .invite-member-card form button[type="submit"] { color: #fff; background: var(--workspace-pine); }
+
+/* Dialogs use focused cards on desktop and native-feeling sheets on mobile. */
+.family-dialog-backdrop { background: rgba(19,36,34,.52); backdrop-filter: blur(8px); }
+.family-dialog {
+  border: 1px solid rgba(255,255,255,.6);
+  border-radius: 20px;
+  color: var(--workspace-ink, #19272b);
+  background: #fffefa;
+  box-shadow: 0 28px 80px rgba(16,43,39,.22);
+}
+.family-dialog header > div > span { color: #a04931; }
+.family-dialog header > button { color: #53615f; background: #f1efe9; }
+.family-dialog > p { color: #697573; }
+.email-detail-backdrop { background: rgba(19,36,34,.55); }
+.email-detail-dialog { border-radius: 20px; box-shadow: 0 28px 90px rgba(16,43,39,.25); }
+.email-detail-dialog > header h2 { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 22px; }
+
+@media (max-width: 1180px) and (min-width: 821px) {
+  .live-conversation-workspace { grid-template-columns: 78px 260px minmax(0, 1fr); }
+  .live-conversation-workspace .rail-action { width: 60px; }
+}
+
+@media (max-width: 820px) {
+  .live-conversation-workspace { grid-template-columns: 1fr; }
+  .live-conversation-workspace .conversation-list { border-right: 0; }
+  .live-conversation-workspace .conversation-header { backdrop-filter: none; }
+  .live-conversation-workspace .conversation-feed { width: 100%; }
+  .live-conversation-workspace .mobile-workspace-nav {
+    gap: 2px;
+    padding: 6px 10px calc(7px + env(safe-area-inset-bottom));
+    border-top: 1px solid #deded7;
+    background: rgba(255,254,250,.96);
+    backdrop-filter: blur(18px);
+  }
+  .live-conversation-workspace .mobile-workspace-nav button {
+    min-height: 58px !important;
+    border-radius: 12px;
+    color: #78817f;
+  }
+  .live-conversation-workspace .mobile-workspace-nav button.active { color: var(--workspace-pine); background: #e4eee9; }
+}
+
+@media (max-width: 600px) {
+  .live-conversation-workspace .conversation-list { padding: max(18px, env(safe-area-inset-top)) 16px calc(94px + env(safe-area-inset-bottom)); }
+  .live-conversation-workspace .mobile-home-header { margin-bottom: 20px; }
+  .live-conversation-workspace .mobile-home-header h1 { color: var(--workspace-ink); font-size: 26px; font-weight: 760; }
+  .live-conversation-workspace .mobile-home-header button { border-radius: 50%; color: var(--workspace-pine); background: #e3ebe7; }
+  .live-conversation-workspace .family-switcher { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; scrollbar-width: none; }
+  .live-conversation-workspace .family-switcher::-webkit-scrollbar { display: none; }
+  .live-conversation-workspace .family-switcher button { flex: 0 0 auto; }
+  .live-conversation-workspace .conversation-link { min-height: 58px; border-radius: 14px; }
+  .live-conversation-workspace .conversation-header {
+    min-height: 76px;
+    padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+    background: var(--workspace-canvas);
+  }
+  .live-conversation-workspace .conversation-header h2 { font-size: 18px; }
+  .live-conversation-workspace .live-label { display: none; }
+  .live-conversation-workspace .conversation-feed { padding: 18px 14px 24px; }
+  .live-conversation-workspace .person-message { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+  .live-conversation-workspace .message-avatar { width: 34px; height: 34px; border-radius: 11px; }
+  .live-conversation-workspace .translation-card,
+  .live-conversation-workspace .assistant-card,
+  .live-conversation-workspace .simple-message { border-radius: 15px; }
+  .live-conversation-workspace .assistant-message .assistant-card { border-radius: 4px 15px 15px 15px; }
+  .live-conversation-workspace .outgoing-message { width: 88%; }
+  .live-conversation-workspace .outgoing-message > p { border-radius: 16px 16px 4px 16px; }
+  .live-conversation-workspace .conversation-composer { padding: 6px 10px 9px; }
+  .live-conversation-workspace .conversation-composer form { min-height: 60px; border-radius: 17px; }
+  .live-conversation-workspace .composer-guidance { overflow-x: auto; scrollbar-width: none; }
+  .live-conversation-workspace .inbox-feed { gap: 8px; }
+  .live-conversation-workspace .inbox-card { grid-template-columns: 34px minmax(0, 1fr); padding: 13px 11px; border-radius: 14px; }
+  .live-conversation-workspace .settings-scroll { gap: 10px; padding: 8px 14px calc(100px + env(safe-area-inset-bottom)); }
+  .live-conversation-workspace .settings-scroll > section,
+  .live-conversation-workspace .settings-disclosure { border-radius: 14px; }
+  .family-dialog { border-radius: 22px 22px 0 0; }
+  .email-detail-dialog { border-radius: 22px 22px 0 0; }
+}

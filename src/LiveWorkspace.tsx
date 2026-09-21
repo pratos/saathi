@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
+import { ThinkingState } from '@aicss/react/thinking-state'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import DOMPurify from 'dompurify'
@@ -49,6 +50,7 @@ import { VoiceBlob } from './VoiceBlob'
 import { useLiveVoice, type VoiceStatus, type VoiceToolActivity, type VoiceTurn } from './useLiveVoice'
 import './LiveTools.css'
 import './Access.css'
+import './WorkspaceModern.css'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
@@ -393,7 +395,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       : 'home'
 
   return (
-    <main className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
+    <main data-theme="light" className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Home</span></button>
@@ -992,7 +994,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
             <div>
               <h3>Saathi <small>· writing a call summary</small></h3>
               <div className="assistant-card streaming-card">
-                <div className="typing-indicator" aria-label="Saathi is typing a voice call summary"><i /><i /><i /></div>
+                <div className="agent-activity" role="status" aria-label="Writing your voice summary"><ThinkingState /><span aria-hidden="true">· writing your voice summary</span></div>
               </div>
             </div>
           </article>
@@ -1014,7 +1016,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
                 )}
                 {activeJob.responseText
                   ? <div className="streaming-markdown"><AssistantText text={activeJob.responseText} /></div>
-                  : <div className="typing-indicator" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : activeJob.activity === 'using_computer' ? 'Saathi is using a live browser' : 'Saathi is thinking'}><i /><i /><i /></div>}
+                  : <div className="agent-activity" role="status" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : activeJob.activity === 'using_computer' ? 'Saathi is using the live browser' : activeJob.activity === 'searching_web' ? 'Saathi is searching the web' : activeJob.activity === 'generating_image' ? 'Saathi is creating your image' : 'Saathi is thinking'}><ThinkingState /><span aria-hidden="true">· {activeJob.status === 'queued' ? 'getting ready' : activeJob.activity === 'using_computer' ? 'using the live browser' : activeJob.activity === 'searching_web' ? 'searching the web' : activeJob.activity === 'generating_image' ? 'creating your image' : 'working on it'}</span></div>}
               </div>
             </div>
           </article>
@@ -1580,20 +1582,20 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
   const dismissAction = useMutation(api.inbox.dismissAction)
   const reprocess = useMutation(api.inbox.reprocess)
   const [openItem, setOpenItem] = useState<Doc<'inboxItems'> | null>(null)
-  return <section className="conversation-pane">
+  return <section className="conversation-pane inbox-pane">
     <header className="conversation-header live-room-header">
       <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
       <div><div className="title-line"><h2>Family inbox</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name} · shared household mail only</p></div>
     </header>
-    <div className="conversation-feed live-feed">
+    <div className="conversation-feed live-feed inbox-feed">
       {items === undefined && <div className="dark-loading"><i /><i /><i /></div>}
       {items?.length === 0 && <div className="dark-empty-state compact"><Bell /><h2>No shared family mail yet</h2><p>Money mail stays in My Saathi until someone shares it here.</p></div>}
       {items?.map(item => <article className="person-message inbox-card" key={item._id}>
         <span className="message-avatar email"><Mail /></span>
         <div>
           <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>· {categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
-          <div className="simple-message">
-            <p>{displaySender(item.sender)}</p>
+          <div className="simple-message inbox-message-card">
+            <p className="inbox-sender">{displaySender(item.sender)}</p>
             {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
             {item.extractedAmountInr && <p>INR: {item.extractedAmountInr}</p>}
             {item.extractedAmountUsd && <p>USD: {item.extractedAmountUsd}</p>}

@@ -1,5 +1,5 @@
 import rateLimiter from "@convex-dev/rate-limiter/test";
-import { convexTest } from "convex-test";
+import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
@@ -117,7 +117,7 @@ describe("AI access onboarding", () => {
   });
 });
 
-async function seedAccessFamily(t: ReturnType<typeof convexTest<typeof schema>>) {
+async function seedAccessFamily(t: TestConvex<typeof schema>) {
   return t.run(async ctx => {
     const now = Date.now();
     const ownerId = await ctx.db.insert("users", { email: "owner@example.test", accessStatus: "pending" });

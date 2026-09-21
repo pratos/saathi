@@ -99,11 +99,13 @@ export const readInboxAttachments = internalAction({
     markdown: v.string(),
     status: v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed")),
     notes: v.string(),
+    retryable: v.boolean(),
   }),
   handler: async (ctx, { inboxItemId }): Promise<{
     markdown: string;
     status: "none" | "parsed" | "password" | "failed";
     notes: string;
+    retryable: boolean;
   }> => {
     const source: {
       connectedAccountId: string;
@@ -112,7 +114,7 @@ export const readInboxAttachments = internalAction({
       subject: string;
       originalText: string;
     } | null = await ctx.runQuery(internal.gmailData.attachmentSource, { inboxItemId });
-    if (!source) return { markdown: "", status: "none", notes: "" };
+    if (!source) return { markdown: "", status: "none", notes: "", retryable: false };
 
     const session = await gmailSession(source.userId, source.connectedAccountId);
     const message = await session.execute("GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID", {
@@ -121,7 +123,12 @@ export const readInboxAttachments = internalAction({
       format: "full",
     }, { account: source.connectedAccountId });
     if (message.error) {
-      return { markdown: "", status: "failed", notes: "Saathi could not load this email's attachments from Gmail." };
+      return {
+        markdown: "",
+        status: "failed",
+        notes: "Saathi could not load this email's attachments from Gmail. Reconnect Gmail if this continues.",
+        retryable: true,
+      };
     }
     const attachments = gmailAttachmentDescriptors(message.data);
     const pdfs = attachments.filter(isPdfAttachment).slice(0, 2);
@@ -132,14 +139,24 @@ export const readInboxAttachments = internalAction({
         notes: attachments.length
           ? "This email has attachments, but no readable PDF."
           : "Gmail did not include a readable PDF attachment with this email.",
+        retryable: false,
       };
     }
     const apiKey = env.FIRECRAWL_API_KEY?.trim();
-    if (!apiKey) return { markdown: "", status: "failed", notes: "PDF reading is not configured." };
+    if (!apiKey) {
+      return {
+        markdown: "",
+        status: "failed",
+        notes: "PDF reading is not configured. Ask an administrator to add FIRECRAWL_API_KEY.",
+        retryable: false,
+      };
+    }
 
     const parsed: string[] = [];
+    const failures: string[] = [];
     let passwordProtected = false;
     let failed = false;
+    let retryable = false;
     for (const attachment of pdfs) {
       const download = await session.execute("GMAIL_GET_ATTACHMENT", {
         attachment_id: attachment.attachmentId,
@@ -150,18 +167,25 @@ export const readInboxAttachments = internalAction({
       const downloadUrl = download.error ? "" : composioDownloadUrl(download.data);
       if (!downloadUrl) {
         failed = true;
+        retryable = true;
+        failures.push("Saathi could not download the attached PDF from Gmail. Try again or reconnect Gmail.");
         continue;
       }
       const result = await parsePublicDocument(apiKey, downloadUrl);
       if (result.markdown) parsed.push(`# ${attachment.fileName}\n\n${result.markdown}`);
       else if (result.passwordProtected) passwordProtected = true;
-      else failed = true;
+      else {
+        failed = true;
+        retryable ||= result.retryable;
+        if (result.error) failures.push(result.error);
+      }
     }
     if (parsed.length) {
       return {
         markdown: parsed.join("\n\n").slice(0, 40_000),
         status: "parsed",
         notes: `Read ${parsed.length} attached PDF${parsed.length === 1 ? "" : "s"} from Gmail.`,
+        retryable: false,
       };
     }
     if (passwordProtected) {
@@ -170,12 +194,14 @@ export const readInboxAttachments = internalAction({
         status: "password",
         notes: extractPasswordHints(source.subject, source.originalText)
           ?? "The attached PDF is password-protected. Check the email for its password hint.",
+        retryable: false,
       };
     }
     return {
       markdown: "",
       status: failed ? "failed" : "none",
-      notes: failed ? "Saathi could not download or read the attached PDF from Gmail." : "",
+      notes: failed ? failures[0] ?? "Saathi could not download or read the attached PDF from Gmail." : "",
+      retryable: failed && retryable,
     };
   },
 });

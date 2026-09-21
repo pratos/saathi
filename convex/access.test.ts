@@ -105,6 +105,85 @@ describe("AI access onboarding", () => {
     });
   });
 
+  test("reports platform and family-funded costs separately by family and service", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const seeded = await seedAccessFamily(t);
+    const now = Date.UTC(2026, 8, 16);
+    await t.run(async ctx => {
+      await ctx.db.insert("usageLedger", {
+        spaceId: seeded.spaceId, userId: seeded.ownerId, provider: "openai", model: "gpt-live-1",
+        unit: "second", quantity: 60, costUsd: 0.05, costClass: "voice", billingSource: "platform", createdAt: now - 1_000,
+      });
+      await ctx.db.insert("usageLedger", {
+        spaceId: seeded.spaceId, userId: seeded.ownerId, provider: "openai", model: "gpt-5.6-luna",
+        unit: "token", quantity: 10_000, costUsd: 0.01, costClass: "voice_backend", billingSource: "platform", createdAt: now - 1_000,
+      });
+      await ctx.db.insert("usageLedger", {
+        spaceId: seeded.spaceId, userId: seeded.ownerId, provider: "openrouter", model: "openai/gpt-5.6-luna",
+        unit: "token", quantity: 20_000, costUsd: 0.02, costClass: "chat", billingSource: "family", createdAt: now - 1_000,
+      });
+      await ctx.db.insert("usageLedger", {
+        spaceId: seeded.spaceId, userId: seeded.ownerId, provider: "openai", model: "gpt-5-mini",
+        unit: "request", quantity: 1, costClass: "email_extraction", createdAt: now - 1_000,
+      });
+    });
+
+    const admin = t.withIdentity({ subject: String(seeded.adminId) });
+    const report = await admin.query(api.admin.usageOverview, { now });
+    expect(report.totals.trackedCostUsd).toBeCloseTo(0.08);
+    expect(report.totals.platformCostUsd).toBeCloseTo(0.06);
+    expect(report.totals.familyByokCostUsd).toBeCloseTo(0.02);
+    expect(report.totals.monthPlatformCostUsd).toBeCloseTo(0.06);
+    expect(report.totals.projectedPlatformMonthlyUsd).toBeCloseTo(0.12);
+    expect(report.totals.unknownCostRows).toBe(1);
+    expect(report.rowLimitReached).toBe(false);
+    expect(report.familyLimitReached).toBe(false);
+    const family = report.families.find(item => item.spaceId === seeded.spaceId);
+    expect(family).toMatchObject({ name: "Access Family", usageRows: 4 });
+    expect(family?.trackedCostUsd).toBeCloseTo(0.08);
+    expect(report.services.map(service => service.label)).toEqual(expect.arrayContaining([
+      "GPT-Live 1 · voice session",
+      "GPT-5.6 Luna · delegated voice work",
+    ]));
+  });
+
+  test("keeps global totals complete when the family table reaches its display limit", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const seeded = await seedAccessFamily(t);
+    const now = Date.UTC(2026, 8, 16);
+    await t.run(async ctx => {
+      for (let index = 0; index < 201; index += 1) {
+        const spaceId = await ctx.db.insert("spaces", {
+          name: `Family ${index}`,
+          createdBy: seeded.ownerId,
+          creationKey: `usage-family-${index}`,
+          createdAt: now - index,
+        });
+        await ctx.db.insert("usageLedger", {
+          spaceId,
+          userId: seeded.ownerId,
+          provider: "openai",
+          model: "gpt-live-1",
+          unit: "second",
+          quantity: 1,
+          costUsd: 0.01,
+          costClass: "voice",
+          billingSource: "platform",
+          createdAt: now - index,
+        });
+      }
+    });
+
+    const admin = t.withIdentity({ subject: String(seeded.adminId) });
+    const report = await admin.query(api.admin.usageOverview, { now });
+    expect(report.trackedRows).toBe(201);
+    expect(report.families).toHaveLength(200);
+    expect(report.familyLimitReached).toBe(true);
+    expect(report.totals.trackedCostUsd).toBeCloseTo(2.01);
+  });
+
   test("records requests and restricts access decisions to superadmins", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
@@ -119,6 +198,7 @@ describe("AI access onboarding", () => {
       requestedAt: expect.any(Number),
     });
     await expect(member.query(api.admin.listUsers, {})).rejects.toThrow(/Superadmin/);
+    await expect(member.query(api.admin.usageOverview, { now: Date.now() })).rejects.toThrow(/Superadmin/);
     await expect(member.mutation(api.admin.setAccessStatus, {
       userId: seeded.ownerId,
       status: "approved",

@@ -1709,8 +1709,12 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {canReadGmailPdf(item) && <div className="inbox-actions">
               <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read Gmail PDF</button>
             </div>}
-            {(item.status === 'failed' || item.documentParseStatus === 'failed') && <div className="inbox-actions">
+            {item.documentParseStatus === 'failed' && item.documentParseRetryable === false && <small>Retry disabled. Fix the PDF source or provider setup before trying again.</small>}
+            {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <div className="inbox-actions">
               <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Retry PDF reading</button>
+            </div>}
+            {item.status === 'failed' && item.documentParseStatus !== 'failed' && <div className="inbox-actions">
+              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Retry processing</button>
             </div>}
             {item.actionStatus === 'confirmed' && <small>Action confirmed for the family.</small>}
           </div>

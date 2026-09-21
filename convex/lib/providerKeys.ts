@@ -6,6 +6,13 @@ import type { ActionCtx } from "../_generated/server";
 import type { ByokProvider } from "./byok";
 import type { DecisionCredential } from "./decisionProvider";
 
+export type ProviderBillingSource = "platform" | "family";
+
+export type ResolvedProviderCredential = {
+  apiKey: string;
+  billingSource: ProviderBillingSource;
+};
+
 async function resolveCredential(
   ctx: ActionCtx,
   spaceId: Id<"spaces">,
@@ -13,14 +20,16 @@ async function resolveCredential(
   providers: readonly ByokProvider[],
   deploymentSecret: string | undefined,
   label: string,
-) {
+): Promise<ResolvedProviderCredential> {
   let platformAllowed = false;
   for (const provider of providers) {
     const access = await ctx.runQuery(internal.spaces.resolveProviderCredential, { spaceId, userId, provider });
     if (access.blocked) {
       throw new ConvexError({ code: "ACCESS_BLOCKED", message: "AI access is blocked for this account" });
     }
-    if (access.ownedSecret?.trim()) return access.ownedSecret.trim();
+    if (access.ownedSecret?.trim()) {
+      return { apiKey: access.ownedSecret.trim(), billingSource: "family" };
+    }
     platformAllowed ||= access.platformAllowed;
   }
   if (!platformAllowed) {
@@ -30,15 +39,23 @@ async function resolveCredential(
   if (!configured) {
     throw new ConvexError({ code: "PROVIDER_NOT_CONFIGURED", message: `${label} is not configured on this deployment` });
   }
-  return configured;
+  return { apiKey: configured, billingSource: "platform" };
 }
 
-export function resolveOpenAiKey(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
+export function resolveOpenAiCredential(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
   return resolveCredential(ctx, spaceId, userId, ["openai", "codex"], env.OPENAI_API_KEY, "OpenAI");
 }
 
-export function resolveOpenRouterKey(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
+export async function resolveOpenAiKey(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
+  return (await resolveOpenAiCredential(ctx, spaceId, userId)).apiKey;
+}
+
+export function resolveOpenRouterCredential(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
   return resolveCredential(ctx, spaceId, userId, ["openrouter"], env.OPENROUTER_API_KEY, "OpenRouter");
+}
+
+export async function resolveOpenRouterKey(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
+  return (await resolveOpenRouterCredential(ctx, spaceId, userId)).apiKey;
 }
 
 export async function resolveDecisionCredential(

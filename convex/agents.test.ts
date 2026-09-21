@@ -53,6 +53,45 @@ describe("durable family agent", () => {
     });
   });
 
+  test("records finite provider usage without letting invalid metrics poison cost totals", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const { roomId, ownerId } = await seedFamily(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const agentId = await seedAgent(t, roomId, ownerId, "usage-ledger-agent");
+    const jobId = await owner.mutation(api.agents.send, {
+      agentId,
+      prompt: "Give a short answer",
+      clientOperationId: "usage-ledger-job",
+    });
+    const work = await t.mutation(internal.agents.beginNext, { agentId });
+
+    await t.mutation(internal.agents.finish, {
+      agentId,
+      jobId,
+      leaseId: work!.leaseId,
+      nextSequence: work!.nextSequence,
+      messages: [{ role: "assistant", content: "Done" }],
+      inputTokens: 10,
+      outputTokens: Number.NaN,
+      cachedInputTokens: -5,
+      costUsd: Number.POSITIVE_INFINITY,
+      billingSource: "family",
+    });
+
+    expect(await t.run(ctx => ctx.db.query("usageLedger").collect())).toEqual([
+      expect.objectContaining({
+        provider: "openrouter",
+        quantity: 10,
+        inputTokens: 10,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        costUsd: 0,
+        billingSource: "family",
+      }),
+    ]);
+  });
+
   test("first agent job is seeded with recent room chat and shared file notes", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);

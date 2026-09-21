@@ -17,7 +17,7 @@ import {
 } from "./lib/assistantCapabilities";
 import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { generateFamilyImageBytes } from "./lib/imageGeneration";
-import { resolveOpenRouterKey, resolveOptionalDecisionCredential } from "./lib/providerKeys";
+import { resolveOpenRouterCredential, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 import type { DecisionCredential } from "./lib/decisionProvider";
 import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
 import { decideAgentTurn } from "./lib/jev";
@@ -48,7 +48,11 @@ export const SHADOW_ROUTING_SAMPLE_PERCENT = 10;
 
 const thinkingLevelMap = { off: "none" as const, minimal: null, low: "low" as const, medium: "medium" as const, high: "high" as const, xhigh: null, max: "max" as const };
 
-function openRouterTextModel(id: string, name: string, cost: { input: number; output: number }): Model<"openai-completions"> {
+function openRouterTextModel(
+  id: string,
+  name: string,
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number },
+): Model<"openai-completions"> {
   return {
     id,
     name,
@@ -58,7 +62,7 @@ function openRouterTextModel(id: string, name: string, cost: { input: number; ou
     reasoning: true,
     thinkingLevelMap,
     input: ["text"],
-    cost: { ...cost, cacheRead: 0.003, cacheWrite: 0 },
+    cost,
     contextWindow: 1_048_576,
     maxTokens: 8_192,
     compat: { supportsDeveloperRole: false, thinkingFormat: "openrouter", requiresReasoningContentOnAssistantMessages: true },
@@ -66,10 +70,10 @@ function openRouterTextModel(id: string, name: string, cost: { input: number; ou
 }
 
 const extraOpenRouterModels = [
-  openRouterTextModel(MODEL_TIERS.low.model, "DeepSeek V4.1 Flash", { input: 0.15, output: 0.6 }),
-  openRouterTextModel(MODEL_TIERS.med.model, "GPT-5.6 Luna", { input: 0.5, output: 2 }),
-  openRouterTextModel(MODEL_TIERS.high.model, "Grok 4.6", { input: 1.5, output: 6 }),
-  openRouterTextModel(MODEL_TIERS.ultra.model, "GPT-5.6 Sol", { input: 2, output: 8 }),
+  openRouterTextModel(MODEL_TIERS.low.model, "DeepSeek V4.1 Flash", { input: 0.15, output: 0.6, cacheRead: 0.003, cacheWrite: 0 }),
+  openRouterTextModel(MODEL_TIERS.med.model, "GPT-5.6 Luna", { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25 }),
+  openRouterTextModel(MODEL_TIERS.high.model, "Grok 4.6", { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0 }),
+  openRouterTextModel(MODEL_TIERS.ultra.model, "GPT-5.6 Sol", { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }),
 ];
 
 export const run = internalAction({
@@ -80,7 +84,8 @@ export const run = internalAction({
     if (!work) return null;
 
     try {
-      const openRouterKey = await resolveOpenRouterKey(ctx, work.agent.spaceId, work.job.requestedBy);
+      const openRouterCredential = await resolveOpenRouterCredential(ctx, work.agent.spaceId, work.job.requestedBy);
+      const openRouterKey = openRouterCredential.apiKey;
       const route = extraOpenRouterModels.some(item => item.id === work.agent.model)
         ? extraOpenRouterModels.find(item => item.id === work.agent.model)!
         : extraOpenRouterModels[1];
@@ -233,11 +238,19 @@ export const run = internalAction({
           },
         });
       }
-      const messages = makeConvexSafe(agent.state.messages.slice(work.messages.length));
-      const usage = assistantUsage(agent.state.messages);
+      const newMessages = agent.state.messages.slice(work.messages.length);
+      const messages = makeConvexSafe(newMessages);
+      const usage = assistantUsage(newMessages);
       const committed = await ctx.runMutation(internal.agents.finish, {
         agentId, jobId: work.job._id, leaseId: work.leaseId, nextSequence: work.nextSequence,
-        messages, error: agent.state.errorMessage, inputTokens: usage.input, outputTokens: usage.output,
+        messages,
+        error: agent.state.errorMessage,
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        cachedInputTokens: usage.cacheRead,
+        cacheWriteTokens: usage.cacheWrite,
+        costUsd: usage.costUsd,
+        billingSource: openRouterCredential.billingSource,
       });
       if (committed && !agent.state.errorMessage && decisionCredential && !largeCatalog && !memoryCandidate
         && shouldSampleShadowRouting(String(work.job._id))) {
@@ -549,12 +562,18 @@ function makeConvexSafe(messages: AgentMessage[]): unknown[] {
 function assistantUsage(messages: AgentMessage[]) {
   let input = 0;
   let output = 0;
+  let cacheRead = 0;
+  let cacheWrite = 0;
+  let costUsd = 0;
   for (const message of messages) {
     if (message.role !== "assistant" || !message.usage) continue;
     input += message.usage.input || 0;
     output += message.usage.output || 0;
+    cacheRead += message.usage.cacheRead || 0;
+    cacheWrite += message.usage.cacheWrite || 0;
+    costUsd += message.usage.cost?.total || 0;
   }
-  return { input, output };
+  return { input, output, cacheRead, cacheWrite, costUsd };
 }
 
 function assistantText(message: AgentMessage) {

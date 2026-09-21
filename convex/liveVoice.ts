@@ -8,8 +8,9 @@ import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
 import { assertSafeComputerTask, assertSafeComputerUrl, profileNameForUser, runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { gptLiveCostUsd } from "./lib/liveVoiceUsage";
-import { resolveOpenAiKey } from "./lib/providerKeys";
+import { resolveOpenAiCredential } from "./lib/providerKeys";
 import { searchPublicWeb as searchPublicWebWithFirecrawl } from "./lib/publicWeb";
+import { estimateGptLunaCostUsd, estimateOpenAiWebSearchCostUsd, GPT_LUNA_MODEL, type TokenUsage } from "./lib/usageCosts";
 
 const liveVoiceLimits = new RateLimiter(components.rateLimiter, {
   startLiveVoice: { kind: "fixed window", rate: 8, period: HOUR },
@@ -18,6 +19,14 @@ const liveVoiceLimits = new RateLimiter(components.rateLimiter, {
 });
 
 const historyItem = v.object({ role: v.union(v.literal("user"), v.literal("assistant")), text: v.string() });
+const billingSourceValidator = v.union(v.literal("platform"), v.literal("family"));
+const tokenUsageValidator = v.object({
+  inputTokens: v.number(),
+  outputTokens: v.number(),
+  cachedInputTokens: v.optional(v.number()),
+  cacheWriteTokens: v.optional(v.number()),
+  webSearchCalls: v.optional(v.number()),
+});
 
 export const startSession = action({
   args: { roomId: v.id("rooms"), sdp: v.string() },
@@ -26,8 +35,8 @@ export const startSession = action({
     if (!sdp.trim() || sdp.length > 100_000) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice connection offer" });
     const prepared: { userId: Id<"users">; spaceId: Id<"spaces">; history: Array<{ role: "user" | "assistant"; text: string }> } =
       await ctx.runMutation(internal.liveVoice.prepare, { roomId });
-    const apiKey = await resolveOpenAiKey(ctx, prepared.spaceId, prepared.userId);
-    if (!apiKey) throw new ConvexError({ code: "LIVE_VOICE_NOT_CONFIGURED", message: "Voice mode is not configured" });
+    const credential = await resolveOpenAiCredential(ctx, prepared.spaceId, prepared.userId);
+    const apiKey = credential.apiKey;
     const safetyIdentifier = await sha256(String(prepared.userId));
     const response = await fetch("https://api.openai.com/v1/live/sessions", {
       method: "POST",
@@ -48,7 +57,7 @@ export const startSession = action({
           delegation: {
             type: "responses",
             responses: {
-              model: "gpt-5-mini",
+              model: GPT_LUNA_MODEL,
               instructions: "Understand Hindi, Marathi, English, other Indian languages, code-switching, and Romanized forms such as Hinglish before decomposing the request or choosing tools. Preserve the caller's language in the result. Use web search for current facts. Use an action or memory tool only when the caller explicitly requests that exact change. Use the computer only for an explicit request to operate a public website, and never enter secrets or complete purchases. When the caller explicitly wants an image, infographic, or respectful devotional artwork, call generate_image. Never create sexual, nude, pornographic, or graphic violent images. Return concise, grounded results for a spoken family conversation.",
               tools: [{ type: "web_search" }, ...assistantProviderTools()],
               tool_choice: "auto",
@@ -66,19 +75,34 @@ export const startSession = action({
     if (!payload || typeof payload !== "object") throw invalidVoiceResponse();
     const result = payload as { session?: { id?: unknown }; transport?: { sdp?: unknown } };
     if (typeof result.session?.id !== "string" || typeof result.transport?.sdp !== "string") throw invalidVoiceResponse();
-    await ctx.runMutation(internal.liveVoice.register, { roomId, sessionId: result.session.id });
+    await ctx.runMutation(internal.liveVoice.register, {
+      roomId,
+      sessionId: result.session.id,
+      billingSource: credential.billingSource,
+    });
     return { sessionId: result.session.id, sdp: result.transport.sdp };
   },
 });
 
 export const register = internalMutation({
-  args: { roomId: v.id("rooms"), sessionId: v.string() },
+  args: {
+    roomId: v.id("rooms"),
+    sessionId: v.string(),
+    billingSource: v.optional(v.union(v.literal("platform"), v.literal("family"))),
+  },
   returns: v.null(),
-  handler: async (ctx, { roomId, sessionId }) => {
+  handler: async (ctx, { roomId, sessionId, billingSource }) => {
     const { userId, room } = await requireRoomPermission(ctx, roomId, "post_message");
     const existing = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
     if (existing) throw new ConvexError({ code: "IDEMPOTENCY_CONFLICT", message: "Voice session already exists" });
-    await ctx.db.insert("liveVoiceSessions", { sessionId, spaceId: room.spaceId, roomId, startedBy: userId, createdAt: Date.now() });
+    await ctx.db.insert("liveVoiceSessions", {
+      sessionId,
+      spaceId: room.spaceId,
+      roomId,
+      startedBy: userId,
+      billingSource,
+      createdAt: Date.now(),
+    });
     return null;
   },
 });
@@ -321,6 +345,7 @@ export const finishSession = action({
     sessionId: v.string(),
     voiceSeconds: v.optional(v.number()),
     voiceUsageFinalized: v.optional(v.boolean()),
+    delegatedUsage: v.optional(tokenUsageValidator),
     turns: v.array(v.object({
       role: v.union(v.literal("user"), v.literal("assistant")),
       text: v.string(),
@@ -328,18 +353,26 @@ export const finishSession = action({
     })),
   },
   returns: v.union(v.literal("saved"), v.literal("already_saved")),
-  handler: async (ctx, { roomId, sessionId, turns, voiceSeconds, voiceUsageFinalized }): Promise<"saved" | "already_saved"> => {
+  handler: async (ctx, { roomId, sessionId, turns, voiceSeconds, voiceUsageFinalized, delegatedUsage }): Promise<"saved" | "already_saved"> => {
     if (!/^live_[A-Za-z0-9_-]{3,120}$/.test(sessionId)) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice session" });
     if (voiceSeconds !== undefined && (!Number.isFinite(voiceSeconds) || voiceSeconds < 0 || voiceSeconds > 3_600)) {
       throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice usage" });
     }
     if (turns.length > 100) throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Voice transcript is too long" });
+    if (delegatedUsage && !isValidTokenUsage(delegatedUsage)) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid delegated model usage" });
+    }
     const cleanedTurns = turns.map(turn => ({ ...turn, text: turn.text.trim() })).filter(turn => turn.text);
     if (cleanedTurns.some(turn => turn.text.length > 20_000 || !Number.isFinite(turn.startMs) || turn.startMs < 0)
       || cleanedTurns.reduce((length, turn) => length + turn.text.length, 0) > 40_000) {
       throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice transcript" });
     }
-    const prepared: { alreadyFinished: boolean; userId: Id<"users">; spaceId: Id<"spaces"> } = await ctx.runQuery(internal.liveVoice.prepareFinish, { roomId, sessionId });
+    const prepared: {
+      alreadyFinished: boolean;
+      userId: Id<"users">;
+      spaceId: Id<"spaces">;
+      billingSource?: "platform" | "family";
+    } = await ctx.runQuery(internal.liveVoice.prepareFinish, { roomId, sessionId });
     if (prepared.alreadyFinished) return "already_saved";
     try {
       await ctx.runAction(internal.voiceBrowser.stopForVoiceSession, { roomId, voiceSessionId: sessionId });
@@ -347,30 +380,45 @@ export const finishSession = action({
       console.warn("VOICE_BROWSER_CLEANUP_FAILED");
     }
     const transcript = cleanedTurns.map(turn => `${turn.role === "user" ? "Caller" : "Saathi"}: ${turn.text}`).join("\n");
-    const apiKey = transcript ? await resolveOpenAiKey(ctx, prepared.spaceId, prepared.userId) : "";
-    const summary = transcript
-      ? await summarizeCall(transcript, apiKey)
-      : "Voice call completed with Saathi.";
+    const credential = transcript
+      ? await resolveOpenAiCredential(ctx, prepared.spaceId, prepared.userId)
+      : null;
+    const summaryResult: { text: string; usage?: TokenUsage } = transcript
+      ? await summarizeCall(transcript, credential?.apiKey)
+      : { text: "Voice call completed with Saathi." };
     return await ctx.runMutation(internal.liveVoice.storeSummary, {
       roomId,
       sessionId,
-      summary,
+      summary: summaryResult.text,
       voiceSeconds,
       voiceUsageFinalized,
+      delegatedUsage,
+      summaryUsage: summaryResult.usage,
+      billingSource: prepared.billingSource ?? credential?.billingSource,
     });
   },
 });
 
 export const prepareFinish = internalQuery({
   args: { roomId: v.id("rooms"), sessionId: v.string() },
-  returns: v.object({ alreadyFinished: v.boolean(), userId: v.id("users"), spaceId: v.id("spaces") }),
+  returns: v.object({
+    alreadyFinished: v.boolean(),
+    userId: v.id("users"),
+    spaceId: v.id("spaces"),
+    billingSource: v.optional(billingSourceValidator),
+  }),
   handler: async (ctx, { roomId, sessionId }) => {
     const { userId, room } = await requireRoomPermission(ctx, roomId, "post_message");
     const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
     if (!session || session.roomId !== roomId || session.startedBy !== userId) {
       throw new ConvexError({ code: "FORBIDDEN", message: "This voice session does not belong to you" });
     }
-    return { alreadyFinished: session.finishedAt !== undefined, userId, spaceId: room.spaceId };
+    return {
+      alreadyFinished: session.finishedAt !== undefined,
+      userId,
+      spaceId: room.spaceId,
+      billingSource: session.billingSource,
+    };
   },
 });
 
@@ -381,15 +429,30 @@ export const storeSummary = internalMutation({
     summary: v.string(),
     voiceSeconds: v.optional(v.number()),
     voiceUsageFinalized: v.optional(v.boolean()),
+    delegatedUsage: v.optional(tokenUsageValidator),
+    summaryUsage: v.optional(tokenUsageValidator),
+    billingSource: v.optional(billingSourceValidator),
   },
   returns: v.union(v.literal("saved"), v.literal("already_saved")),
-  handler: async (ctx, { roomId, sessionId, summary, voiceSeconds, voiceUsageFinalized }) => {
+  handler: async (ctx, {
+    roomId,
+    sessionId,
+    summary,
+    voiceSeconds,
+    voiceUsageFinalized,
+    delegatedUsage,
+    summaryUsage,
+    billingSource,
+  }) => {
     const { room, userId } = await requireRoomPermission(ctx, roomId, "post_message");
     const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
     if (!session || session.roomId !== roomId || session.startedBy !== userId) {
       throw new ConvexError({ code: "FORBIDDEN", message: "This voice session does not belong to you" });
     }
     if (session.finishedAt) return "already_saved";
+    if ((delegatedUsage && !isValidTokenUsage(delegatedUsage)) || (summaryUsage && !isValidTokenUsage(summaryUsage))) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid voice model usage" });
+    }
     const elapsedSeconds = Math.max(0, (Date.now() - session.createdAt) / 1_000);
     const recordedSeconds = voiceSeconds === undefined
       ? undefined
@@ -419,6 +482,61 @@ export const storeSummary = internalMutation({
         quantity: recordedSeconds,
         costUsd: voiceCostUsd,
         costClass: "voice",
+        billingSource: session.billingSource ?? billingSource,
+        createdAt: Date.now(),
+      });
+    }
+    const usageBillingSource = session.billingSource ?? billingSource;
+    if (delegatedUsage) {
+      const delegatedTokens = totalTokenQuantity(delegatedUsage);
+      if (delegatedTokens > 0) {
+        await ctx.db.insert("usageLedger", {
+          spaceId: room.spaceId,
+          userId,
+          provider: "openai",
+          model: GPT_LUNA_MODEL,
+          unit: "token",
+          quantity: delegatedTokens,
+          costUsd: estimateGptLunaCostUsd(delegatedUsage),
+          costClass: "voice_backend",
+          inputTokens: delegatedUsage.inputTokens,
+          outputTokens: delegatedUsage.outputTokens,
+          cachedInputTokens: delegatedUsage.cachedInputTokens,
+          cacheWriteTokens: delegatedUsage.cacheWriteTokens,
+          billingSource: usageBillingSource,
+          createdAt: Date.now(),
+        });
+      }
+      if ((delegatedUsage.webSearchCalls ?? 0) > 0) {
+        await ctx.db.insert("usageLedger", {
+          spaceId: room.spaceId,
+          userId,
+          provider: "openai",
+          model: "web_search",
+          unit: "request",
+          quantity: delegatedUsage.webSearchCalls ?? 0,
+          costUsd: estimateOpenAiWebSearchCostUsd(delegatedUsage.webSearchCalls ?? 0),
+          costClass: "voice_backend_tool",
+          billingSource: usageBillingSource,
+          createdAt: Date.now(),
+        });
+      }
+    }
+    if (summaryUsage && totalTokenQuantity(summaryUsage) > 0) {
+      await ctx.db.insert("usageLedger", {
+        spaceId: room.spaceId,
+        userId,
+        provider: "openai",
+        model: GPT_LUNA_MODEL,
+        unit: "token",
+        quantity: totalTokenQuantity(summaryUsage),
+        costUsd: estimateGptLunaCostUsd(summaryUsage),
+        costClass: "voice_summary",
+        inputTokens: summaryUsage.inputTokens,
+        outputTokens: summaryUsage.outputTokens,
+        cachedInputTokens: summaryUsage.cachedInputTokens,
+        cacheWriteTokens: summaryUsage.cacheWriteTokens,
+        billingSource: usageBillingSource,
         createdAt: Date.now(),
       });
     }
@@ -451,29 +569,73 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function summarizeCall(transcript: string, apiKey: string | undefined) {
+async function summarizeCall(
+  transcript: string,
+  apiKey: string | undefined,
+): Promise<{ text: string; usage?: TokenUsage }> {
   const fallback = fallbackSummary(transcript);
-  if (!apiKey) return fallback;
+  if (!apiKey) return { text: fallback };
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-5-mini",
+        model: GPT_LUNA_MODEL,
         input: [
           { role: "system", content: "Summarize this family voice call in 1-3 concise sentences. Preserve decisions, requests, and next steps. Do not mention that you are summarizing a transcript." },
           { role: "user", content: transcript },
         ],
       }),
     });
-    if (!response.ok) return fallback;
+    if (!response.ok) return { text: fallback };
     const payload: unknown = await response.json();
-    if (!payload || typeof payload !== "object") return fallback;
-    const output = (payload as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> }).output;
-    return output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text?.trim().slice(0, 2_000) || fallback;
+    if (!payload || typeof payload !== "object") return { text: fallback };
+    const result = payload as {
+      output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        input_tokens_details?: { cached_tokens?: number };
+      };
+    };
+    const text = result.output?.flatMap(item => item.content ?? [])
+      .find(item => item.type === "output_text")?.text?.trim().slice(0, 2_000) || fallback;
+    return { text, usage: normalizedOpenAiUsage(result.usage) };
   } catch {
-    return fallback;
+    return { text: fallback };
   }
+}
+
+function normalizedOpenAiUsage(usage: {
+  input_tokens?: number;
+  output_tokens?: number;
+  input_tokens_details?: { cached_tokens?: number };
+} | undefined): TokenUsage | undefined {
+  if (!usage) return undefined;
+  const totalInput = Math.max(0, usage.input_tokens ?? 0);
+  const cachedInputTokens = Math.min(totalInput, Math.max(0, usage.input_tokens_details?.cached_tokens ?? 0));
+  const normalized = {
+    inputTokens: totalInput - cachedInputTokens,
+    outputTokens: Math.max(0, usage.output_tokens ?? 0),
+    cachedInputTokens,
+  };
+  return isValidTokenUsage(normalized) ? normalized : undefined;
+}
+
+function totalTokenQuantity(usage: TokenUsage) {
+  return usage.inputTokens + usage.outputTokens + (usage.cachedInputTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+}
+
+function isValidTokenUsage(usage: TokenUsage) {
+  const counts = [
+    usage.inputTokens,
+    usage.outputTokens,
+    usage.cachedInputTokens ?? 0,
+    usage.cacheWriteTokens ?? 0,
+    usage.webSearchCalls ?? 0,
+  ];
+  return counts.every(count => Number.isSafeInteger(count) && count >= 0 && count <= 100_000_000)
+    && (usage.webSearchCalls ?? 0) <= 1_000;
 }
 
 function fallbackSummary(transcript: string) {

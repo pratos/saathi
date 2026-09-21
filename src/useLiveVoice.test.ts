@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from '../convex/lib/assistantCapabilities'
 import {
+  accumulateDelegatedUsage,
   addVoiceToolActivity,
   finishVoiceToolActivity,
   groupVoiceFragments,
@@ -70,6 +71,33 @@ describe('live voice caption grouping', () => {
       name: 'use_computer', callId: 'call_browser_1',
       arguments: { url: 'https://example.com', task: 'Find the admissions page' },
     })
+  })
+
+  test('accounts delegated Luna tokens and web searches once per provider item', () => {
+    const responseIds = new Set<string>()
+    const searchIds = new Set<string>()
+    const initial = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, webSearchCalls: 0 }
+    const completed = {
+      type: 'response.event',
+      event: {
+        type: 'response.completed',
+        response: {
+          id: 'resp_1',
+          usage: { input_tokens: 1_000, output_tokens: 200, input_tokens_details: { cached_tokens: 300 } },
+        },
+      },
+    }
+    const once = accumulateDelegatedUsage(completed, initial, responseIds, searchIds)
+    expect(once).toEqual({ inputTokens: 700, outputTokens: 200, cachedInputTokens: 300, webSearchCalls: 0 })
+    expect(accumulateDelegatedUsage(completed, once, responseIds, searchIds)).toEqual(once)
+
+    const search = {
+      type: 'response.event',
+      event: { type: 'response.output_item.done', item: { id: 'search_1', type: 'web_search_call' } },
+    }
+    const withSearch = accumulateDelegatedUsage(search, once, responseIds, searchIds)
+    expect(withSearch.webSearchCalls).toBe(1)
+    expect(accumulateDelegatedUsage(search, withSearch, responseIds, searchIds).webSearchCalls).toBe(1)
   })
 
   test('keeps rich voice activities keyed to the matching tool call', () => {

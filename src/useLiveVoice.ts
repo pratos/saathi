@@ -13,6 +13,12 @@ import { liveVoiceUsageSeconds } from '../convex/lib/liveVoiceUsage'
 export type VoiceStatus = 'idle' | 'requesting' | 'connecting' | 'live' | 'muted' | 'ending' | 'ended' | 'error'
 type VoiceFragment = { role: 'user' | 'assistant'; text: string; startMs: number; endMs: number; order: number }
 export type VoiceTurn = { role: 'user' | 'assistant'; text: string; startMs: number }
+export type DelegatedVoiceUsage = {
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  webSearchCalls: number
+}
 export type VoiceToolActivity = {
   id: string
   name: ApplicationAssistantToolName
@@ -53,6 +59,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
   const generationRef = useRef(0)
   const voiceSecondsRef = useRef(0)
   const usageFinalizedRef = useRef(false)
+  const delegatedUsageRef = useRef<DelegatedVoiceUsage>(emptyDelegatedUsage())
+  const countedResponseIdsRef = useRef(new Set<string>())
+  const countedWebSearchIdsRef = useRef(new Set<string>())
   const computerTool = useQuery(api.liveVoice.computerToolState, sessionId ? { roomId, sessionId } : 'skip')
 
   const cleanup = useCallback(() => {
@@ -86,7 +95,10 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           const usage = voiceSecondsRef.current > 0
             ? { voiceSeconds: voiceSecondsRef.current, voiceUsageFinalized: usageFinalizedRef.current }
             : {}
-          await finishSession({ roomId, sessionId, turns, ...usage })
+          const delegatedUsage = hasDelegatedUsage(delegatedUsageRef.current)
+            ? { delegatedUsage: delegatedUsageRef.current }
+            : {}
+          await finishSession({ roomId, sessionId, turns, ...usage, ...delegatedUsage })
           break
         } catch (caught) {
           if (attempt === 1) throw caught
@@ -121,6 +133,9 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
     setActivities([])
     voiceSecondsRef.current = 0
     usageFinalizedRef.current = false
+    delegatedUsageRef.current = emptyDelegatedUsage()
+    countedResponseIdsRef.current.clear()
+    countedWebSearchIdsRef.current.clear()
     setVoiceSeconds(0)
     setError('')
     setStatus('requesting')
@@ -198,6 +213,12 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
           void persistKnownTranscript()
           cleanup()
         } else if (event.type === 'response.event') {
+          delegatedUsageRef.current = accumulateDelegatedUsage(
+            event.raw,
+            delegatedUsageRef.current,
+            countedResponseIdsRef.current,
+            countedWebSearchIdsRef.current,
+          )
           const call = liveToolCall(event.raw)
           if (call) setActivities(current => addVoiceToolActivity(current, call))
           const startedAt = Date.now()
@@ -360,6 +381,62 @@ function parseLiveEvent(value: unknown): null | { type: string; delta: string; s
   } catch {
     return null
   }
+}
+
+function emptyDelegatedUsage(): DelegatedVoiceUsage {
+  return { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, webSearchCalls: 0 }
+}
+
+function hasDelegatedUsage(usage: DelegatedVoiceUsage) {
+  return usage.inputTokens + usage.outputTokens + usage.cachedInputTokens + usage.webSearchCalls > 0
+}
+
+export function accumulateDelegatedUsage(
+  envelope: Record<string, unknown>,
+  current: DelegatedVoiceUsage,
+  countedResponseIds: Set<string>,
+  countedWebSearchIds: Set<string>,
+): DelegatedVoiceUsage {
+  const event = envelope.event && typeof envelope.event === 'object'
+    ? envelope.event as Record<string, unknown>
+    : envelope
+  let next = current
+  if (event.type === 'response.completed') {
+    const response = event.response && typeof event.response === 'object'
+      ? event.response as Record<string, unknown>
+      : event
+    const responseId = typeof response.id === 'string' ? response.id : ''
+    if (responseId && !countedResponseIds.has(responseId)) {
+      const usage = response.usage && typeof response.usage === 'object'
+        ? response.usage as Record<string, unknown>
+        : null
+      const inputDetails = usage?.input_tokens_details && typeof usage.input_tokens_details === 'object'
+        ? usage.input_tokens_details as Record<string, unknown>
+        : null
+      const totalInput = finiteCount(usage?.input_tokens)
+      const cachedInput = Math.min(totalInput, finiteCount(inputDetails?.cached_tokens))
+      next = {
+        ...next,
+        inputTokens: next.inputTokens + totalInput - cachedInput,
+        outputTokens: next.outputTokens + finiteCount(usage?.output_tokens),
+        cachedInputTokens: next.cachedInputTokens + cachedInput,
+      }
+      countedResponseIds.add(responseId)
+    }
+  }
+  if (event.type === 'response.output_item.done') {
+    const item = event.item && typeof event.item === 'object' ? event.item as Record<string, unknown> : null
+    const itemId = typeof item?.id === 'string' ? item.id : ''
+    if (item?.type === 'web_search_call' && itemId && !countedWebSearchIds.has(itemId)) {
+      next = { ...next, webSearchCalls: next.webSearchCalls + 1 }
+      countedWebSearchIds.add(itemId)
+    }
+  }
+  return next
+}
+
+function finiteCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
 }
 
 type LiveToolCall = {

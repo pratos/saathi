@@ -44,6 +44,9 @@ describe("GPT-Live call summaries", () => {
       roomId,
       sessionId: "live_asymmetric_session_123",
       summary: "The family agreed that Saathi should reply in Marathi and confirm the travel time.",
+      delegatedUsage: { inputTokens: 700, cachedInputTokens: 300, outputTokens: 200, webSearchCalls: 1 },
+      summaryUsage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 },
+      billingSource: "platform" as const,
     };
 
     await owner.mutation(internal.liveVoice.prepareComputerTool, {
@@ -118,6 +121,12 @@ describe("GPT-Live call summaries", () => {
       roomId,
       sessionId: "live_empty_session_456",
       turns: [],
+      delegatedUsage: { inputTokens: 1.5, outputTokens: 0 },
+    })).rejects.toThrow(/Invalid delegated model usage/i);
+    await expect(owner.action(api.liveVoice.finishSession, {
+      roomId,
+      sessionId: "live_empty_session_456",
+      turns: [],
       voiceSeconds: 18,
       voiceUsageFinalized: true,
     })).resolves.toBe("saved");
@@ -133,9 +142,14 @@ describe("GPT-Live call summaries", () => {
       voiceCostUsd: 0.015,
       voiceUsageFinalized: true,
     });
-    expect(await t.run(ctx => ctx.db.query("usageLedger").collect())).toEqual([
+    const usage = await t.run(ctx => ctx.db.query("usageLedger").collect());
+    expect(usage).toHaveLength(4);
+    expect(usage).toEqual(expect.arrayContaining([
       expect.objectContaining({ provider: "openai", model: "gpt-live-1", unit: "second", quantity: 18, costUsd: 0.015, costClass: "voice" }),
-    ]);
+      expect.objectContaining({ provider: "openai", model: "gpt-5.6-luna", quantity: 1_200, costClass: "voice_backend", billingSource: "platform" }),
+      expect.objectContaining({ provider: "openai", model: "web_search", quantity: 1, costUsd: 0.01, costClass: "voice_backend_tool" }),
+      expect.objectContaining({ provider: "openai", model: "gpt-5.6-luna", quantity: 120, costClass: "voice_summary" }),
+    ]));
     expect(await t.run(ctx => ctx.db.get(oldUserId))).toMatchObject({ originalText: "Existing caller transcript", voiceSpeaker: "user" });
     expect(await t.run(ctx => ctx.db.get(oldAssistantId))).toMatchObject({ originalText: "Existing assistant transcript", voiceSpeaker: "assistant" });
     expect(await t.run(ctx => ctx.db.query("agentJobs").collect())).toEqual([]);

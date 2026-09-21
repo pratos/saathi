@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireRoomPermission, requireSpacePermission } from "./lib/authz";
+import { parseUploadedDocument } from "./lib/firecrawlParse";
 import { resolveOpenAiKey } from "./lib/providerKeys";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -419,27 +420,11 @@ function encodeBase64(bytes: Uint8Array) {
 }
 
 async function parseStoredPdf(fileName: string, bytes: Blob) {
-  const apiKey = env.FIRECRAWL_API_KEY;
-  if (!apiKey) throw new Error("Document reading needs FIRECRAWL_API_KEY.");
-  const form = new FormData();
-  form.set("file", bytes, fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
-  form.set("options", JSON.stringify({ formats: ["markdown"], parsers: [{ type: "pdf", mode: "auto", maxPages: 20 }] }));
-  const response = await fetch("https://api.firecrawl.dev/v2/parse", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-    signal: AbortSignal.timeout(60_000),
-  });
-  const body = await response.text();
-  if (!response.ok) throw new Error(`Document parsing failed (${response.status}).`);
-  try {
-    const markdown = JSON.parse(body) as { data?: { markdown?: unknown }; markdown?: unknown };
-    const text = typeof markdown.data?.markdown === "string" ? markdown.data.markdown
-      : typeof markdown.markdown === "string" ? markdown.markdown : "";
-    return text.trim();
-  } catch {
-    return "";
-  }
+  const apiKey = env.FIRECRAWL_API_KEY?.trim();
+  if (!apiKey) throw new Error("PDF reading is not configured. Ask an administrator to add FIRECRAWL_API_KEY.");
+  const result = await parseUploadedDocument(apiKey, fileName, bytes);
+  if (result.markdown) return result.markdown;
+  throw new Error(result.error || "Could not read this PDF.");
 }
 
 function attachmentKindFor(mediaType: string, capture?: "library" | "camera" | "receipt") {

@@ -51,8 +51,8 @@ export function sanitizeHttpsUrl(value: string) {
   }
 }
 
-export function isPasswordParseError(status: number, body: string) {
-  return status === 401 || status === 403 || /password|encrypt|protected/i.test(body);
+export function isPasswordParseError(_status: number, body: string) {
+  return /\b(?:password[-\s]?protected|password (?:is )?(?:required|incorrect|invalid)|encrypted pdf|pdf (?:is )?encrypted|document (?:is )?encrypted)\b/i.test(body);
 }
 
 export function parseMarkdownFromFirecrawl(payload: unknown) {

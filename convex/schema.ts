@@ -75,6 +75,7 @@ export default defineSchema({
     direction: v.optional(v.union(v.literal("incoming"), v.literal("outgoing"))),
     processingNotes: v.optional(v.string()),
     documentParseStatus: v.optional(v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed"))),
+    documentParseRetryable: v.optional(v.boolean()),
     suggestedActions: v.optional(v.array(v.object({
       kind: v.string(), label: v.string(), detail: v.optional(v.string()), url: v.optional(v.string()),
     }))),
@@ -100,6 +101,7 @@ export default defineSchema({
   }).index("by_room_created", ["roomId", "createdAt"]).index("by_room_idempotency", ["roomId", "idempotencyKey"]),
   liveVoiceSessions: defineTable({
     sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
+    billingSource: v.optional(v.union(v.literal("platform"), v.literal("family"))),
     createdAt: v.number(), finishedAt: v.optional(v.number()),
     activeToolCallId: v.optional(v.string()),
     activity: v.optional(v.literal("using_computer")),
@@ -240,6 +242,10 @@ export default defineSchema({
     // Historical ledger rows may still carry the ID from the removed agentRuns table.
     runId: v.optional(v.string()), userId: v.id("users"),
     provider: v.string(), model: v.optional(v.string()), unit: v.string(), quantity: v.number(),
-    costUsd: v.optional(v.number()), costClass: v.string(), createdAt: v.number(),
+    costUsd: v.optional(v.number()), costClass: v.string(),
+    inputTokens: v.optional(v.number()), outputTokens: v.optional(v.number()),
+    cachedInputTokens: v.optional(v.number()), cacheWriteTokens: v.optional(v.number()),
+    billingSource: v.optional(v.union(v.literal("platform"), v.literal("family"))),
+    createdAt: v.number(),
   }).index("by_space_created", ["spaceId", "createdAt"]),
 });

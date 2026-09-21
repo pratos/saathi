@@ -55,12 +55,17 @@ export const processInboxItem = workflow
   .define({ args: { inboxItemId: v.id("inboxItems") } })
   .handler(async (step, args): Promise<void> => {
     await step.runMutation(internal.inboxWorkflow.markProcessing, args, { inline: true });
-    const documents = await step.runAction(internal.inboxWorkflow.parseDocuments, args, { retry: true });
-    const extraction = await step.runAction(internal.inboxWorkflow.extract, { ...args, documentMarkdown: documents.markdown }, { retry: true });
+    const documents = await step.runAction(internal.inboxWorkflow.parseDocuments, args, { retry: false });
+    const extraction = await step.runAction(
+      internal.inboxWorkflow.extract,
+      { ...args, documentMarkdown: documents.markdown },
+      { retry: { maxAttempts: 2, initialBackoffMs: 1_000, base: 2 } },
+    );
     await step.runMutation(internal.inboxWorkflow.applyExtraction, {
       ...args,
       ...extraction,
       documentParseStatus: documents.status,
+      documentParseRetryable: documents.retryable,
       processingNotes: documents.notes || extraction.notes,
     }, { inline: true });
     const claimed = await step.runMutation(internal.jev.claimInboxClassification, args, { inline: true });
@@ -151,8 +156,14 @@ export const parseDocuments = internalAction({
     markdown: v.string(),
     status: v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed")),
     notes: v.string(),
+    retryable: v.boolean(),
   }),
-  handler: async (ctx, args): Promise<{ markdown: string; status: "none" | "parsed" | "password" | "failed"; notes: string }> => {
+  handler: async (ctx, args): Promise<{
+    markdown: string;
+    status: "none" | "parsed" | "password" | "failed";
+    notes: string;
+    retryable: boolean;
+  }> => {
     const item: {
       subject: string;
       originalText: string;
@@ -168,6 +179,7 @@ export const parseDocuments = internalAction({
           markdown: string;
           status: "none" | "parsed" | "password" | "failed";
           notes: string;
+          retryable: boolean;
         } = await ctx.runAction(internal.gmail.readInboxAttachments, args);
         if (gmailResult.status !== "none" || gmailResult.notes) return gmailResult;
       }
@@ -177,29 +189,56 @@ export const parseDocuments = internalAction({
         notes: attachmentHint(item.originalHtml ?? "", item.originalText, item.subject)
           ? "This email mentions a PDF or invoice, but no public document link was available to parse."
           : "",
+        retryable: false,
       };
     }
     const apiKey = env.FIRECRAWL_API_KEY;
-    if (!apiKey) return { markdown: "", status: "failed" as const, notes: "Document parsing needs FIRECRAWL_API_KEY." };
+    if (!apiKey) {
+      return {
+        markdown: "",
+        status: "failed" as const,
+        notes: "PDF reading is not configured. Ask an administrator to add FIRECRAWL_API_KEY.",
+        retryable: false,
+      };
+    }
     const parsed: string[] = [];
+    const failures: string[] = [];
     let passwordProtected = false;
     let failed = false;
+    let retryable = false;
     for (const url of urls) {
       const result = await parsePublicDocument(apiKey, url);
       if (result.markdown) parsed.push(result.markdown);
       else if (result.passwordProtected) passwordProtected = true;
-      else failed = true;
+      else {
+        failed = true;
+        retryable ||= result.retryable;
+        if (result.error) failures.push(result.error);
+      }
     }
-    if (parsed.length > 0) return { markdown: parsed.join("\n\n").slice(0, 40_000), status: "parsed" as const, notes: "" };
+    if (parsed.length > 0) {
+      return {
+        markdown: parsed.join("\n\n").slice(0, 40_000),
+        status: "parsed" as const,
+        notes: "",
+        retryable: false,
+      };
+    }
     if (passwordProtected) {
       const hint = extractPasswordHints(item.subject, item.originalText);
       return {
         markdown: "",
         status: "password" as const,
         notes: hint ?? "A PDF looks password-protected. Check the email for the invoice, policy, or account number.",
+        retryable: false,
       };
     }
-    return { markdown: "", status: failed ? "failed" as const : "none" as const, notes: failed ? "Saathi could not read an attached document." : "" };
+    return {
+      markdown: "",
+      status: failed ? "failed" as const : "none" as const,
+      notes: failed ? failures[0] ?? "Saathi could not read an attached document." : "",
+      retryable: failed && retryable,
+    };
   },
 });
 
@@ -327,6 +366,7 @@ export const applyExtraction = internalMutation({
     notes: v.union(v.string(), v.null()),
     actions: v.array(actionValidator),
     documentParseStatus: v.optional(v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed"))),
+    documentParseRetryable: v.optional(v.boolean()),
     processingNotes: v.union(v.string(), v.null()),
   },
   returns: v.null(),
@@ -367,6 +407,7 @@ export const applyExtraction = internalMutation({
       direction: args.direction,
       processingNotes: notes,
       documentParseStatus: args.documentParseStatus ?? "none",
+      documentParseRetryable: args.documentParseRetryable,
       suggestedActions: suggestedActions.length ? suggestedActions : undefined,
       actionStatus: suggestedActions.length ? "suggested" : undefined,
       heartbeatMessageId,

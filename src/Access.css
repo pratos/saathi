@@ -16,7 +16,42 @@
 .access-admin-header > div > span { display: flex; align-items: center; gap: 7px; color: #9a4a2d; font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .access-admin-header h1 { margin: 7px 0 5px; font: 600 clamp(34px, 4vw, 48px)/1 "Newsreader", Georgia, serif; }
 .access-admin-header p { max-width: 760px; margin: 0; color: #596273; font-size: 13px; line-height: 1.55; }
-.access-admin-toolbar { display: grid; gap: 16px; padding: 24px clamp(22px, 5vw, 72px); }
+.usage-admin { display: grid; gap: 18px; padding: 28px clamp(22px, 5vw, 72px) 8px; }
+.usage-admin-heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
+.usage-admin-heading > div > span { display: flex; align-items: center; gap: 7px; color: #315d46; font-size: 11px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.usage-admin-heading h2, .access-section-heading h2 { margin: 5px 0 3px; font: 600 28px/1.1 "Newsreader", Georgia, serif; }
+.usage-admin-heading p, .access-section-heading p, .usage-panel-title p { margin: 0; color: #596273; font-size: 12px; line-height: 1.5; }
+.usage-admin-heading > button { min-height: 39px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border: 1px solid #d8d2c8; border-radius: 10px; color: #273246; background: #fffdf8; font-size: 11px; font-weight: 800; }
+.usage-admin-heading svg, .convex-usage-note svg { width: 17px; }
+.usage-loading { min-height: 130px; display: grid; place-items: center; margin: 0; color: #596273; border: 1px solid #d8d2c8; border-radius: 14px; background: #fffdf8; }
+.usage-summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.usage-summary-cards article { min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; padding: 16px; border: 1px solid #d8d2c8; border-radius: 14px; background: #fffdf8; }
+.usage-summary-cards article > svg { width: 18px; color: #9a4a2d; }
+.usage-summary-cards article > span { color: #596273; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.usage-summary-cards article > strong { grid-column: 1 / -1; margin-top: 3px; font-size: clamp(23px, 3vw, 31px); font-variant-numeric: tabular-nums; }
+.usage-summary-cards article > small { grid-column: 1 / -1; color: #777f8c; font-size: 10px; }
+.usage-admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, .34fr); gap: 12px; align-items: stretch; }
+.usage-panel { min-width: 0; padding: 17px; border: 1px solid #d8d2c8; border-radius: 14px; background: #fffdf8; }
+.usage-panel-title { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 13px; }
+.usage-panel h3 { margin: 0 0 3px; font-size: 14px; }
+.usage-table-wrap { overflow-x: auto; }
+.usage-panel table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.usage-panel th { padding: 9px 10px; color: #777f8c; border-bottom: 1px solid #d8d2c8; text-align: right; font-size: 9px; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+.usage-panel th:first-child, .usage-panel td:first-child { text-align: left; }
+.usage-panel td { padding: 11px 10px; color: #3f4958; border-bottom: 1px solid #ebe6dd; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.usage-panel tbody tr:last-child td { border-bottom: 0; }
+.usage-panel td strong, .usage-panel td small { display: block; }
+.usage-panel td strong { color: #17233a; font-size: 11px; }
+.usage-panel td small { margin-top: 2px; color: #777f8c; font-size: 9px; }
+.convex-usage-note { display: flex; flex-direction: column; justify-content: space-between; color: #e9edf5; border-color: #233f72; background: #233f72; }
+.convex-usage-note > div { display: flex; align-items: center; gap: 8px; }
+.convex-usage-note h3 { color: #fff; }
+.convex-usage-note p { margin: 14px 0; color: #d5dbea; font-size: 11px; line-height: 1.6; }
+.convex-usage-note a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; color: #fff; border-top: 1px solid #526589; font-size: 11px; font-weight: 900; }
+.family-cost-panel { padding-bottom: 8px; }
+.usage-caveat { margin: -5px 0 0; color: #745d23; font-size: 10px; }
+.access-section-heading { margin-bottom: -2px; }
+.access-admin-toolbar { display: grid; gap: 16px; padding: 28px clamp(22px, 5vw, 72px) 24px; }
 .access-stats { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); gap: 12px; }
 .access-stats button { min-height: 82px; display: grid; padding: 14px; border: 1px solid #d8d2c8; border-radius: 13px; color: #4f5968; background: #fffdf8; text-align: left; }
 .access-stats button.selected { border-color: #233f72; box-shadow: inset 0 0 0 1px #233f72; }
@@ -43,10 +78,17 @@
 .access-user-actions button:not(.danger) { color: #fff; border-color: #315d46; background: #315d46; }
 .access-user-actions button.danger { color: #903f37; }
 
+@media (max-width: 900px) {
+  .usage-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .usage-admin-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 760px) {
   .access-admin-header { grid-template-columns: 1fr; gap: 14px; padding: 20px 18px; }
+  .usage-admin-heading { align-items: start; flex-direction: column; }
+  .usage-summary-cards { grid-template-columns: 1fr; }
   .access-stats { grid-template-columns: repeat(2, 1fr); }
-  .access-admin-toolbar, .access-user-list { padding-left: 16px; padding-right: 16px; }
+  .usage-admin, .access-admin-toolbar, .access-user-list { padding-left: 16px; padding-right: 16px; }
   .access-user-row { grid-template-columns: 1fr; }
   .access-user-actions { justify-content: flex-start; }
 }

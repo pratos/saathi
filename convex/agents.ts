@@ -162,6 +162,9 @@ export const finish = internalMutation({
     agentId: v.id("agents"), jobId: v.id("agentJobs"), leaseId: v.string(),
     nextSequence: v.number(), messages: v.array(v.any()), error: v.optional(v.string()),
     inputTokens: v.optional(v.number()), outputTokens: v.optional(v.number()),
+    cachedInputTokens: v.optional(v.number()), cacheWriteTokens: v.optional(v.number()),
+    costUsd: v.optional(v.number()),
+    billingSource: v.optional(v.union(v.literal("platform"), v.literal("family"))),
   },
   returns: v.boolean(),
   handler: async (ctx, args) => {
@@ -196,12 +199,27 @@ export const finish = internalMutation({
         source: "chat", sourceKey: `job:${job._id}`, request: job.prompt, response: responseText, createdAt: completedAt,
       });
     }
-    const inputTokens = Math.max(0, args.inputTokens ?? 0);
-    const outputTokens = Math.max(0, args.outputTokens ?? 0);
-    if (inputTokens + outputTokens > 0) {
+    const inputTokens = finiteNonnegative(args.inputTokens);
+    const outputTokens = finiteNonnegative(args.outputTokens);
+    const cachedInputTokens = finiteNonnegative(args.cachedInputTokens);
+    const cacheWriteTokens = finiteNonnegative(args.cacheWriteTokens);
+    const quantity = inputTokens + outputTokens + cachedInputTokens + cacheWriteTokens;
+    if (quantity > 0) {
       await ctx.db.insert("usageLedger", {
-        spaceId: agent.spaceId, userId: job.requestedBy, provider: "openrouter", model: agent.model,
-        unit: "token", quantity: inputTokens + outputTokens, costClass: "chat", createdAt: Date.now(),
+        spaceId: agent.spaceId,
+        userId: job.requestedBy,
+        provider: "openrouter",
+        model: agent.model,
+        unit: "token",
+        quantity,
+        costUsd: finiteNonnegative(args.costUsd),
+        costClass: "chat",
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+        cacheWriteTokens,
+        billingSource: args.billingSource,
+        createdAt: Date.now(),
       });
     }
     await scheduleNextOrIdle(ctx, args.agentId, args.error);
@@ -406,6 +424,10 @@ function boundContext(messages: unknown[]) {
     chars += size;
   }
   return selected;
+}
+
+function finiteNonnegative(value: number | undefined) {
+  return value !== undefined && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function invalid(message: string) {

@@ -99,16 +99,22 @@ describe("family inbox processing", () => {
       notes: "PDF parsed",
       actions: [{ kind: "pay_bill", label: "Review electricity bill" }],
       documentParseStatus: "parsed",
+      documentParseRetryable: false,
       processingNotes: "Attached document read.",
     });
     const item = await t.run(ctx => ctx.db.get(seeded.inboxItemId));
     expect(item).toMatchObject({
-      category: "bills", status: "ready", direction: "incoming", documentParseStatus: "parsed", extractedMerchant: "BEST",
+      category: "bills", status: "ready", direction: "incoming", documentParseStatus: "parsed",
+      documentParseRetryable: false, extractedMerchant: "BEST",
     });
     expect(item?.heartbeatMessageId).toBeTruthy();
     await owner.mutation(api.inbox.reprocess, { inboxItemId: seeded.inboxItemId });
     const reprocessed = await t.run(ctx => ctx.db.get(seeded.inboxItemId));
-    expect(reprocessed?.status).toBe("processing");
+    expect(reprocessed).toMatchObject({ status: "processing" });
+    expect(reprocessed?.documentParseStatus).toBeUndefined();
+    expect(reprocessed?.documentParseRetryable).toBeUndefined();
+    expect(reprocessed?.processingNotes).toBeUndefined();
+    await expect(owner.mutation(api.inbox.reprocess, { inboxItemId: seeded.inboxItemId })).resolves.toBe(seeded.inboxItemId);
     const usage = await owner.query(api.spaces.usageBreakdown, { spaceId: seeded.spaceId });
     expect(usage.tier).toBe("med");
     expect(usage.rows.some(row => row.costClass === "email_extraction")).toBe(true);

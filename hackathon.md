@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-18T11:29:35Z
+- **Last updated:** 2026-09-21T14:00:43Z
 
 ## Log
 
@@ -250,3 +250,24 @@ large-catalog bundle routing stays pre-turn and shadow-only. After a successful
 small-catalog reply, 10% of turns schedule an asynchronous Jev shadow decision
 for product analytics without applying that guidance to the user reply
 (`convex/agentWorker.ts`, `convex/agents.ts`).
+
+### 2026-09-21 - 2f7ef31
+Hardened room grants, invitation roles, Gmail promotion ownership, and Firecrawl
+browser targets. Added opt-in Gmail fan-out through owner-created family aliases,
+then consolidated delivery around an installable PWA with a complete manifest
+and icon set (`convex/invitations.ts`, `convex/gmailData.ts`,
+`convex/lib/familyAlias.ts`, `convex/lib/firecrawlInteract.ts`, `vite.config.ts`).
+
+Added controlled access and installation onboarding, configured superadmin
+management, and made generated images expandable in a lightbox
+(`convex/admin.ts`, `src/AdminDashboard.tsx`, `src/PwaInstallPrompt.tsx`,
+`src/LiveWorkspace.tsx`). Added superadmin AI usage reporting split by family,
+service, platform-funded versus family BYOK spend, and separate GPT-Live and
+delegated Luna work. Voice delegation and post-call summaries now use
+`gpt-5.6-luna` (`convex/liveVoice.ts`, `convex/lib/usageCosts.ts`).
+
+Made PDF reading bounded and actionable: Firecrawl gets a 120-second parse
+timeout, deterministic failures do not auto-retry, transient failures remain
+manually retryable, and duplicate reprocessing is rejected while work is active
+(`convex/lib/firecrawlParse.ts`, `convex/inboxWorkflow.ts`, `convex/inbox.ts`,
+`src/LiveWorkspace.tsx`).

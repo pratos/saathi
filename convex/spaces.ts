@@ -253,18 +253,6 @@ export const usageBreakdown = query({
   },
 });
 
-export const resolveProviderKey = internalQuery({
-  args: { spaceId: v.id("spaces"), provider: byokProvider },
-  returns: v.union(v.string(), v.null()),
-  handler: async (ctx, args) => {
-    const row = await ctx.db.query("providerKeys").withIndex("by_space_provider", q =>
-      q.eq("spaceId", args.spaceId).eq("provider", args.provider),
-    ).unique();
-    if (!row) return null;
-    return openSecret(row.sealedSecret);
-  },
-});
-
 export const resolveDecisionCredential = internalQuery({
   args: { spaceId: v.id("spaces"), userId: v.id("users") },
   returns: v.object({

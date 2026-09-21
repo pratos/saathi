@@ -19,6 +19,7 @@ import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { generateFamilyImageBytes } from "./lib/imageGeneration";
 import { resolveOpenRouterCredential, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 import type { DecisionCredential } from "./lib/decisionProvider";
+import { conversationUiActionsForRoute } from "./lib/conversationUi";
 import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
 import { decideAgentTurn } from "./lib/jev";
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
@@ -43,8 +44,6 @@ import {
 } from "./lib/toolBundleRouting";
 
 export { formatPublicWebResults as formatFirecrawlResults } from "./lib/publicWeb";
-
-export const SHADOW_ROUTING_SAMPLE_PERCENT = 10;
 
 const thinkingLevelMap = { off: "none" as const, minimal: null, low: "low" as const, medium: "medium" as const, high: "high" as const, xhigh: null, max: "max" as const };
 
@@ -106,6 +105,9 @@ export const run = internalAction({
       const authorizedToolNames = authorizedAssistantToolNames(work.requesterRole);
       const largeCatalog = authorizedToolNames.length > DIRECT_PI_TOOL_LIMIT;
       const memoryCandidate = shouldTriageMemoryRequest(decisionInput);
+      const turnDecisionPromise = decisionCredential && !largeCatalog
+        ? safeTurnDecision(decisionCredential, decisionInput, decisionContext)
+        : Promise.resolve(null);
       const [bundleAttempt, memoryDecision] = await Promise.all([
         decisionCredential && largeCatalog
           ? safeBundleDecision(decisionCredential, decisionInput, decisionContext)
@@ -228,6 +230,22 @@ export const run = internalAction({
       });
 
       await agent.prompt(work.job.prompt);
+      const turnDecision = await turnDecisionPromise;
+      if (!jevDecisionId && turnDecision) {
+        jevDecisionId = await recordJevDecision(
+          ctx,
+          work,
+          "chat_turn",
+          decisionInput,
+          turnDecision.route,
+          turnDecision.routeConfidence,
+          {
+            ...turnDecision,
+            guidanceApplied: false,
+            selectedToolNames: [...selectedToolNames],
+          },
+        );
+      }
       if (jevDecisionId && largeCatalog) {
         await ctx.runMutation(internal.jev.completeTurnToolRouting, {
           decisionId: jevDecisionId,
@@ -241,7 +259,7 @@ export const run = internalAction({
       const newMessages = agent.state.messages.slice(work.messages.length);
       const messages = makeConvexSafe(newMessages);
       const usage = assistantUsage(newMessages);
-      const committed = await ctx.runMutation(internal.agents.finish, {
+      await ctx.runMutation(internal.agents.finish, {
         agentId, jobId: work.job._id, leaseId: work.leaseId, nextSequence: work.nextSequence,
         messages,
         error: agent.state.errorMessage,
@@ -251,63 +269,17 @@ export const run = internalAction({
         cacheWriteTokens: usage.cacheWrite,
         costUsd: usage.costUsd,
         billingSource: openRouterCredential.billingSource,
+        decisionUsage: decisionCredential?.kind === "byok_openrouter" && turnDecision
+          ? { model: turnDecision.model, inputTokens: turnDecision.inputTokens, outputTokens: turnDecision.outputTokens }
+          : undefined,
+        uiActions: conversationUiActionsForRoute(turnDecision?.route ?? ""),
       });
-      if (committed && !agent.state.errorMessage && decisionCredential && !largeCatalog && !memoryCandidate
-        && shouldSampleShadowRouting(String(work.job._id))) {
-        await ctx.scheduler.runAfter(0, internal.agentWorker.shadowRoute, {
-          spaceId: work.agent.spaceId,
-          roomId: work.agent.roomId,
-          jobId: work.job._id,
-          requestedBy: work.job.requestedBy,
-          request: decisionInput,
-          recentConversation: decisionContext,
-          selectedToolNames: [...selectedToolNames],
-        });
-      }
     } catch (error) {
       await ctx.runMutation(internal.agents.fail, {
         agentId, jobId: work.job._id, leaseId: work.leaseId,
         error: error instanceof Error ? error.message : "Agent worker failed",
       });
     }
-    return null;
-  },
-});
-
-export const shadowRoute = internalAction({
-  args: {
-    spaceId: v.id("spaces"),
-    roomId: v.id("rooms"),
-    jobId: v.id("agentJobs"),
-    requestedBy: v.id("users"),
-    request: v.string(),
-    recentConversation: v.string(),
-    selectedToolNames: v.array(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const credential = await resolveOptionalDecisionCredential(ctx, args.spaceId, args.requestedBy);
-    if (!credential) return null;
-    const decision = await safeTurnDecision(credential, args.request, args.recentConversation);
-    if (!decision) return null;
-    await ctx.runMutation(internal.jev.record, {
-      spaceId: args.spaceId,
-      roomId: args.roomId,
-      jobId: args.jobId,
-      source: "chat_turn",
-      inputPreview: args.request,
-      decision: decision.route,
-      confidence: decision.routeConfidence,
-      details: {
-        ...decision,
-        shadowSamplePercent: SHADOW_ROUTING_SAMPLE_PERCENT,
-        guidanceApplied: false,
-        selectedToolNames: args.selectedToolNames,
-      },
-      model: decision.model,
-      latencyMs: decision.latencyMs,
-      inputTokens: decision.inputTokens,
-    });
     return null;
   },
 });
@@ -467,17 +439,6 @@ export function decisionContextForAgentJob(messages: AgentMessage[]) {
     return cleaned ? [`${message.role === "user" ? "Person" : "Saathi"}: ${cleaned}`] : [];
   });
   return lines.join("\n").slice(-6_000);
-}
-
-export function shouldSampleShadowRouting(value: string, percent = SHADOW_ROUTING_SAMPLE_PERCENT) {
-  if (percent <= 0) return false;
-  if (percent >= 100) return true;
-  let hash = 2_166_136_261;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return (hash >>> 0) % 100 < percent;
 }
 
 async function safeTurnDecision(credential: DecisionCredential, request: string, recentConversation: string) {

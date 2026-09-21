@@ -77,8 +77,16 @@ describe("durable family agent", () => {
       cachedInputTokens: -5,
       costUsd: Number.POSITIVE_INFINITY,
       billingSource: "family",
+      decisionUsage: { model: "openai/gpt-5.6-luna", inputTokens: 4, outputTokens: 2 },
+      uiActions: [{ kind: "open_settings", label: "Review settings" }],
     });
 
+    await expect(owner.query(api.rooms.messages, { roomId })).resolves.toEqual([
+      expect.objectContaining({
+        originalText: "Done",
+        uiActions: [{ kind: "open_settings", label: "Review settings" }],
+      }),
+    ]);
     expect(await t.run(ctx => ctx.db.query("usageLedger").collect())).toEqual([
       expect.objectContaining({
         provider: "openrouter",
@@ -88,6 +96,16 @@ describe("durable family agent", () => {
         cachedInputTokens: 0,
         costUsd: 0,
         billingSource: "family",
+        costClass: "chat",
+      }),
+      expect.objectContaining({
+        provider: "openrouter",
+        model: "openai/gpt-5.6-luna",
+        quantity: 6,
+        inputTokens: 4,
+        outputTokens: 2,
+        billingSource: "family",
+        costClass: "decision",
       }),
     ]);
   });

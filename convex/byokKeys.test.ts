@@ -28,12 +28,12 @@ describe("family BYOK", () => {
     ]);
     const publicJson = JSON.stringify(await owner.query(api.spaces.providerKeyStatus, { spaceId }));
     expect(publicJson).not.toContain("sk-test-family-key-1234567890");
-    expect(await t.query(internal.spaces.resolveProviderKey, { spaceId, provider: "openai" })).toBe("sk-test-family-key-1234567890");
+    expect(await t.query(internal.spaces.resolveProviderCredential, { spaceId, userId: ownerId, provider: "openai" })).toMatchObject({ ownedSecret: "sk-test-family-key-1234567890" });
     expect(await t.run(async ctx => (await ctx.db.query("providerKeys").unique())?.sealedSecret)).toMatch(/^v2:/);
 
     await owner.mutation(api.spaces.removeProviderKey, { spaceId, provider: "openai" });
     expect(await owner.query(api.spaces.providerKeyStatus, { spaceId })).toEqual([]);
-    expect(await t.query(internal.spaces.resolveProviderKey, { spaceId, provider: "openai" })).toBeNull();
+    expect(await t.query(internal.spaces.resolveProviderCredential, { spaceId, userId: ownerId, provider: "openai" })).toMatchObject({ ownedSecret: null });
 
     const legacySecret = "sk-test-legacy-family-key-1234567890";
     await t.run(async ctx => {
@@ -46,7 +46,7 @@ describe("family BYOK", () => {
         updatedAt: Date.now(),
       });
     });
-    expect(await t.query(internal.spaces.resolveProviderKey, { spaceId, provider: "openai" })).toBe(legacySecret);
+    expect(await t.query(internal.spaces.resolveProviderCredential, { spaceId, userId: ownerId, provider: "openai" })).toMatchObject({ ownedSecret: legacySecret });
   });
 });
 

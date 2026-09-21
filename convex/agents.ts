@@ -6,6 +6,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireAiAccess, requireRoomPermission } from "./lib/authz";
+import { conversationUiActionValidator } from "./lib/conversationUi";
 import { profileNameForUser } from "./lib/firecrawlInteract";
 import { imageKindValidator, imageLanguageValidator, imageStyleValidator } from "./lib/imageSafety";
 import { isNoReplyText } from "./lib/saathi";
@@ -165,6 +166,8 @@ export const finish = internalMutation({
     cachedInputTokens: v.optional(v.number()), cacheWriteTokens: v.optional(v.number()),
     costUsd: v.optional(v.number()),
     billingSource: v.optional(v.union(v.literal("platform"), v.literal("family"))),
+    decisionUsage: v.optional(v.object({ model: v.string(), inputTokens: v.number(), outputTokens: v.number() })),
+    uiActions: v.optional(v.array(conversationUiActionValidator)),
   },
   returns: v.boolean(),
   handler: async (ctx, args) => {
@@ -192,7 +195,8 @@ export const finish = internalMutation({
       const completedAt = Date.now();
       await ctx.db.insert("messages", {
         spaceId: agent.spaceId, roomId: agent.roomId, actorType: "assistant", origin: "assistant",
-        originalText: responseText, language: "en", idempotencyKey: `agent-${job._id}`, createdAt: completedAt,
+        originalText: responseText, language: "en", idempotencyKey: `agent-${job._id}`,
+        uiActions: args.uiActions?.slice(0, 3), createdAt: completedAt,
       });
       await recordAgentEpisode(ctx, {
         agentId: agent._id, spaceId: agent.spaceId, roomId: agent.roomId, requestedBy: job.requestedBy,
@@ -219,6 +223,23 @@ export const finish = internalMutation({
         cachedInputTokens,
         cacheWriteTokens,
         billingSource: args.billingSource,
+        createdAt: Date.now(),
+      });
+    }
+    const decisionInputTokens = finiteNonnegative(args.decisionUsage?.inputTokens);
+    const decisionOutputTokens = finiteNonnegative(args.decisionUsage?.outputTokens);
+    if (args.decisionUsage && decisionInputTokens + decisionOutputTokens > 0) {
+      await ctx.db.insert("usageLedger", {
+        spaceId: agent.spaceId,
+        userId: job.requestedBy,
+        provider: "openrouter",
+        model: args.decisionUsage.model,
+        unit: "token",
+        quantity: decisionInputTokens + decisionOutputTokens,
+        costClass: "decision",
+        inputTokens: decisionInputTokens,
+        outputTokens: decisionOutputTokens,
+        billingSource: "family",
         createdAt: Date.now(),
       });
     }

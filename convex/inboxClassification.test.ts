@@ -10,7 +10,7 @@ describe("shared inbox classification telemetry", () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {
       const now = Date.now();
-      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test", platformRole: "superadmin" });
       const memberId = await ctx.db.insert("users", { email: "member@example.test" });
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "inbox-telemetry", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
@@ -83,7 +83,7 @@ describe("shared inbox classification telemetry", () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {
       const now = Date.now();
-      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test", platformRole: "superadmin" });
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "inbox-failure", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
       const inboxItemId = await ctx.db.insert("inboxItems", {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { MULTILINGUAL_INTENT_GUIDANCE, turnDecisionGuidance, type JevTurnDecision } from "./jev.js";
 import { shouldIgnoreEmail } from "../gmail.js";
 
-const metadata = { model: "jev-latest", inputTokens: 20, latencyMs: 12 };
+const metadata = { model: "jev-latest", inputTokens: 20, outputTokens: 5, latencyMs: 12 };
 
 describe("Jev decision policy", () => {
   test("asks for clarification only when routing evidence crosses the policy boundary", () => {

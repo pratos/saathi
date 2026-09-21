@@ -102,9 +102,9 @@ Desktop: nav rail · conversation list · active conversation · settings/contex
 | Chats | My Saathi + family rooms | `rooms.list`, `rooms.messages` |
 | Updates | Family inbox, suggested actions | `inbox.list` |
 | Files | Space attachments | `attachments.forSpace` |
-| Family | Language, Gmail, food budget, inbox address, model tier, BYOK, invites | `users.current`, `gmailData.mine`, `budget.food`, `spaces.*`, `invitations.list` |
+| Family | Language, Gmail, food budget, inbox address, BYOK-only model/usage/key controls, invites | `users.current`, `gmailData.mine`, `budget.food`, `spaces.*`, `invitations.list` |
 
-Owners can open Jev debug. `jev.canViewBenchmarks` gates the private benchmark report (server-side admin check; the client never embeds an admin email).
+Superadmins can open Jev debug. The backend checks both family access and the configured superadmin role; benchmark reports are not exposed in the product.
 
 ---
 
@@ -118,12 +118,15 @@ LiveRoom composer
   → insert messages
   → if assistantMode ≠ off: queue agentJobs, schedule agentWorker.run
   → Pi (Node 22) against OpenRouter (space model tier / BYOK)
-  → Jev may route tools / memory triage (Typesafe, optional)
+  → Jev classifies the turn in parallel and maps its route to trusted UI actions
+  → Jev may route tools / memory triage (TypeSafe or family OpenRouter BYOK)
   → tools: search_public_web (Firecrawl), use_computer (Firecrawl Interact),
            generate_image (Muse), conversation actions (language, budget,
            model tier, memory, inbox/file search)
-  → transcript persisted on agentMessages; reply written as assistant message
+  → transcript persisted on agentMessages; reply and suggested UI actions written as assistant message
 ```
+
+Jev's UI vocabulary can open settings, inbox, files, image creation, or voice, or draft a follow-up. These controls never execute external or destructive work directly.
 
 Saathi **cannot** send email, unsubscribe, pay, delete, or invite. Those stay on confirmable Saathi mutations. Chat attachments go `attachments.generateUploadUrl` → Convex storage → `attachments.submit` → photo/document read actions.
 
@@ -165,7 +168,8 @@ LiveRoom mic
   → tools: web search, use_computer, generate_image, conversation actions
   → optional voiceBrowserSessions (Firecrawl computer-use, live view,
      never stores passwords)
-  → liveVoice.finishSession → one saved post-call summary on the room
+  → liveVoice.finishSession → summary + Jev next-action classification
+  → one saved post-call summary with trusted UI actions on the room
 ```
 
 ### E. Invitations and multi-family
@@ -183,7 +187,7 @@ Owner `invitations.createAndSend` emails a token. Invitee signs in with that add
 | OpenAI | Inbox extraction, GPT-Live voice | `OPENAI_API_KEY` or space BYOK |
 | Firecrawl | Web search, document parse, computer-use browser | `FIRECRAWL_API_KEY` |
 | Composio | Gmail OAuth, triggers, message fetch | `COMPOSIO_API_KEY`, `COMPOSIO_WEBHOOK_SECRET` |
-| Typesafe (optional) | Jev turn / bundle / memory / email decisions | `TYPESAFE_API_KEY` |
+| TypeSafe (managed access) | Jev turn / bundle / memory / email decisions | `TYPESAFE_API_KEY` |
 
 Convex components: `@convex-dev/auth`, `@convex-dev/rate-limiter`, `@convex-dev/workflow`, `@convex-dev/static-hosting`, `@agentmail/convex`, `@firecrawl/firecrawl-convex`.
 
@@ -191,7 +195,7 @@ Convex components: `@convex-dev/auth`, `@convex-dev/rate-limiter`, `@convex-dev/
 
 ## 7. Public vs internal (attack surface)
 
-**Client-reachable (selected):** `users.*`, `spaces.*`, `rooms.list|ensurePersonal|messages`, `messages.post`, `inbox.list|confirmAction|dismissAction|reprocess`, `agents.send|forRoom`, `attachments.*` (public), `gmail.beginConnection|confirmConnection|checkNow`, `gmailData.mine|pendingForRoom|shareWithFamily`, `invitations.list|createAndSend|revoke|accept`, `liveVoice.startSession|searchPublicWeb|useComputer|finishSession|…`, `images.forRoom|createFromVoice`, `budget.*`, `mentions.candidates`, `conversationActions.execute`, `jev.recent|evaluate|canViewBenchmarks|benchmarkReport`.
+**Client-reachable (selected):** `users.*`, `spaces.*`, `rooms.list|ensurePersonal|messages`, `messages.post`, `inbox.list|confirmAction|dismissAction|reprocess`, `agents.send|forRoom`, `attachments.*` (public), `gmail.beginConnection|confirmConnection|checkNow`, `gmailData.mine|pendingForRoom|shareWithFamily`, `invitations.list|createAndSend|revoke|accept`, `liveVoice.startSession|searchPublicWeb|finishSession|…`, `images.forRoom|createFromVoice`, `budget.*`, `mentions.candidates`, `conversationActions.execute`, `jev.recent|evaluate`.
 
 **Internal only:** AgentMail ingest, inbox workflow steps, `agentWorker.run`, Gmail process/backfill, voice-browser controller, photo/document readers, Jev claim/complete, provider-key resolve.
 

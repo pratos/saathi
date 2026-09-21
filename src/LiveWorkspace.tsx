@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, t
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
+import DOMPurify from 'dompurify'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -11,11 +12,8 @@ import {
   Bell,
   Bot,
   Camera,
-  ChartBar,
   Check,
-  CircleDollarSign,
   Copy,
-  Database,
   FileText,
   Folder,
   Image as ImageIcon,
@@ -54,7 +52,7 @@ import './Access.css'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
-type BenchmarkReport = FunctionReturnType<typeof api.jev.benchmarkReport>
+type ConversationUiAction = NonNullable<Doc<'messages'>['uiActions']>[number]
 type MentionCandidate =
   | { kind: 'assistant'; username: 'saathi'; label: string }
   | { kind: 'person'; username: string; label: string; userId: Id<'users'> }
@@ -122,7 +120,7 @@ function FamilyAccessEntry({ families, family, onSelectFamily, onExit }: {
   const access = useQuery(api.spaces.aiAccess, { spaceId: family.space._id })
   if (access === undefined) return <LiveStatus message="Checking AI access…" />
   if (!access.ready) return <AiAccessSetup family={family} access={access} onExit={onExit} />
-  return <LiveFamilyShell families={families} family={family} onSelectFamily={onSelectFamily} onExit={onExit} isSuperadmin={access.isSuperadmin} />
+  return <LiveFamilyShell families={families} family={family} onSelectFamily={onSelectFamily} onExit={onExit} isSuperadmin={access.isSuperadmin} accessSource={access.source} />
 }
 
 function AiAccessSetup({ family, access, onExit }: {
@@ -290,16 +288,16 @@ function CreateFirstFamily({ onExit, isSuperadmin = false }: { onExit: () => voi
   )
 }
 
-function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmin }: {
+function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmin, accessSource }: {
   families: FamilyRow[]
   family: FamilyRow
   onSelectFamily: (spaceId: Id<'spaces'>) => void
   onExit: () => void
   isSuperadmin: boolean
+  accessSource: 'byok' | 'platform' | 'none'
 }) {
   const { signOut } = useAuthActions()
   const user = useQuery(api.users.current)
-  const canViewBenchmarks = useQuery(api.jev.canViewBenchmarks)
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
   const ensurePersonalRoom = useMutation(api.rooms.ensurePersonal)
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
@@ -325,7 +323,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const [profileOpen, setProfileOpen] = useState(false)
   const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
   const [jevOpen, setJevOpen] = useState(false)
-  const [benchmarkAdminOpen, setBenchmarkAdminOpen] = useState(false)
   const createSpace = useMutation(api.spaces.create)
   const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
   const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
@@ -335,7 +332,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
   const selectedRoom = rooms?.flatMap(({ room }) => room ? [room] : []).find(room => room._id === selectedRoomId) ?? sharedRoom
   const initials = initialsFor(user?.displayName ?? user?.name ?? user?.email ?? 'Family member')
-  const isBenchmarkAdmin = canViewBenchmarks === true
 
   useEffect(() => {
     if (rooms === undefined || personalRoom) return
@@ -402,16 +398,15 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       : 'home'
 
   return (
-    <main className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}${isBenchmarkAdmin ? ' is-benchmark-admin' : ''}`}>
+    <main className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Home</span></button>
         <button className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => openPane('updates')}><Bell /><span>Inbox</span></button>
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
         <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
-        {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Debug</span></button>}
+        {isSuperadmin && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Debug</span></button>}
         {isSuperadmin && <button className="rail-action" onClick={openAdminDashboard}><ShieldCheck /><span>Access</span></button>}
-        {isBenchmarkAdmin && <button className={`rail-action ${benchmarkAdminOpen ? 'active' : ''}`} onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /><span>Benchmarks</span></button>}
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
           {profileOpen && <div className="session-menu" role="menu">
@@ -454,7 +449,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       ) : pane === 'files' ? (
         <FamilyFiles family={family} files={spaceFiles} onBack={openHome} onOpenRoom={openRoom} />
       ) : selectedRoom ? (
-        <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} onBack={openHome} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
+        <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} onBack={openHome} onNavigate={openPane} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
       ) : (
         <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
       )}
@@ -512,7 +507,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         </section>
         <section className="food-budget">
           <span>Food budget</span>
-          <p>Approved food receipts, including Swiggy and Zomato, count toward this monthly budget.</p>
+          <p>Approved food receipts, including Swiggy and Zomato, count toward this family budget. Family members can see totals; only owners can change the limit.</p>
           <strong>{foodBudget?.monthlyLimit != null ? `${foodBudget.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget.spentThisMonth)} of ${foodBudget.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget.monthlyLimit)} this month` : `${foodBudget?.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget?.spentThisMonth ?? 0)} tracked this month`}</strong>
           {family.membership.role === 'owner' && <form onSubmit={(event) => { event.preventDefault(); const monthlyLimit = Number(budgetDraft); if (!monthlyLimit) return; setBudgetBusy(true); void setFoodLimit({ spaceId: family.space._id, monthlyLimit, currency: budgetCurrency }).then(() => setBudgetDraft('')).finally(() => setBudgetBusy(false)) }}>
             <div className="chip-row" role="radiogroup" aria-label="Budget currency">
@@ -522,19 +517,18 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
           </form>}
         </section>
         <details className="settings-disclosure">
-          <summary><span>Advanced settings</span><small>Family inbox address, AI model, and provider keys</small></summary>
+          <summary><span>Advanced settings</span><small>{accessSource === 'byok' ? 'Family inbox address, AI model, usage, and provider keys' : 'Family inbox address and access controls'}</small></summary>
           <section><span>Family inbox</span>{family.space.agentmailInboxId
           ? <div className="agentmail-id"><p className="confirmed"><Check /> AgentMail is connected</p><code>{family.space.agentmailEmail ?? family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailEmail ?? family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy'}</button></div>
           : family.membership.role === 'owner'
             ? <ConnectInbox spaceId={family.space._id} />
             : <p>Ask a family owner to connect AgentMail.</p>}</section>
-          {family.membership.role === 'owner' && <section><span>Family model</span><ModelTierControls spaceId={family.space._id} /></section>}
-          {family.membership.role === 'owner' && <section><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
+          {family.membership.role === 'owner' && accessSource === 'byok' && <section><span>Models and usage</span><ModelTierControls spaceId={family.space._id} /></section>}
+          {family.membership.role === 'owner' && accessSource === 'byok' && <section><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
         </details>
         {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
-        {family.membership.role === 'owner' && <section className="jev-settings-card"><span>Jev debug</span><p>Preview routing and inspect recent chat, Voice, and Gmail decision logs without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Debug</button></section>}
+        {isSuperadmin && <section className="jev-settings-card"><span>Jev debug</span><p>Preview routing and inspect recent chat, Voice, and Gmail decision logs without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Debug</button></section>}
         {isSuperadmin && <section className="jev-settings-card"><span>Deployment access</span><p>Approve or block accounts that request deployment-funded AI access.</p><button type="button" className="connect-gmail" onClick={openAdminDashboard}><ShieldCheck /> Open access dashboard</button></section>}
-        {isBenchmarkAdmin && <section className="jev-settings-card"><span>Private benchmark report</span><p>Review multilingual quality, routing safety, cost estimates, and prompt-cache tradeoffs.</p><button type="button" className="connect-gmail" onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /> Open benchmarks</button></section>}
         </div>
       </aside>
       <nav className="mobile-workspace-nav" aria-label="Workspace">
@@ -545,114 +539,9 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       </nav>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
-      {jevOpen && <JevLabDrawer spaceId={family.space._id} onClose={() => setJevOpen(false)} />}
-      {benchmarkAdminOpen && isBenchmarkAdmin && <BenchmarkAdminPage onClose={() => setBenchmarkAdminOpen(false)} />}
+      {jevOpen && isSuperadmin && <JevLabDrawer spaceId={family.space._id} onClose={() => setJevOpen(false)} />}
     </main>
   )
-}
-
-function BenchmarkAdminPage({ onClose }: { onClose: () => void }) {
-  const report = useQuery(api.jev.benchmarkReport)
-
-  useEffect(() => {
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => event.key === 'Escape' && onClose()
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
-
-  if (report === undefined) {
-    return <div className="benchmark-admin-page"><div className="benchmark-admin-loading" role="status"><i />Loading private benchmark report…</div></div>
-  }
-  return <BenchmarkReportView report={report} onClose={onClose} />
-}
-
-export function BenchmarkReportView({ report, onClose }: { report: BenchmarkReport; onClose: () => void }) {
-  const direct15 = report.conditions.find(result => result.id === 'A')!
-  const direct200 = report.conditions.find(result => result.id === 'B')!
-  const routed200 = report.conditions.find(result => result.id === 'D')!
-  const cacheRate = (condition: typeof direct15) => condition.promptTokens ? condition.cacheTokens / condition.promptTokens * 100 : 0
-
-  return <div className="benchmark-admin-page">
-    <header className="benchmark-admin-header">
-      <div><span><ChartBar /> Private admin report</span><h1>End-to-end tool routing</h1><p>{report.repetitions} repetitions · {report.casesPerCondition} cases per condition · {report.model}</p></div>
-      <button type="button" onClick={onClose} aria-label="Close benchmark report" autoFocus><X /></button>
-    </header>
-    <div className="benchmark-admin-scroll">
-      <section className="benchmark-summary-grid" aria-label="Benchmark summary">
-        <article><ChartBar /><span>Best production choice</span><strong>{(direct15.passed / direct15.total * 100).toFixed(1)}%</strong><small>Direct Pi · 15 tools · {direct15.endToEndLatency.p95Ms.toLocaleString()} ms p95</small></article>
-        <article><CircleDollarSign /><span>Jev scale saving</span><strong>{report.promotionGates.expandedCostReductionPercent.toFixed(1)}%</strong><small>Lower cost than direct 200 · latency gate failed</small></article>
-        <article><ShieldCheck /><span>Safety regression</span><strong>None</strong><small>0 unsafe · 2 duplicate calls in C</small></article>
-      </section>
-
-      <section className="benchmark-recommendation" aria-label="Benchmark recommendation">
-        <header><span>Decision now</span><h2>Keep direct Pi as the default. Do not enable Jev pre-turn guidance globally yet.</h2></header>
-        <div className="benchmark-recommendation-grid">
-          <article className="selected"><small>Use now</small><strong>Direct Pi · 15</strong><p>{direct15.passed}/{direct15.total} exact, lowest end-to-end cost, and no sidecar latency.</p></article>
-          <article className="rejected"><small>Current Jev pre-turn path</small><strong>Fails 3 of 4 gates</strong><p>At 200 tools accuracy was unchanged, but p95 became {Math.abs(report.promotionGates.expandedP95ReductionPercent).toFixed(1)}% slower and cost fell only {report.promotionGates.expandedCostReductionPercent.toFixed(1)}%.</p></article>
-          <article><small>What worked</small><strong>Accuracy + safety at 200</strong><p>Pre-turn guidance matched direct Pi at 107/117 exact with no unsafe calls.</p></article>
-        </div>
-        <p><strong>Recommendation:</strong> {report.recommendation}</p>
-      </section>
-
-      <section className="benchmark-panel benchmark-decision-panel">
-        <div className="benchmark-report-heading">
-          <div><span>Comparable end-to-end benchmark</span><h2>Same cases, settings, and scoring</h2></div>
-          <small>{report.conditions.length * report.casesPerCondition} Pi responses<br />Exact effective-call scoring<br />No selected tools executed</small>
-        </div>
-        <div className="benchmark-table-wrap">
-          <table className="benchmark-decision-table">
-            <thead><tr><th>Candidate</th><th>Accuracy</th><th>Wrong / safety</th><th>Avg tools</th><th>E2E p50</th><th>E2E p95</th><th>Cost</th></tr></thead>
-            <tbody>
-              {report.conditions.map(condition => <tr key={condition.id} className={condition.id === 'A' ? 'recommended' : condition.id === 'D' ? 'rejected' : undefined}>
-                <th><span>{condition.id}</span>{condition.label}</th>
-                <td><strong>{(condition.passed / condition.total * 100).toFixed(1)}%</strong><br /><small>{condition.passed}/{condition.total} exact</small></td>
-                <td>{condition.wrongCalls} wrong<br /><small>{condition.safetySignificantCalls} unsafe</small></td>
-                <td><strong>{condition.averageExposedTools.toFixed(1)}</strong></td>
-                <td><strong>{condition.endToEndLatency.medianMs.toLocaleString()} ms</strong></td>
-                <td><strong>{condition.endToEndLatency.p95Ms.toLocaleString()} ms</strong></td>
-                <td><strong>{formatTinyUsd(condition.combinedCostUsd)}</strong><br /><small>{formatTinyUsd(condition.combinedCostUsd / condition.total)} / turn</small></td>
-              </tr>)}
-            </tbody>
-          </table>
-        </div>
-        <div className="benchmark-verdicts">
-          <article><strong className={report.promotionGates.accuracyPassed ? '' : 'benchmark-gate-fail'}>Accuracy · fail</strong><span>C vs A {report.promotionGates.currentAccuracyDeltaPoints.toFixed(2)} points; D vs B {report.promotionGates.expandedAccuracyDeltaPoints.toFixed(2)}. Required: no worse than −3.</span></article>
-          <article><strong>Safety · pass</strong><span>No unsafe calls. C produced two extra duplicate calls.</span></article>
-          <article><strong className={report.promotionGates.latencyPassed ? '' : 'benchmark-gate-fail'}>P95 latency · fail</strong><span>D was {Math.abs(report.promotionGates.expandedP95ReductionPercent).toFixed(1)}% slower than B. Required: at least 30% faster.</span></article>
-          <article><strong className={report.promotionGates.costPassed ? '' : 'benchmark-gate-fail'}>Cost · fail</strong><span>D cost {report.promotionGates.expandedCostReductionPercent.toFixed(1)}% less than B. Required: at least 40% less.</span></article>
-        </div>
-        <p className="benchmark-evidence-note">C and D include only Jev pre-turn route guidance and the same complete 15/200-tool registry as their direct baseline. No Jev tool-list narrowing or per-tool execution gate was used.</p>
-      </section>
-
-      <section className="benchmark-panel cache-panel">
-        <div className="benchmark-panel-title"><div><span>Measured cache impact</span><h2>Stable prefixes, one pre-turn call</h2></div></div>
-        <div className="cache-explanation">
-          <article><strong>Direct 200</strong><p>{cacheRate(direct200).toFixed(1)}% of prompt tokens were reported cached, but the fixed 200-tool prefix still produced {direct200.promptTokens.toLocaleString()} prompt tokens.</p></article>
-          <article><strong>Jev pre-turn 200</strong><p>{cacheRate(routed200).toFixed(1)}% were cached with the same stable full registry; prompt tokens were {routed200.promptTokens.toLocaleString()}.</p></article>
-        </div>
-        <p className="benchmark-cache-warning"><strong>Interpretation:</strong> pre-turn guidance preserves the stable tool prefix and cache behavior. It does not reduce context pressure, while the route call adds end-to-end latency.</p>
-      </section>
-
-      <section className="benchmark-panel">
-        <div className="benchmark-panel-title"><div><span>Separate benchmark</span><h2>Memory decisions</h2></div><small>{report.memory.inputTokens.toLocaleString()} Jev input tokens · {formatTinyUsd(report.memory.costUsd)}</small></div>
-        <div className="benchmark-language-grid"><BenchmarkLanguageTable title="Recall / store / lifecycle" results={report.memory.languages} /></div>
-        <div className="benchmark-safety-note"><Database /><span><strong>{report.memory.passed}/{report.memory.total} correct.</strong> This memory benchmark remains separate from the tool-selection promotion decision.</span></div>
-      </section>
-
-      <footer className="benchmark-method">
-        <strong>Method and billing note</strong>
-        <p>Commit {report.commit.slice(0, 7)} with Jev retained only before the Pi turn. The same 39 English, Hindi/Hinglish, and Marathi cases were counterbalanced across three repetitions. Results are a deterministic replay of the captured route and Pi responses because the removed gate ran only after Pi returned; no selected function tool was executed.</p>
-      </footer>
-    </div>
-  </div>
-}
-
-function BenchmarkLanguageTable({ title, results }: { title: string; results: BenchmarkReport['memory']['languages'] }) {
-  return <article><h3>{title}</h3>{results.map(result => <div key={result.language}><span>{result.language}</span><i><b style={{ width: `${result.passed / result.total * 100}%` }} /></i><strong>{result.passed}/{result.total}</strong></div>)}</article>
-}
-
-function formatTinyUsd(value: number) {
-  return `$${value.toFixed(6)}`
 }
 
 function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: () => void }) {
@@ -843,11 +732,12 @@ function jevExecutionSummary(
   return { tone: 'warning', label: 'Finished without a reply', detail: 'Pi completed the run but produced no visible answer.' }
 }
 
-function LiveRoom({ room, family, families, onBack, onInvite }: {
+function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
   room: Doc<'rooms'>
   family: FamilyRow
   families: FamilyRow[]
   onBack: () => void
+  onNavigate: (pane: 'updates' | 'files' | 'family') => void
   onInvite?: () => void
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
@@ -897,6 +787,25 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
     ...(generatedImages ?? []).map((item) => ({ kind: 'image' as const, createdAt: item.createdAt, item })),
     ...(attachments ?? []).map((item) => ({ kind: 'attachment' as const, createdAt: item.createdAt, item })),
   ].sort((left, right) => left.createdAt - right.createdAt), [messages, generatedImages, attachments, attachmentMessageIds])
+
+  const useUiAction = (action: ConversationUiAction) => {
+    if (action.kind === 'open_settings') return onNavigate('family')
+    if (action.kind === 'open_inbox') return onNavigate('updates')
+    if (action.kind === 'open_files') return onNavigate('files')
+    if (action.kind === 'open_image') {
+      setImageOpen(true)
+      requestAnimationFrame(() => textareaRef.current?.focus())
+      return
+    }
+    if (action.kind === 'start_voice') {
+      void voice.start()
+      return
+    }
+    if (action.kind === 'send_prompt' && action.prompt) {
+      setMessage(action.prompt)
+      requestAnimationFrame(() => textareaRef.current?.focus())
+    }
+  }
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ block: 'end' })
@@ -1088,12 +997,12 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
               ? <article className="outgoing-message saved-voice-transcript" key={`message-${entry.item._id}`}><span>You · voice transcript · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
               : entry.item.voiceSpeaker === 'assistant'
                 ? <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
-                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p>{entry.item.voiceSeconds !== undefined && <small className="voice-call-cost">{formatVoiceDuration(entry.item.voiceSeconds)} · est. {formatVoiceCost(entry.item.voiceCostUsd ?? 0)} GPT‑Live{entry.item.voiceUsageFinalized === false ? ' · final usage unavailable' : ''}</small>}</div></article>
+                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p>{entry.item.voiceSeconds !== undefined && <small className="voice-call-cost">{formatVoiceDuration(entry.item.voiceSeconds)} · est. {formatVoiceCost(entry.item.voiceCostUsd ?? 0)} GPT‑Live{entry.item.voiceUsageFinalized === false ? ' · final usage unavailable' : ''}</small>}<ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} /></div></article>
             : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
-                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
+                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{entry.item.actorType === 'assistant' && <ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} />}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
               </article>)}
         {voice.summarizing && (
           <article className="person-message assistant-message saathi-stream" aria-live="polite">
@@ -1200,6 +1109,17 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
       />}
     </section>
   )
+}
+
+function ConversationUiActions({ actions, onAction }: {
+  actions: ConversationUiAction[] | undefined
+  onAction: (action: ConversationUiAction) => void
+}) {
+  if (!actions?.length) return null
+  return <div className="conversation-ui-actions" aria-label="Suggested next actions">
+    <span><Sparkles /> Suggested next steps</span>
+    <div>{actions.map(action => <button type="button" key={`${action.kind}-${action.label}`} onClick={() => onAction(action)}>{action.label}</button>)}</div>
+  </div>
 }
 
 function GeneratedImageLightbox({ image, onClose }: {
@@ -1677,6 +1597,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
   const confirmAction = useMutation(api.inbox.confirmAction)
   const dismissAction = useMutation(api.inbox.dismissAction)
   const reprocess = useMutation(api.inbox.reprocess)
+  const [openItem, setOpenItem] = useState<Doc<'inboxItems'> | null>(null)
   return <section className="conversation-pane">
     <header className="conversation-header live-room-header">
       <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
@@ -1688,7 +1609,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
       {items?.map(item => <article className="person-message inbox-card" key={item._id}>
         <span className="message-avatar email"><Mail /></span>
         <div>
-          <h3>{item.subject} <small>· {categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
+          <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>· {categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
           <div className="simple-message">
             <p>{displaySender(item.sender)}</p>
             {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
@@ -1702,6 +1623,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
             {(item.suggestedActions ?? []).map(action => <p key={`${item._id}-${action.kind}`}>{action.label}{action.detail ? ` — ${action.detail}` : ''}</p>)}
+            <div className="inbox-actions"><button type="button" className="secondary" onClick={() => setOpenItem(item)}>Open email</button></div>
             {item.actionStatus === 'suggested' && <div className="inbox-actions">
               <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Confirm action</button>
               <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Not now</button>
@@ -1721,7 +1643,81 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
         </div>
       </article>)}
     </div>
+    {openItem && <EmailDetailDialog item={openItem} onClose={() => setOpenItem(null)} />}
   </section>
+}
+
+function EmailDetailDialog({ item, onClose }: { item: Doc<'inboxItems'>; onClose: () => void }) {
+  const [loadRemoteImages, setLoadRemoteImages] = useState(false)
+  const onCloseRef = useRef(onClose)
+  const documentHtml = useMemo(() => buildSafeEmailDocument(item, loadRemoteImages), [item, loadRemoteImages])
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => event.key === 'Escape' && onCloseRef.current()
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', closeOnEscape)
+      previouslyFocused?.focus()
+    }
+  }, [])
+
+  return <div className="email-detail-backdrop" role="presentation" onMouseDown={onClose}>
+    <section className="email-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="email-detail-title" onMouseDown={event => event.stopPropagation()}>
+      <header>
+        <div><span>{displaySender(item.sender)}</span><h2 id="email-detail-title">{item.subject}</h2><small>{categoryLabel(item.category)} · {formatRelativeTime(item.receivedAt)}</small></div>
+        <button type="button" onClick={onClose} aria-label="Close email" autoFocus><X /></button>
+      </header>
+      <div className="email-detail-controls">
+        <span>Links open in a new tab. Scripts and forms are blocked.</span>
+        {!loadRemoteImages && <button type="button" onClick={() => setLoadRemoteImages(true)}>Load remote images</button>}
+      </div>
+      <iframe
+        className="email-detail-frame"
+        title={`Email: ${item.subject}`}
+        sandbox="allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="no-referrer"
+        srcDoc={documentHtml}
+      />
+    </section>
+  </div>
+}
+
+function buildSafeEmailDocument(item: Doc<'inboxItems'>, loadRemoteImages: boolean) {
+  const raw = item.originalHtml?.trim() || `<p>${escapeHtml(item.originalText)}</p>`
+  const sanitized = DOMPurify.sanitize(raw, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option'],
+  })
+  const parsed = new DOMParser().parseFromString(String(sanitized), 'text/html')
+  parsed.querySelectorAll('a[href]').forEach(link => {
+    link.setAttribute('target', '_blank')
+    link.setAttribute('rel', 'noopener noreferrer')
+  })
+  if (!loadRemoteImages) {
+    parsed.querySelectorAll('img[src]').forEach(image => {
+      const src = image.getAttribute('src') ?? ''
+      if (!/^(data:|blob:)/i.test(src)) {
+        image.removeAttribute('src')
+        image.setAttribute('data-remote-image-blocked', 'true')
+        image.setAttribute('title', 'Remote image blocked for privacy')
+      }
+    })
+  }
+  const imageSources = loadRemoteImages ? 'data: blob: https: http:' : 'data: blob:'
+  const emailStyles = Array.from(parsed.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>html{color:#273246;background:#fffdf8;font:16px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}body{max-width:760px;margin:0 auto;padding:24px;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[data-remote-image-blocked]{display:none}a{color:#234d86;text-decoration:underline}table{max-width:100%;border-collapse:collapse}pre{white-space:pre-wrap}</style>${emailStyles}</head><body>${parsed.body.innerHTML}</body></html>`
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;').replaceAll('\n', '<br>')
 }
 
 function FamilyFiles({ family, files, onBack, onOpenRoom }: {

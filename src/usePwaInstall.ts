@@ -21,13 +21,14 @@ export function usePwaInstall(): PwaInstallController {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [installed, setInstalled] = useState(isStandalone)
   const [snoozed, setSnoozed] = useState(() => readDismissedUntil() > Date.now())
-  const iosInstallAvailable = useMemo(() => 'standalone' in navigator, [])
+  const mobileInstallSurface = useMemo(() => isMobileInstallSurface(), [])
+  const iosInstallAvailable = useMemo(() => mobileInstallSurface && 'standalone' in navigator, [mobileInstallSurface])
 
   useEffect(() => {
     const displayMode = window.matchMedia('(display-mode: standalone)')
     const capturePrompt = (event: Event) => {
       event.preventDefault()
-      setInstallPrompt(event as BeforeInstallPromptEvent)
+      if (mobileInstallSurface) setInstallPrompt(event as BeforeInstallPromptEvent)
     }
     const updateInstalledState = () => setInstalled(isStandalone())
     const markInstalled = () => {
@@ -44,7 +45,7 @@ export function usePwaInstall(): PwaInstallController {
       window.removeEventListener('appinstalled', markInstalled)
       displayMode.removeEventListener('change', updateInstalledState)
     }
-  }, [])
+  }, [mobileInstallSurface])
 
   const dismiss = () => {
     writeDismissedUntil(Date.now() + DISMISSAL_MS)
@@ -65,8 +66,15 @@ export function usePwaInstall(): PwaInstallController {
     }
   }
 
-  const mode = installed || snoozed ? null : installPrompt ? 'native' : iosInstallAvailable ? 'ios' : null
+  const mode = !mobileInstallSurface || installed || snoozed ? null : installPrompt ? 'native' : iosInstallAvailable ? 'ios' : null
   return { mode, install, dismiss }
+}
+
+export function isMobileInstallSurface(currentNavigator: Pick<Navigator, 'userAgent' | 'maxTouchPoints'> = navigator) {
+  const userAgent = currentNavigator.userAgent
+  const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)
+  const iPadDesktopMode = /Macintosh/i.test(userAgent) && currentNavigator.maxTouchPoints > 1
+  return mobileUserAgent || iPadDesktopMode
 }
 
 function isStandalone() {

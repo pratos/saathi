@@ -2,13 +2,16 @@ import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, env, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { APPLICATION_ASSISTANT_TOOLS, assistantProviderTools } from "./lib/assistantCapabilities";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
 import { requireRoomPermission } from "./lib/authz";
-import { assertSafeComputerTask, assertSafeComputerUrl, profileNameForUser, runFirecrawlComputerTask } from "./lib/firecrawlInteract";
+import { conversationUiActionsForRoute, conversationUiActionValidator } from "./lib/conversationUi";
+import { profileNameForUser } from "./lib/firecrawlInteract";
+import { decideAgentTurn, type JevTurnDecision } from "./lib/jev";
 import { gptLiveCostUsd } from "./lib/liveVoiceUsage";
-import { resolveOpenAiCredential } from "./lib/providerKeys";
+import type { DecisionCredential } from "./lib/decisionProvider";
+import { resolveOpenAiCredential, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 import { searchPublicWeb as searchPublicWebWithFirecrawl } from "./lib/publicWeb";
 import { estimateGptLunaCostUsd, estimateOpenAiWebSearchCostUsd, GPT_LUNA_MODEL, type TokenUsage } from "./lib/usageCosts";
 
@@ -142,36 +145,6 @@ export const searchPublicWeb = action({
     await ctx.runMutation(internal.liveVoice.prepareExternalTool, { roomId });
     const message = await searchPublicWebWithFirecrawl(ctx, text);
     return { ok: true, message };
-  },
-});
-
-export const useComputer = action({
-  args: { roomId: v.id("rooms"), sessionId: v.string(), callId: v.string(), url: v.string(), task: v.string() },
-  returns: v.object({ ok: v.boolean(), message: v.string() }),
-  handler: async (ctx, { roomId, sessionId, callId, url, task }) => {
-    const safeUrl = assertSafeComputerUrl(url);
-    const safeTask = assertSafeComputerTask(task);
-    const prepared: { profileName: string; userId: Id<"users">; spaceId: Id<"spaces"> } = await ctx.runMutation(internal.liveVoice.prepareComputerTool, {
-      roomId, sessionId, callId, task: safeTask,
-    });
-    try {
-      const result = await runFirecrawlComputerTask({
-        apiKey: env.FIRECRAWL_API_KEY,
-        url: safeUrl,
-        task: safeTask,
-        profileName: prepared.profileName,
-        onLiveView: async (view) => {
-          await ctx.runMutation(internal.liveVoice.updateComputerView, {
-            roomId, sessionId, callId,
-            liveViewUrl: view.liveViewUrl,
-            interactiveLiveViewUrl: view.interactiveLiveViewUrl,
-          });
-        },
-      });
-      return { ok: true, message: result.output.slice(0, 8_000) };
-    } finally {
-      await ctx.runMutation(internal.liveVoice.finishComputerTool, { roomId, sessionId, callId });
-    }
   },
 });
 
@@ -380,12 +353,33 @@ export const finishSession = action({
       console.warn("VOICE_BROWSER_CLEANUP_FAILED");
     }
     const transcript = cleanedTurns.map(turn => `${turn.role === "user" ? "Caller" : "Saathi"}: ${turn.text}`).join("\n");
-    const credential = transcript
-      ? await resolveOpenAiCredential(ctx, prepared.spaceId, prepared.userId)
-      : null;
-    const summaryResult: { text: string; usage?: TokenUsage } = transcript
-      ? await summarizeCall(transcript, credential?.apiKey)
-      : { text: "Voice call completed with Saathi." };
+    const latestUserTurn = [...cleanedTurns].reverse().find(turn => turn.role === "user")?.text ?? "";
+    const [credential, decisionCredential] = transcript
+      ? await Promise.all([
+        resolveOpenAiCredential(ctx, prepared.spaceId, prepared.userId),
+        resolveOptionalDecisionCredential(ctx, prepared.spaceId, prepared.userId),
+      ])
+      : [null, null];
+    const [summaryResult, uiDecision]: [{ text: string; usage?: TokenUsage }, JevTurnDecision | null] = await Promise.all([
+      transcript ? summarizeCall(transcript, credential?.apiKey) : Promise.resolve({ text: "Voice call completed with Saathi." }),
+      latestUserTurn && decisionCredential
+        ? safeVoiceUiDecision(decisionCredential, latestUserTurn, transcript)
+        : Promise.resolve(null),
+    ]);
+    if (uiDecision) {
+      await ctx.runMutation(internal.jev.record, {
+        spaceId: prepared.spaceId,
+        roomId,
+        source: "voice_tool",
+        inputPreview: latestUserTurn,
+        decision: uiDecision.route,
+        confidence: uiDecision.routeConfidence,
+        details: { ...uiDecision, guidanceApplied: false, uiActionsDisplayed: true },
+        model: uiDecision.model,
+        latencyMs: uiDecision.latencyMs,
+        inputTokens: uiDecision.inputTokens,
+      });
+    }
     return await ctx.runMutation(internal.liveVoice.storeSummary, {
       roomId,
       sessionId,
@@ -395,6 +389,10 @@ export const finishSession = action({
       delegatedUsage,
       summaryUsage: summaryResult.usage,
       billingSource: prepared.billingSource ?? credential?.billingSource,
+      decisionUsage: decisionCredential?.kind === "byok_openrouter" && uiDecision
+        ? { model: uiDecision.model, inputTokens: uiDecision.inputTokens, outputTokens: uiDecision.outputTokens }
+        : undefined,
+      uiActions: conversationUiActionsForRoute(uiDecision?.route ?? ""),
     });
   },
 });
@@ -432,6 +430,8 @@ export const storeSummary = internalMutation({
     delegatedUsage: v.optional(tokenUsageValidator),
     summaryUsage: v.optional(tokenUsageValidator),
     billingSource: v.optional(billingSourceValidator),
+    decisionUsage: v.optional(v.object({ model: v.string(), inputTokens: v.number(), outputTokens: v.number() })),
+    uiActions: v.optional(v.array(conversationUiActionValidator)),
   },
   returns: v.union(v.literal("saved"), v.literal("already_saved")),
   handler: async (ctx, {
@@ -443,6 +443,8 @@ export const storeSummary = internalMutation({
     delegatedUsage,
     summaryUsage,
     billingSource,
+    decisionUsage,
+    uiActions,
   }) => {
     const { room, userId } = await requireRoomPermission(ctx, roomId, "post_message");
     const session = await ctx.db.query("liveVoiceSessions").withIndex("by_session_id", q => q.eq("sessionId", sessionId)).unique();
@@ -470,6 +472,7 @@ export const storeSummary = internalMutation({
       voiceSeconds: recordedSeconds,
       voiceCostUsd,
       voiceUsageFinalized,
+      uiActions: uiActions?.slice(0, 3),
       createdAt: Date.now(),
     });
     if (recordedSeconds !== undefined) {
@@ -540,6 +543,23 @@ export const storeSummary = internalMutation({
         createdAt: Date.now(),
       });
     }
+    const decisionInputTokens = decisionUsage && Number.isFinite(decisionUsage.inputTokens) ? Math.max(0, decisionUsage.inputTokens) : 0;
+    const decisionOutputTokens = decisionUsage && Number.isFinite(decisionUsage.outputTokens) ? Math.max(0, decisionUsage.outputTokens) : 0;
+    if (decisionUsage && decisionInputTokens + decisionOutputTokens > 0) {
+      await ctx.db.insert("usageLedger", {
+        spaceId: room.spaceId,
+        userId,
+        provider: "openrouter",
+        model: decisionUsage.model,
+        unit: "token",
+        quantity: decisionInputTokens + decisionOutputTokens,
+        costClass: "decision",
+        inputTokens: decisionInputTokens,
+        outputTokens: decisionOutputTokens,
+        billingSource: "family",
+        createdAt: Date.now(),
+      });
+    }
     const completedAt = Date.now();
     const agent = await ctx.db.query("agents").withIndex("by_room", q => q.eq("roomId", roomId)).first();
     if (agent) {
@@ -562,6 +582,19 @@ export const storeSummary = internalMutation({
 
 function invalidVoiceResponse() {
   return new ConvexError({ code: "LIVE_VOICE_UNAVAILABLE", message: "Voice mode returned an invalid connection" });
+}
+
+async function safeVoiceUiDecision(
+  credential: DecisionCredential,
+  request: string,
+  recentConversation: string,
+): Promise<JevTurnDecision | null> {
+  try {
+    return await decideAgentTurn(credential, request, recentConversation);
+  } catch (error) {
+    console.warn("JEV_VOICE_UI_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
+    return null;
+  }
 }
 
 async function sha256(value: string) {

@@ -38,6 +38,7 @@ export type JevTurnDecision = {
   needsClarification: number;
   model: string;
   inputTokens: number;
+  outputTokens: number;
   latencyMs: number;
 };
 
@@ -83,6 +84,7 @@ export async function decideAgentTurn(credential: DecisionCredential, request: s
       needsClarification: response.answers.needs_clarification.noul,
       model: response.model,
       inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
       latencyMs: Date.now() - startedAt,
     };
   }
@@ -117,6 +119,7 @@ export async function decideAgentTurn(credential: DecisionCredential, request: s
     needsClarification: probability(result.output.needsClarification),
     model: result.model,
     inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
     latencyMs: Date.now() - startedAt,
   };
 }

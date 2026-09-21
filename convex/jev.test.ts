@@ -8,7 +8,7 @@ import schema from "./schema.js";
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
 describe("Jev decision records", () => {
-  test("keeps previews bounded and exposes decisions only to family owners", async () => {
+  test("keeps previews bounded and exposes debug data only to superadmins", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
     const seeded = await t.run(async ctx => {
@@ -23,9 +23,11 @@ describe("Jev decision records", () => {
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "jev-family", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: now });
+      await ctx.db.insert("memberships", { spaceId, userId: adminId, role: "owner", status: "active", joinedAt: now });
       const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now });
       await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt: now });
       await ctx.db.insert("roomMembers", { roomId, userId: memberId, role: "participant", createdAt: now });
+      await ctx.db.insert("roomMembers", { roomId, userId: adminId, role: "manager", createdAt: now });
       return { ownerId, memberId, adminId, spaceId, roomId };
     });
     await t.mutation(internal.jev.record, {
@@ -43,32 +45,16 @@ describe("Jev decision records", () => {
     const owner = t.withIdentity({ subject: String(seeded.ownerId) });
     const member = t.withIdentity({ subject: String(seeded.memberId) });
     const admin = t.withIdentity({ subject: String(seeded.adminId) });
-    const rows = await owner.query(api.jev.recent, { spaceId: seeded.spaceId });
+    const rows = await admin.query(api.jev.recent, { spaceId: seeded.spaceId });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ decision: "answer", source: "lab", confidence: 0.82 });
     expect(rows[0].inputPreview).toHaveLength(500);
     expect(rows[0].inputPreview).not.toContain("\n");
+    await expect(owner.query(api.jev.recent, { spaceId: seeded.spaceId })).rejects.toThrow(/superadmin/i);
     await expect(member.query(api.jev.recent, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
-    await expect(owner.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).resolves.toBe(seeded.ownerId);
+    await expect(owner.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).rejects.toThrow(/superadmin/i);
     await expect(member.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
-    await expect(owner.query(api.jev.canViewBenchmarks, {})).resolves.toBe(false);
-    await expect(member.query(api.jev.canViewBenchmarks, {})).resolves.toBe(false);
-    await expect(admin.query(api.jev.canViewBenchmarks, {})).resolves.toBe(true);
-    await expect(owner.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
-    await expect(member.query(api.jev.benchmarkReport, {})).rejects.toThrow(/permission/i);
-    await expect(admin.query(api.jev.benchmarkReport, {})).resolves.toMatchObject({
-      commit: "5af76abe20241ac7dfa6309083fb1a6ff363a482",
-      repetitions: 3,
-      memory: { passed: 33, total: 36 },
-      conditions: [
-        { id: "A", passed: 106, total: 117, wrongCalls: 0 },
-        { id: "B", passed: 107, total: 117, wrongCalls: 0 },
-        { id: "C", passed: 100, total: 117, wrongCalls: 2 },
-        { id: "D", passed: 107, total: 117, wrongCalls: 0 },
-      ],
-      promotionGates: { accuracyPassed: false, safetyPassed: true, latencyPassed: false, costPassed: false },
-      projectedFromPostPiGateRun: true,
-    });
+    await expect(admin.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).resolves.toBe(seeded.adminId);
   });
 
   test("links routing advice to the downstream Pi outcome", async () => {
@@ -76,7 +62,7 @@ describe("Jev decision records", () => {
     rateLimiter.register(t);
     const seeded = await t.run(async ctx => {
       const now = Date.now();
-      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test", platformRole: "superadmin" });
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "jev-outcomes", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
       const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now });

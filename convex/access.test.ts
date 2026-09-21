@@ -193,7 +193,7 @@ describe("AI access onboarding", () => {
     const admin = t.withIdentity({ subject: String(seeded.adminId) });
 
     await owner.mutation(api.users.requestAccess, {});
-    await expect(owner.query(api.users.accessOverview, {})).resolves.toMatchObject({
+    await expect(owner.query(api.spaces.aiAccess, { spaceId: seeded.spaceId })).resolves.toMatchObject({
       status: "pending",
       requestedAt: expect.any(Number),
     });
@@ -210,7 +210,7 @@ describe("AI access onboarding", () => {
       expect.objectContaining({ _id: seeded.adminId, status: "approved", isSuperadmin: true }),
     ]));
     await admin.mutation(api.admin.setAccessStatus, { userId: seeded.ownerId, status: "approved" });
-    await expect(owner.query(api.users.accessOverview, {})).resolves.toMatchObject({ status: "approved" });
+    await expect(owner.query(api.spaces.aiAccess, { spaceId: seeded.spaceId })).resolves.toMatchObject({ status: "approved" });
   });
 });
 

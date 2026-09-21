@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { conversationUiActionValidator } from "./lib/conversationUi";
 import { imageStyleValidator } from "./lib/imageSafety";
 
 const language = v.union(v.literal("en"), v.literal("hi"), v.literal("mr"));
@@ -97,7 +98,9 @@ export default defineSchema({
     ))),
     voiceSpeaker: v.optional(v.union(v.literal("user"), v.literal("assistant"))),
     voiceSeconds: v.optional(v.number()), voiceCostUsd: v.optional(v.number()),
-    voiceUsageFinalized: v.optional(v.boolean()), createdAt: v.number(),
+    voiceUsageFinalized: v.optional(v.boolean()),
+    uiActions: v.optional(v.array(conversationUiActionValidator)),
+    createdAt: v.number(),
   }).index("by_room_created", ["roomId", "createdAt"]).index("by_room_idempotency", ["roomId", "idempotencyKey"]),
   liveVoiceSessions: defineTable({
     sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
@@ -127,8 +130,7 @@ export default defineSchema({
     remoteStartedAt: v.optional(v.number()), firecrawlSeconds: v.optional(v.number()), firecrawlCredits: v.optional(v.number()),
     lastActiveAt: v.number(), expiresAt: v.number(), createdAt: v.number(),
     completedAt: v.optional(v.number()), terminalReason: v.optional(v.string()),
-  }).index("by_voice_session", ["voiceSessionId"])
-    .index("by_expiry", ["expiresAt"]),
+  }).index("by_voice_session", ["voiceSessionId"]),
   gmailConnections: defineTable({
     spaceId: v.id("spaces"), userId: v.id("users"), connectedAccountId: v.string(),
     alias: v.string(), email: v.optional(v.string()), triggerId: v.string(),

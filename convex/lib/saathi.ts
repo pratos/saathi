@@ -1,7 +1,4 @@
-import { DEFAULT_MODEL_TIER, resolveModelTier } from "./modelTiers";
-
 export const SAATHI_MENTION = /@saathi\b[:,]?/i;
-export const SAATHI_MODEL = resolveModelTier(DEFAULT_MODEL_TIER).model;
 export const SAATHI_IMAGE_MODEL = "meta/muse-image";
 export const SAATHI_WEB_ACCESS_PROMPT = `For current events, recent news, changing facts, or facts you are unsure about, search the public web before answering.
 Prefer the search_public_web Firecrawl tool for public research. You may also use the built-in web search when it is useful.

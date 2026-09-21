@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/authz";
 import { imageStyleValidator } from "./lib/imageSafety";
-import { effectiveAccessStatus, isConfiguredSuperadmin, isSuperadminUser } from "./lib/platformAccess";
+import { effectiveAccessStatus, isConfiguredSuperadmin } from "./lib/platformAccess";
 import { validateUsername } from "./lib/usernames";
 
 // Convex Auth creates the row; this provisions Saathi-owned profile defaults.
@@ -32,19 +32,6 @@ export const ensureCurrent = mutation({
 export const current = query({
   args: {},
   handler: async (ctx) => (await requireUser(ctx)).user,
-});
-
-export const accessOverview = query({
-  args: {},
-  returns: v.object({ status: v.union(v.literal("pending"), v.literal("approved"), v.literal("blocked")), isSuperadmin: v.boolean(), requestedAt: v.union(v.number(), v.null()) }),
-  handler: async (ctx) => {
-    const { user } = await requireUser(ctx);
-    return {
-      status: effectiveAccessStatus(user),
-      isSuperadmin: isSuperadminUser(user),
-      requestedAt: user.accessRequestedAt ?? null,
-    };
-  },
 });
 
 export const requestAccess = mutation({

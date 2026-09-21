@@ -32,7 +32,6 @@ export const MODEL_TIERS = {
 export type ModelTier = keyof typeof MODEL_TIERS;
 export type SaathiThinkingLevel = (typeof MODEL_TIERS)[ModelTier]["thinkingLevel"];
 export const DEFAULT_MODEL_TIER: ModelTier = "med";
-export const MODEL_TIER_IDS = ["low", "med", "high", "ultra"] as const;
 
 export function isModelTier(value: string | undefined): value is ModelTier {
   return value === "low" || value === "med" || value === "high" || value === "ultra";

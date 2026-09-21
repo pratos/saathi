@@ -3,7 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, query } from "./_generated/server";
-import { requireSpacePermission, requireUser } from "./lib/authz";
+import { requireSpacePermission } from "./lib/authz";
 import { decideAgentTurn } from "./lib/jev";
 import { inboxClassificationResultValidator, type InboxClassificationResult } from "./lib/inboxClassification";
 import { isSuperadminUser } from "./lib/platformAccess";
@@ -52,92 +52,14 @@ const decisionView = v.object({
   execution: v.optional(execution),
 });
 
-const benchmarkLanguageResult = v.object({
-  language: v.string(),
-  passed: v.number(),
-  total: v.number(),
-});
-
-const benchmarkLatency = v.object({
-  medianMs: v.number(),
-  p95Ms: v.number(),
-});
-
-const benchmarkConditionResult = v.object({
-  id: v.string(), label: v.string(), catalogTools: v.number(), passed: v.number(), total: v.number(),
-  wrongCalls: v.number(), safetySignificantCalls: v.number(),
-  averageExposedTools: v.number(), narrowingRate: v.optional(v.number()), fallbackRate: v.optional(v.number()),
-  routeLatency: v.optional(benchmarkLatency), piLatency: benchmarkLatency,
-  endToEndLatency: benchmarkLatency,
-  routeCostUsd: v.number(), piCostUsd: v.number(), combinedCostUsd: v.number(),
-  promptTokens: v.number(), cacheTokens: v.number(),
-});
-
-const benchmarkReportView = v.object({
-  runAt: v.string(), commit: v.string(), model: v.string(), repetitions: v.number(), casesPerCondition: v.number(),
-  memory: v.object({
-    passed: v.number(), total: v.number(), averageLatencyMs: v.number(), inputTokens: v.number(), costUsd: v.number(),
-    languages: v.array(benchmarkLanguageResult),
-  }),
-  conditions: v.array(benchmarkConditionResult),
-  promotionGates: v.object({
-    currentAccuracyDeltaPoints: v.number(), expandedAccuracyDeltaPoints: v.number(),
-    noSafetyRegression: v.boolean(), expandedP95ReductionPercent: v.number(), expandedCostReductionPercent: v.number(),
-    accuracyPassed: v.boolean(), safetyPassed: v.boolean(), latencyPassed: v.boolean(), costPassed: v.boolean(),
-  }),
-  recommendation: v.string(), projectedFromPostPiGateRun: v.boolean(),
-});
-
-export const canViewBenchmarks = query({
-  args: {},
-  returns: v.boolean(),
-  handler: async (ctx) => isSuperadminUser((await requireUser(ctx)).user),
-});
-
-export const benchmarkReport = query({
-  args: {},
-  returns: benchmarkReportView,
-  handler: async (ctx) => {
-    const { user } = await requireUser(ctx);
-    if (!isSuperadminUser(user)) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "You do not have permission to access benchmark reports" });
-    }
-    return {
-      runAt: "2026-09-17",
-      commit: "5af76abe20241ac7dfa6309083fb1a6ff363a482",
-      model: "openai/gpt-5.6-luna",
-      repetitions: 3,
-      casesPerCondition: 117,
-      memory: {
-        passed: 33, total: 36, averageLatencyMs: 146, inputTokens: 46_522, costUsd: 0.001953924,
-        languages: [
-          { language: "English", passed: 11, total: 12 },
-          { language: "Hindi / Hinglish", passed: 10, total: 12 },
-          { language: "Marathi", passed: 12, total: 12 },
-        ],
-      },
-      conditions: [
-        { id: "A", label: "Direct Pi · 15 tools", catalogTools: 15, passed: 106, total: 117, wrongCalls: 0, safetySignificantCalls: 0, averageExposedTools: 15, piLatency: { medianMs: 640, p95Ms: 1_451 }, endToEndLatency: { medianMs: 640, p95Ms: 1_451 }, routeCostUsd: 0, piCostUsd: 0.0351011, combinedCostUsd: 0.0351011, promptTokens: 704_163, cacheTokens: 681_935 },
-        { id: "B", label: "Direct Pi · 200 tools", catalogTools: 200, passed: 107, total: 117, wrongCalls: 0, safetySignificantCalls: 0, averageExposedTools: 200, piLatency: { medianMs: 1_542, p95Ms: 2_434 }, endToEndLatency: { medianMs: 1_542, p95Ms: 2_434 }, routeCostUsd: 0, piCostUsd: 0.09588498, combinedCostUsd: 0.09588498, promptTokens: 2_543_095, cacheTokens: 2_510_189 },
-        { id: "C", label: "Jev pre-turn · full 15 tools", catalogTools: 15, passed: 100, total: 117, wrongCalls: 2, safetySignificantCalls: 0, averageExposedTools: 15, routeLatency: { medianMs: 180, p95Ms: 300 }, piLatency: { medianMs: 588, p95Ms: 1_525 }, endToEndLatency: { medianMs: 807, p95Ms: 1_677 }, routeCostUsd: 0.003929436, piCostUsd: 0.08467525, combinedCostUsd: 0.088604686, promptTokens: 714_583, cacheTokens: 697_545 },
-        { id: "D", label: "Jev pre-turn · full 200 tools", catalogTools: 200, passed: 107, total: 117, wrongCalls: 0, safetySignificantCalls: 0, averageExposedTools: 200, routeLatency: { medianMs: 180, p95Ms: 300 }, piLatency: { medianMs: 1_531, p95Ms: 2_494 }, endToEndLatency: { medianMs: 1_740, p95Ms: 2_683 }, routeCostUsd: 0.003929436, piCostUsd: 0.08648722, combinedCostUsd: 0.090416656, promptTokens: 2_551_186, cacheTokens: 2_514_076 },
-      ],
-      promotionGates: {
-        currentAccuracyDeltaPoints: -5.1282, expandedAccuracyDeltaPoints: 0,
-        noSafetyRegression: true, expandedP95ReductionPercent: -10.2301, expandedCostReductionPercent: 5.703,
-        accuracyPassed: false, safetyPassed: true, latencyPassed: false, costPassed: false,
-      },
-      recommendation: "Keep direct Pi as the default. Jev pre-turn guidance preserved 200-tool accuracy, but it did not improve safety in this corpus and failed the p95 latency and cost gates.",
-      projectedFromPostPiGateRun: true,
-    };
-  },
-});
-
 export const recent = query({
   args: { spaceId: v.id("spaces"), limit: v.optional(v.number()) },
   returns: v.array(decisionView),
   handler: async (ctx, { spaceId, limit }) => {
-    await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const { user } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    if (!isSuperadminUser(user)) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "Jev debug is restricted to deployment superadmins" });
+    }
     const decisions = await ctx.db.query("jevDecisions").withIndex("by_space_created", q =>
       q.eq("spaceId", spaceId),
     ).order("desc").take(Math.min(Math.max(limit ?? 30, 1), 100));
@@ -170,6 +92,7 @@ export const evaluate = action({
     needsClarification: v.number(),
     model: v.string(),
     inputTokens: v.number(),
+    outputTokens: v.number(),
     latencyMs: v.number(),
   }),
   handler: async (ctx, { spaceId, text }) => {
@@ -199,7 +122,10 @@ export const prepareLab = internalMutation({
   args: { spaceId: v.id("spaces") },
   returns: v.id("users"),
   handler: async (ctx, { spaceId }) => {
-    const { userId } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const { userId, user } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    if (!isSuperadminUser(user)) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "Jev debug is restricted to deployment superadmins" });
+    }
     const rate = await limits.limit(ctx, "lab", { key: String(userId) });
     if (!rate.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: rate.retryAfter });
     return userId;

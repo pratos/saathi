@@ -5,7 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { buildAgentMemoryContext, recordAgentEpisode } from "./lib/agentMemory";
-import { requireRoomPermission } from "./lib/authz";
+import { requireAiAccess, requireRoomPermission } from "./lib/authz";
 import { profileNameForUser } from "./lib/firecrawlInteract";
 import { imageKindValidator, imageLanguageValidator, imageStyleValidator } from "./lib/imageSafety";
 import { isNoReplyText } from "./lib/saathi";
@@ -57,6 +57,7 @@ export const send = mutation({
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new ConvexError({ code: "NOT_FOUND", message: "Agent not found" });
     const { userId } = await requireRoomPermission(ctx, agent.roomId, "post_message");
+    await requireAiAccess(ctx, agent.spaceId, "openrouter");
     const prompt = args.prompt.trim();
     validateOperationId(args.clientOperationId);
     if (!prompt || prompt.length > 20_000) throw invalid("Prompt must be between 1 and 20,000 characters");

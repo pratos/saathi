@@ -519,9 +519,9 @@ async function agentSnapshot(t: TestConvex<typeof schema>, agentId: Id<"agents">
 async function seedFamily(t: TestConvex<typeof schema>) {
   return t.run(async ctx => {
     const now = Date.now();
-    const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
-    const participantId = await ctx.db.insert("users", { email: "member@example.test" });
-    const outsiderId = await ctx.db.insert("users", { email: "outsider@example.test" });
+    const ownerId = await ctx.db.insert("users", { email: "owner@example.test", accessStatus: "approved" });
+    const participantId = await ctx.db.insert("users", { email: "member@example.test", accessStatus: "approved" });
+    const outsiderId = await ctx.db.insert("users", { email: "outsider@example.test", accessStatus: "approved" });
     const spaceId = await ctx.db.insert("spaces", {
       name: "Test family", createdBy: ownerId, creationKey: "test-family", createdAt: now,
     });

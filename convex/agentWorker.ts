@@ -17,7 +17,8 @@ import {
 } from "./lib/assistantCapabilities";
 import { runFirecrawlComputerTask } from "./lib/firecrawlInteract";
 import { generateFamilyImageBytes } from "./lib/imageGeneration";
-import { resolveOpenRouterKey } from "./lib/providerKeys";
+import { resolveOpenRouterKey, resolveOptionalDecisionCredential } from "./lib/providerKeys";
+import type { DecisionCredential } from "./lib/decisionProvider";
 import { composeFamilyImagePrompt, isImageKind, isImageLanguage, isImageStyle } from "./lib/imageSafety";
 import { decideAgentTurn } from "./lib/jev";
 import { MODEL_TIERS, resolveModelTier, type SaathiThinkingLevel } from "./lib/modelTiers";
@@ -79,7 +80,7 @@ export const run = internalAction({
     if (!work) return null;
 
     try {
-      const openRouterKey = await resolveOpenRouterKey(ctx, work.agent.spaceId);
+      const openRouterKey = await resolveOpenRouterKey(ctx, work.agent.spaceId, work.job.requestedBy);
       const route = extraOpenRouterModels.some(item => item.id === work.agent.model)
         ? extraOpenRouterModels.find(item => item.id === work.agent.model)!
         : extraOpenRouterModels[1];
@@ -94,18 +95,18 @@ export const run = internalAction({
       models.setProvider({ ...baseProvider, getModels: () => [...baseProvider.getModels(), ...extraOpenRouterModels] });
       const model = models.getModel("openrouter", work.agent.model) ?? models.getModel("openrouter", route.id);
       if (!model) throw new Error(`Unsupported agent model: ${work.agent.model}`);
-      const typesafeKey = env.TYPESAFE_API_KEY?.trim();
+      const decisionCredential = await resolveOptionalDecisionCredential(ctx, work.agent.spaceId, work.job.requestedBy);
       const decisionInput = decisionInputForAgentJob(work.job.prompt);
       const decisionContext = decisionContextForAgentJob(work.messages as AgentMessage[]);
       const authorizedToolNames = authorizedAssistantToolNames(work.requesterRole);
       const largeCatalog = authorizedToolNames.length > DIRECT_PI_TOOL_LIMIT;
       const memoryCandidate = shouldTriageMemoryRequest(decisionInput);
       const [bundleAttempt, memoryDecision] = await Promise.all([
-        typesafeKey && largeCatalog
-          ? safeBundleDecision(typesafeKey, decisionInput, decisionContext)
+        decisionCredential && largeCatalog
+          ? safeBundleDecision(decisionCredential, decisionInput, decisionContext)
           : Promise.resolve({ decision: null, latencyMs: 0, error: null }),
-        typesafeKey && memoryCandidate
-          ? safelyDecideMemory(typesafeKey, { originalText: decisionInput })
+        decisionCredential && memoryCandidate
+          ? safelyDecideMemory(decisionCredential, { originalText: decisionInput })
           : Promise.resolve(null),
       ]);
       const memoryPolicy = memoryDecision
@@ -238,12 +239,13 @@ export const run = internalAction({
         agentId, jobId: work.job._id, leaseId: work.leaseId, nextSequence: work.nextSequence,
         messages, error: agent.state.errorMessage, inputTokens: usage.input, outputTokens: usage.output,
       });
-      if (committed && !agent.state.errorMessage && typesafeKey && !largeCatalog && !memoryCandidate
+      if (committed && !agent.state.errorMessage && decisionCredential && !largeCatalog && !memoryCandidate
         && shouldSampleShadowRouting(String(work.job._id))) {
         await ctx.scheduler.runAfter(0, internal.agentWorker.shadowRoute, {
           spaceId: work.agent.spaceId,
           roomId: work.agent.roomId,
           jobId: work.job._id,
+          requestedBy: work.job.requestedBy,
           request: decisionInput,
           recentConversation: decisionContext,
           selectedToolNames: [...selectedToolNames],
@@ -264,15 +266,16 @@ export const shadowRoute = internalAction({
     spaceId: v.id("spaces"),
     roomId: v.id("rooms"),
     jobId: v.id("agentJobs"),
+    requestedBy: v.id("users"),
     request: v.string(),
     recentConversation: v.string(),
     selectedToolNames: v.array(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const apiKey = env.TYPESAFE_API_KEY?.trim();
-    if (!apiKey) return null;
-    const decision = await safeTurnDecision(apiKey, args.request, args.recentConversation);
+    const credential = await resolveOptionalDecisionCredential(ctx, args.spaceId, args.requestedBy);
+    if (!credential) return null;
+    const decision = await safeTurnDecision(credential, args.request, args.recentConversation);
     if (!decision) return null;
     await ctx.runMutation(internal.jev.record, {
       spaceId: args.spaceId,
@@ -464,9 +467,9 @@ export function shouldSampleShadowRouting(value: string, percent = SHADOW_ROUTIN
   return (hash >>> 0) % 100 < percent;
 }
 
-async function safeTurnDecision(apiKey: string, request: string, recentConversation: string) {
+async function safeTurnDecision(credential: DecisionCredential, request: string, recentConversation: string) {
   try {
-    return await decideAgentTurn(apiKey, request, recentConversation);
+    return await decideAgentTurn(credential, request, recentConversation);
   } catch (error) {
     console.warn("JEV_SHADOW_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
     return null;
@@ -474,14 +477,14 @@ async function safeTurnDecision(apiKey: string, request: string, recentConversat
 }
 
 async function safeBundleDecision(
-  apiKey: string,
+  credential: DecisionCredential,
   request: string,
   recentConversation: string,
 ): Promise<{ decision: ToolBundleDecision | null; latencyMs: number; error: string | null }> {
   const startedAt = Date.now();
   try {
     return {
-      decision: await decideToolBundles(apiKey, request, recentConversation),
+      decision: await decideToolBundles(credential, request, recentConversation),
       latencyMs: Date.now() - startedAt,
       error: null,
     };

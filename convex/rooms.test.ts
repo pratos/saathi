@@ -12,8 +12,8 @@ describe("personal Saathi rooms", () => {
     rateLimiter.register(t);
     const { spaceId, ownerId, memberId } = await t.run(async ctx => {
       const now = Date.now();
-      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
-      const memberId = await ctx.db.insert("users", { email: "member@example.test" });
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test", accessStatus: "approved" });
+      const memberId = await ctx.db.insert("users", { email: "member@example.test", accessStatus: "approved" });
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "family-create-001", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: now });

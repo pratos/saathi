@@ -17,6 +17,12 @@ export default defineSchema({
     phoneVerificationTime: v.optional(v.number()), isAnonymous: v.optional(v.boolean()),
     displayName: v.optional(v.string()), username: v.optional(v.string()), preferredLanguage: v.optional(language),
     preferredImageStyle: v.optional(imageStyleValidator),
+    platformRole: v.optional(v.literal("superadmin")),
+    accessStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("blocked"))),
+    accessRequestedAt: v.optional(v.number()),
+    accessReviewedAt: v.optional(v.number()),
+    accessReviewedBy: v.optional(v.id("users")),
+    accessNote: v.optional(v.string()),
   }).index("email", ["email"]).index("phone", ["phone"]),
   usernameClaims: defineTable({
     normalized: v.string(), userId: v.id("users"), claimedAt: v.number(),

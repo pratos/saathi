@@ -60,9 +60,9 @@ async function seedMentionRooms() {
   const t = convexTest(schema, modules);
   const seeded = await t.run(async ctx => {
     const now = Date.now();
-    const ownerId = await ctx.db.insert("users", { email: "owner@example.test", username: "owner_one", displayName: "Owner" });
-    const memberId = await ctx.db.insert("users", { email: "member@example.test", username: "member_two", displayName: "Member" });
-    const outsiderId = await ctx.db.insert("users", { email: "outsider@example.test", username: "outsider_three", displayName: "Outsider" });
+    const ownerId = await ctx.db.insert("users", { email: "owner@example.test", username: "owner_one", displayName: "Owner", accessStatus: "approved" });
+    const memberId = await ctx.db.insert("users", { email: "member@example.test", username: "member_two", displayName: "Member", accessStatus: "approved" });
+    const outsiderId = await ctx.db.insert("users", { email: "outsider@example.test", username: "outsider_three", displayName: "Outsider", accessStatus: "approved" });
     const spaceId = await ctx.db.insert("spaces", { name: "First family", createdBy: ownerId, creationKey: "first", createdAt: now });
     const otherSpaceId = await ctx.db.insert("spaces", { name: "Other family", createdBy: outsiderId, creationKey: "other", createdAt: now });
     await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });

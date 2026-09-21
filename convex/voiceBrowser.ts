@@ -12,6 +12,7 @@ import {
   startFirecrawlCodeSession,
   stopFirecrawlCodeSession,
 } from "./lib/firecrawlInteract";
+import { resolveOptionalDecisionCredential } from "./lib/providerKeys";
 import {
   applyBrowserPolicy,
   browserEstimatedJevCostUsd,
@@ -46,20 +47,28 @@ export const useComputer = action({
       callId: args.callId,
       task,
     });
-    return await ctx.runAction(internal.voiceBrowser.runCommand, { ...args, url, task, profileName: prepared.profileName });
+    return await ctx.runAction(internal.voiceBrowser.runCommand, {
+      ...args,
+      url,
+      task,
+      profileName: prepared.profileName,
+      userId: prepared.userId,
+      spaceId: prepared.spaceId,
+    });
   },
 });
 
 export const runCommand = internalAction({
   args: {
     roomId: v.id("rooms"), sessionId: v.string(), callId: v.string(), url: v.string(), task: v.string(), profileName: v.string(),
+    userId: v.id("users"), spaceId: v.id("spaces"),
   },
   returns: browserToolResult,
   handler: async (ctx, args): Promise<{ ok: boolean; message: string }> => {
     const url = assertSafeComputerUrl(args.url);
     const task = assertSafeComputerTask(args.task);
-    const typesafeKey = env.TYPESAFE_API_KEY?.trim();
-    if (env.JEV_VOICE_BROWSER_ENABLED?.trim().toLowerCase() !== "true" || !typesafeKey) {
+    const decisionCredential = await resolveOptionalDecisionCredential(ctx, args.spaceId, args.userId);
+    if (env.JEV_VOICE_BROWSER_ENABLED?.trim().toLowerCase() !== "true" || !decisionCredential) {
       try {
         const result = await runFirecrawlComputerTask({
           apiKey: env.FIRECRAWL_API_KEY,
@@ -125,7 +134,7 @@ export const runCommand = internalAction({
         if (!await updateState(ctx, prepared.browserSessionId, prepared.leaseId, "deciding")) {
           return { ok: false, message: "The page changed before I could choose an action." };
         }
-        const decision = await decideBrowserStep(typesafeKey, {
+        const decision = await decideBrowserStep(decisionCredential, {
           goal: prepared.goal,
           latestVoiceInstruction: task,
           page: { url: observation.url, fingerprint: observation.fingerprint },

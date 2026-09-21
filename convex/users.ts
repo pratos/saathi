@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/authz";
 import { imageStyleValidator } from "./lib/imageSafety";
+import { effectiveAccessStatus, isConfiguredSuperadmin, isSuperadminUser } from "./lib/platformAccess";
 import { validateUsername } from "./lib/usernames";
 
 // Convex Auth creates the row; this provisions Saath-owned profile defaults.
@@ -15,10 +16,13 @@ export const ensureCurrent = mutation({
     const { userId, user } = await requireUser(ctx);
     const displayName = args.displayName?.trim();
     if (displayName !== undefined && (displayName.length < 1 || displayName.length > 100)) throw new Error("Invalid display name");
+    const shouldBootstrapSuperadmin = isConfiguredSuperadmin(user.email);
     const patch = {
       displayName: displayName ?? user.displayName ?? user.name,
       preferredLanguage: args.preferredLanguage ?? user.preferredLanguage ?? ("en" as const),
       preferredImageStyle: args.preferredImageStyle ?? user.preferredImageStyle ?? ("warm_family" as const),
+      platformRole: shouldBootstrapSuperadmin ? ("superadmin" as const) : user.platformRole,
+      accessStatus: shouldBootstrapSuperadmin ? ("approved" as const) : user.accessStatus ?? ("pending" as const),
     };
     await ctx.db.patch(userId, patch);
     return { ...user, ...patch };
@@ -28,6 +32,34 @@ export const ensureCurrent = mutation({
 export const current = query({
   args: {},
   handler: async (ctx) => (await requireUser(ctx)).user,
+});
+
+export const accessOverview = query({
+  args: {},
+  returns: v.object({ status: v.union(v.literal("pending"), v.literal("approved"), v.literal("blocked")), isSuperadmin: v.boolean(), requestedAt: v.union(v.number(), v.null()) }),
+  handler: async (ctx) => {
+    const { user } = await requireUser(ctx);
+    return {
+      status: effectiveAccessStatus(user),
+      isSuperadmin: isSuperadminUser(user),
+      requestedAt: user.accessRequestedAt ?? null,
+    };
+  },
+});
+
+export const requestAccess = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const { userId, user } = await requireUser(ctx);
+    if (effectiveAccessStatus(user) === "blocked") {
+      throw new ConvexError({ code: "ACCESS_BLOCKED", message: "This account cannot request access" });
+    }
+    if (effectiveAccessStatus(user) !== "approved" && !user.accessRequestedAt) {
+      await ctx.db.patch(userId, { accessStatus: "pending", accessRequestedAt: Date.now() });
+    }
+    return null;
+  },
 });
 
 export const setUsername = mutation({

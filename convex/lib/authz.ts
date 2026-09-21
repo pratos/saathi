@@ -2,8 +2,10 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { effectiveAccessStatus } from "./platformAccess";
 
 type DbCtx = QueryCtx | MutationCtx;
+type AiProvider = "openai" | "openrouter";
 type SpacePermission = "read" | "manage_members" | "configure_inbox";
 type RoomPermission = "read" | "post_message" | "manage_room";
 
@@ -25,6 +27,25 @@ export async function requireSpacePermission(ctx: DbCtx, spaceId: Id<"spaces">, 
   if (!membership || membership.status !== "active") denied();
   if (permission !== "read" && membership.role !== "owner") denied();
   return { userId, user, membership };
+}
+
+export async function requireAiAccess(ctx: DbCtx, spaceId: Id<"spaces">, provider: AiProvider) {
+  const principal = await requireSpacePermission(ctx, spaceId, "read");
+  const status = effectiveAccessStatus(principal.user);
+  if (status === "blocked") {
+    throw new ConvexError({ code: "ACCESS_BLOCKED", message: "AI access is blocked for this account" });
+  }
+  const providers = provider === "openai" ? ["openai", "codex"] as const : [provider] as const;
+  for (const candidate of providers) {
+    const key = await ctx.db.query("providerKeys").withIndex("by_space_provider", q =>
+      q.eq("spaceId", spaceId).eq("provider", candidate),
+    ).unique();
+    if (key) return { ...principal, credentialSource: "byok" as const };
+  }
+  if (status !== "approved") {
+    throw new ConvexError({ code: "AI_ACCESS_REQUIRED", message: "Add your own API key or request access" });
+  }
+  return { ...principal, credentialSource: "platform" as const };
 }
 
 export async function requireRoomPermission(ctx: DbCtx, roomId: Id<"rooms">, permission: RoomPermission) {

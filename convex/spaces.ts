@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { requireSpacePermission, requireUser } from "./lib/authz";
 import { isByokProvider, keyLastFour, keyLooksValid, openSecret, sealSecret } from "./lib/byok";
 import { isModelTier, resolveModelTier } from "./lib/modelTiers";
+import { effectiveAccessStatus, isSuperadminUser } from "./lib/platformAccess";
 
 export const create = mutation({
   args: { name: v.string(), creationKey: v.string() },
@@ -103,6 +104,34 @@ export const providerKeyStatus = query({
     await requireSpacePermission(ctx, spaceId, "read");
     const rows = await ctx.db.query("providerKeys").withIndex("by_space_provider", q => q.eq("spaceId", spaceId)).take(8);
     return rows.map(row => ({ provider: row.provider, lastFour: row.lastFour, updatedAt: row.updatedAt }));
+  },
+});
+
+export const aiAccess = query({
+  args: { spaceId: v.id("spaces") },
+  returns: v.object({
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("blocked")),
+    ready: v.boolean(),
+    source: v.union(v.literal("byok"), v.literal("platform"), v.literal("none")),
+    hasOpenRouter: v.boolean(),
+    isSuperadmin: v.boolean(),
+    requestedAt: v.union(v.number(), v.null()),
+  }),
+  handler: async (ctx, { spaceId }) => {
+    const { user } = await requireSpacePermission(ctx, spaceId, "read");
+    const rows = await ctx.db.query("providerKeys").withIndex("by_space_provider", q => q.eq("spaceId", spaceId)).take(8);
+    const hasOpenRouter = rows.some(row => row.provider === "openrouter");
+    const status = effectiveAccessStatus(user);
+    const ready = status !== "blocked" && (hasOpenRouter || status === "approved");
+    const source: "none" | "byok" | "platform" = !ready ? "none" : hasOpenRouter ? "byok" : "platform";
+    return {
+      status,
+      ready,
+      source,
+      hasOpenRouter,
+      isSuperadmin: isSuperadminUser(user),
+      requestedAt: user.accessRequestedAt ?? null,
+    };
   },
 });
 
@@ -233,5 +262,71 @@ export const resolveProviderKey = internalQuery({
     ).unique();
     if (!row) return null;
     return openSecret(row.sealedSecret);
+  },
+});
+
+export const resolveDecisionCredential = internalQuery({
+  args: { spaceId: v.id("spaces"), userId: v.id("users") },
+  returns: v.object({
+    ownedOpenRouterSecret: v.union(v.string(), v.null()),
+    openRouterModel: v.string(),
+    platformAllowed: v.boolean(),
+    blocked: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const [user, membership, space] = await Promise.all([
+      ctx.db.get(args.userId),
+      ctx.db.query("memberships").withIndex("by_space_user", q =>
+        q.eq("spaceId", args.spaceId).eq("userId", args.userId),
+      ).unique(),
+      ctx.db.get(args.spaceId),
+    ]);
+    const openRouterModel = resolveModelTier(space?.modelTier).model;
+    if (!user || !membership || membership.status !== "active") {
+      return { ownedOpenRouterSecret: null, openRouterModel, platformAllowed: false, blocked: true };
+    }
+    const status = effectiveAccessStatus(user);
+    if (status === "blocked") {
+      return { ownedOpenRouterSecret: null, openRouterModel, platformAllowed: false, blocked: true };
+    }
+    const row = await ctx.db.query("providerKeys").withIndex("by_space_provider", q =>
+      q.eq("spaceId", args.spaceId).eq("provider", "openrouter"),
+    ).unique();
+    return {
+      ownedOpenRouterSecret: row ? await openSecret(row.sealedSecret) : null,
+      openRouterModel,
+      platformAllowed: status === "approved",
+      blocked: false,
+    };
+  },
+});
+
+export const resolveProviderCredential = internalQuery({
+  args: { spaceId: v.id("spaces"), userId: v.id("users"), provider: byokProvider },
+  returns: v.object({
+    ownedSecret: v.union(v.string(), v.null()),
+    platformAllowed: v.boolean(),
+    blocked: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const [user, membership] = await Promise.all([
+      ctx.db.get(args.userId),
+      ctx.db.query("memberships").withIndex("by_space_user", q =>
+        q.eq("spaceId", args.spaceId).eq("userId", args.userId),
+      ).unique(),
+    ]);
+    if (!user || !membership || membership.status !== "active") {
+      return { ownedSecret: null, platformAllowed: false, blocked: true };
+    }
+    const status = effectiveAccessStatus(user);
+    if (status === "blocked") return { ownedSecret: null, platformAllowed: false, blocked: true };
+    const row = await ctx.db.query("providerKeys").withIndex("by_space_provider", q =>
+      q.eq("spaceId", args.spaceId).eq("provider", args.provider),
+    ).unique();
+    return {
+      ownedSecret: row ? await openSecret(row.sealedSecret) : null,
+      platformAllowed: status === "approved",
+      blocked: false,
+    };
   },
 });

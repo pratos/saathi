@@ -13,7 +13,6 @@ import {
   MessageSquareText,
   Pause,
   Play,
-  RefreshCcw,
   Send,
   Settings2,
   ShieldCheck,
@@ -115,11 +114,10 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
           restartDemo()
           window.setTimeout(() => setIsPlaying(true), 0)
         } else setIsPlaying((current) => !current)
-      }} onStep={goToStep} onRestart={restartDemo} onExit={onExit} />
+      }} onStep={goToStep} onExit={onExit} />
 
       {demoStep === 0 && (
         <section className="preview-demo-stage preview-auth-stage">
-          <button className="back-link" onClick={onExit}><ArrowLeft size={19} /> Exit preview</button>
           <form className="live-auth-card preview-flow-card" onSubmit={(event) => { event.preventDefault(); goToStep(1) }}>
             <div className="auth-brand dark"><span className="brand-mark">स</span> Saath</div>
             <span className="mode-badge preview-flow-badge"><Sparkles size={15} /> Simulated preview</span>
@@ -240,7 +238,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
       </section>
 
       <aside className="conversation-context">
-        <div className="context-title"><h2>This conversation</h2><button onClick={onExit}>Exit preview</button></div>
+        <div className="context-title"><h2>This conversation</h2></div>
         <section><span>{selectedFamily === 'asha' ? 'Confirmed plan' : 'Latest update'}</span><p className="confirmed"><Check /> {selectedFamily === 'asha' ? 'Leave Saturday at 6:30 AM' : 'Medicines delivered this morning'}</p></section>
         <section><span>Still to decide</span><p>{selectedFamily === 'asha' ? 'Book Riya’s homestay before 6 PM?' : 'Schedule the next doctor visit?'}</p></section>
         {selectedFamily === 'asha' && <section><span>Family inbox</span>{inboxConnected ? <p className="confirmed"><Check /> Sample AgentMail inbox connected</p> : <button className="preview-connect-button" onClick={() => goToStep(Math.max(demoStep, 5))}><Mail /> Connect sample inbox</button>}</section>}
@@ -252,24 +250,22 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
   )
 }
 
-function DemoControls({ step, isPlaying, onPlay, onStep, onRestart, onExit }: {
+function DemoControls({ step, isPlaying, onPlay, onStep, onExit }: {
   step: number
   isPlaying: boolean
   onPlay: () => void
   onStep: (step: number) => void
-  onRestart: () => void
   onExit: () => void
 }) {
   return (
     <header className="demo-controls" aria-label="Guided preview controls">
       <div className="demo-caption" aria-live="polite"><span>Step {step + 1} of {demoSteps.length}</span><strong>{demoSteps[step].title}</strong><small>{demoSteps[step].caption}</small></div>
-      <div className="demo-progress" aria-hidden="true"><i style={{ width: `${((step + 1) / demoSteps.length) * 100}%` }} /></div>
+      <div className="demo-progress" role="progressbar" aria-label="Preview progress" aria-valuemin={1} aria-valuemax={demoSteps.length} aria-valuenow={step + 1}><i style={{ transform: `scaleX(${(step + 1) / demoSteps.length})` }} /></div>
       <div className="demo-buttons">
-        <button onClick={onRestart} aria-label="Restart preview"><RefreshCcw /></button>
-        <button onClick={() => onStep(step - 1)} disabled={step === 0} aria-label="Previous step"><ChevronLeft /></button>
-        <button className="demo-play" onClick={onPlay}>{isPlaying ? <Pause /> : <Play fill="currentColor" />}<span>{isPlaying ? 'Pause' : step === demoSteps.length - 1 ? 'Replay' : 'Play'}</span></button>
-        <button onClick={() => onStep(step + 1)} disabled={step === demoSteps.length - 1} aria-label="Next step"><ChevronRight /></button>
-        <button className="demo-exit" onClick={onExit}>Exit</button>
+        <button type="button" onClick={() => onStep(step - 1)} disabled={step === 0} aria-label="Previous step"><ChevronLeft /></button>
+        <button type="button" className="demo-play" onClick={onPlay}>{isPlaying ? <Pause /> : <Play fill="currentColor" />}<span>{isPlaying ? 'Pause' : step === demoSteps.length - 1 ? 'Replay' : 'Play'}</span></button>
+        <button type="button" onClick={() => onStep(step + 1)} disabled={step === demoSteps.length - 1} aria-label="Next step"><ChevronRight /></button>
+        <button type="button" className="demo-exit" onClick={onExit}>Exit</button>
       </div>
     </header>
   )

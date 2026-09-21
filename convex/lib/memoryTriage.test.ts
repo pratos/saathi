@@ -115,7 +115,7 @@ describe("deterministic memory policy", () => {
   });
 
   test("fails closed on classifier failure and low confidence", async () => {
-    const failed = await safelyDecideMemory("test-key", { originalText: "माझी माहिती लक्षात ठेव" }, async () => {
+    const failed = await safelyDecideMemory({ kind: "managed_typesafe", apiKey: "test-key" }, { originalText: "माझी माहिती लक्षात ठेव" }, async () => {
       throw new Error("Jev unavailable");
     });
     expect(failed.originalText).toBe("माझी माहिती लक्षात ठेव");

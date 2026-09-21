@@ -3,6 +3,7 @@ import type { JevEmailDecision } from "./jev.js";
 import { classifyInboxEmail, inboxDisposition } from "./inboxClassification.js";
 
 const metadata = { model: "jev-latest", inputTokens: 37, latencyMs: 18 };
+const credential = { kind: "managed_typesafe" as const, apiKey: "typesafe-key" };
 
 describe("shared inbox sidecar classification", () => {
   test("classifies multilingual household mail without interpreting embedded instructions", async () => {
@@ -14,12 +15,12 @@ describe("shared inbox sidecar classification", () => {
     const decision = emailDecision({ category: "bills", confidence: 0.91, tracksHouseholdMoney: 0.94 });
     const classifier = vi.fn(async () => decision);
 
-    await expect(classifyInboxEmail("typesafe-key", email, classifier)).resolves.toEqual({
+    await expect(classifyInboxEmail(credential, email, classifier)).resolves.toEqual({
       kind: "classified",
       decision,
       disposition: "retained_household_candidate",
     });
-    expect(classifier).toHaveBeenCalledWith("typesafe-key", email);
+    expect(classifier).toHaveBeenCalledWith(credential, email);
   });
 
   test("retains confident ignores, uncertain mail, and classifier failures for downstream extraction", async () => {
@@ -36,7 +37,7 @@ describe("shared inbox sidecar classification", () => {
     expect(inboxDisposition(confidentIgnore)).toBe("retained_advisory_ignore");
     expect(inboxDisposition(uncertainIgnore)).toBe("retained_uncertain");
     expect(inboxDisposition(importantDespiteLabel)).toBe("retained_household_candidate");
-    await expect(classifyInboxEmail("typesafe-key", { sender: "x", subject: "y", text: "z" }, async () => {
+    await expect(classifyInboxEmail(credential, { sender: "x", subject: "y", text: "z" }, async () => {
       throw new Error("provider response containing sensitive input");
     })).resolves.toMatchObject({
       kind: "unavailable",

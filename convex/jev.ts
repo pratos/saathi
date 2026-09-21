@@ -1,16 +1,13 @@
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import { action, env, internalMutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { action, internalMutation, query } from "./_generated/server";
 import { requireSpacePermission, requireUser } from "./lib/authz";
 import { decideAgentTurn } from "./lib/jev";
 import { inboxClassificationResultValidator, type InboxClassificationResult } from "./lib/inboxClassification";
-
-const BENCHMARK_ADMIN_EMAIL = "prathamesh.b.sarang@gmail.com";
-
-function isBenchmarkAdmin(email: string | undefined) {
-  return email?.trim().toLowerCase() === BENCHMARK_ADMIN_EMAIL;
-}
+import { isSuperadminUser } from "./lib/platformAccess";
+import { resolveDecisionCredential } from "./lib/providerKeys";
 
 const limits = new RateLimiter(components.rateLimiter, {
   lab: { kind: "fixed window", rate: 30, period: HOUR },
@@ -94,7 +91,7 @@ const benchmarkReportView = v.object({
 export const canViewBenchmarks = query({
   args: {},
   returns: v.boolean(),
-  handler: async (ctx) => isBenchmarkAdmin((await requireUser(ctx)).user.email),
+  handler: async (ctx) => isSuperadminUser((await requireUser(ctx)).user),
 });
 
 export const benchmarkReport = query({
@@ -102,7 +99,7 @@ export const benchmarkReport = query({
   returns: benchmarkReportView,
   handler: async (ctx) => {
     const { user } = await requireUser(ctx);
-    if (!isBenchmarkAdmin(user.email)) {
+    if (!isSuperadminUser(user)) {
       throw new ConvexError({ code: "FORBIDDEN", message: "You do not have permission to access benchmark reports" });
     }
     return {
@@ -180,10 +177,9 @@ export const evaluate = action({
     if (!request || request.length > 12_000) {
       throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Enter between 1 and 12,000 characters." });
     }
-    await ctx.runMutation(internal.jev.prepareLab, { spaceId });
-    const apiKey = env.TYPESAFE_API_KEY?.trim();
-    if (!apiKey) throw new ConvexError({ code: "JEV_NOT_CONFIGURED", message: "TypeSafe is not configured." });
-    const result = await decideAgentTurn(apiKey, request);
+    const userId: Id<"users"> = await ctx.runMutation(internal.jev.prepareLab, { spaceId });
+    const credential = await resolveDecisionCredential(ctx, spaceId, userId);
+    const result = await decideAgentTurn(credential, request);
     await ctx.runMutation(internal.jev.record, {
       spaceId,
       source: "lab",
@@ -201,12 +197,12 @@ export const evaluate = action({
 
 export const prepareLab = internalMutation({
   args: { spaceId: v.id("spaces") },
-  returns: v.null(),
+  returns: v.id("users"),
   handler: async (ctx, { spaceId }) => {
     const { userId } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
     const rate = await limits.limit(ctx, "lab", { key: String(userId) });
     if (!rate.ok) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: rate.retryAfter });
-    return null;
+    return userId;
   },
 });
 

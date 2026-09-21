@@ -198,10 +198,10 @@ export const readPhoto = internalAction({
   args: { attachmentId: v.id("attachments") },
   returns: v.null(),
   handler: async (ctx, { attachmentId }): Promise<null> => {
-    const photo: { storageId: Id<"_storage">; mediaType: string; kind: "photo" | "receipt" | "document"; spaceId: Id<"spaces"> } | null =
+    const photo: { storageId: Id<"_storage">; mediaType: string; kind: "photo" | "receipt" | "document"; spaceId: Id<"spaces">; userId: Id<"users"> } | null =
       await ctx.runQuery(internal.attachments.loadPhotoRead, { attachmentId });
     if (!photo) return null;
-    const apiKey = await resolveOpenAiKey(ctx, photo.spaceId);
+    const apiKey = await resolveOpenAiKey(ctx, photo.spaceId, photo.userId);
     if (!apiKey) {
       await ctx.runMutation(internal.attachments.failPhotoRead, { attachmentId, error: "Photo reading needs OPENAI_API_KEY." });
       return null;
@@ -234,6 +234,7 @@ export const loadPhotoRead = internalQuery({
     mediaType: v.string(),
     kind: attachmentKind,
     spaceId: v.id("spaces"),
+    userId: v.id("users"),
   }), v.null()),
   handler: async (ctx, { attachmentId }) => {
     const attachment = await ctx.db.get(attachmentId);
@@ -243,6 +244,7 @@ export const loadPhotoRead = internalQuery({
       mediaType: attachment.mediaType,
       kind: attachment.kind ?? "photo",
       spaceId: attachment.spaceId,
+      userId: attachment.authorUserId,
     };
   },
 });

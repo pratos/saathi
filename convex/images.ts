@@ -50,7 +50,7 @@ export const createFromVoice = action({
     const language: ImageLanguage = isImageLanguage(args.language) ? args.language : prepared.language;
     try {
       const prompt = composeFamilyImagePrompt({ prompt: args.prompt, kind, style, language });
-      const generated = await generateFamilyImageBytes(prompt, await resolveOpenRouterKey(ctx, prepared.spaceId));
+      const generated = await generateFamilyImageBytes(prompt, await resolveOpenRouterKey(ctx, prepared.spaceId, prepared.userId));
       const storageId = await ctx.storage.store(new Blob([generated.bytes], { type: generated.mediaType }));
       const saved = await ctx.runMutation(internal.images.save, {
         roomId: args.roomId, storageId, prompt: args.prompt.trim(), mediaType: generated.mediaType, kind, style, language,

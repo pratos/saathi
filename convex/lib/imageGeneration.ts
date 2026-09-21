@@ -1,9 +1,8 @@
-import { env } from "../_generated/server";
 import { SAATHI_IMAGE_MODEL } from "./saathi";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
-export async function generateFamilyImageBytes(prompt: string, apiKey = env.OPENROUTER_API_KEY) {
+export async function generateFamilyImageBytes(prompt: string, apiKey: string) {
   const response = await fetch("https://openrouter.ai/api/v1/images", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

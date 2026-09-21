@@ -37,7 +37,9 @@ type Env = {
   readonly FIRECRAWL_API_KEY: string;
   readonly FIRECRAWL_WEBHOOK_SECRET: string | undefined;
   readonly OPENAI_API_KEY: string | undefined;
-  readonly OPENROUTER_API_KEY: string;
+  readonly OPENROUTER_API_KEY: string | undefined;
+  readonly BYOK_ENCRYPTION_KEY: string | undefined;
+  readonly SUPERADMIN_EMAILS: string | undefined;
   readonly SARVAM_API_KEY: string;
   readonly SITE_URL: string;
   readonly JEV_VOICE_BROWSER_ENABLED: string | undefined;

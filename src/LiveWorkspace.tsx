@@ -19,6 +19,7 @@ import {
   FileText,
   Folder,
   Image as ImageIcon,
+  KeyRound,
   LockKeyhole,
   LogOut,
   Mail,
@@ -45,8 +46,11 @@ import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from './components/ui/select'
+import { AdminDashboard } from './AdminDashboard'
 import { VoiceBlob } from './VoiceBlob'
 import { useLiveVoice, type VoiceStatus, type VoiceToolActivity, type VoiceTurn } from './useLiveVoice'
+import './LiveTools.css'
+import './Access.css'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
@@ -64,6 +68,7 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const ensureCurrent = useMutation(api.users.ensureCurrent)
   const acceptInvitation = useMutation(api.invitations.accept)
   const currentUser = useQuery(api.users.current)
+  const adminRole = useQuery(api.admin.currentRole)
   const spaces = useQuery(api.spaces.mine)
   const [selectedSpaceId, setSelectedSpaceId] = useState<Id<'spaces'> | null>(() => gmailSpaceFromUrl())
   const [invitationState, setInvitationState] = useState<'idle' | 'accepting' | 'error'>(() => invitationToken() ? 'accepting' : 'idle')
@@ -96,15 +101,102 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
     return spaces.flatMap((row) => row.space ? [{ membership: row.membership, space: row.space }] : [])
   }, [spaces])
 
-  if (currentUser === undefined) return <LiveStatus message="Preparing your Saathi profile…" />
+  if (currentUser === undefined || adminRole === undefined) return <LiveStatus message="Preparing your Saathi profile…" />
+  if (adminModeFromUrl() && adminRole.isSuperadmin) return <AdminDashboard onClose={closeAdminDashboard} />
   if (!currentUser.username) return <UsernameSetup onExit={onExit} />
   if (invitationState === 'accepting') return <LiveStatus message="Adding you to the invited family…" />
   if (invitationState === 'error') return <InvitationError message={invitationError} onDismiss={() => { clearInvitationToken(); setInvitationState('idle') }} />
   if (spaces === undefined) return <LiveStatus message="Loading your private family spaces…" />
-  if (families.length === 0) return <CreateFirstFamily onExit={onExit} />
+  if (families.length === 0) return <CreateFirstFamily onExit={onExit} isSuperadmin={adminRole.isSuperadmin} />
 
   const family = families.find(({ space }) => space._id === selectedSpaceId) ?? families[0]
-  return <LiveFamilyShell families={families} family={family} onSelectFamily={setSelectedSpaceId} onExit={onExit} />
+  return <FamilyAccessEntry families={families} family={family} onSelectFamily={setSelectedSpaceId} onExit={onExit} />
+}
+
+function FamilyAccessEntry({ families, family, onSelectFamily, onExit }: {
+  families: FamilyRow[]
+  family: FamilyRow
+  onSelectFamily: (spaceId: Id<'spaces'>) => void
+  onExit: () => void
+}) {
+  const access = useQuery(api.spaces.aiAccess, { spaceId: family.space._id })
+  if (access === undefined) return <LiveStatus message="Checking AI access…" />
+  if (!access.ready) return <AiAccessSetup family={family} access={access} onExit={onExit} />
+  return <LiveFamilyShell families={families} family={family} onSelectFamily={onSelectFamily} onExit={onExit} />
+}
+
+function AiAccessSetup({ family, access, onExit }: {
+  family: FamilyRow
+  access: FunctionReturnType<typeof api.spaces.aiAccess>
+  onExit: () => void
+}) {
+  const saveKey = useMutation(api.spaces.saveProviderKey)
+  const requestAccess = useMutation(api.users.requestAccess)
+  const [openRouterKey, setOpenRouterKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+
+  const saveKeys = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setFeedback('')
+    try {
+      await saveKey({ spaceId: family.space._id, provider: 'openrouter', secret: openRouterKey })
+      setFeedback('Key saved. Opening your family workspace…')
+    } catch {
+      setFeedback('A key could not be saved. Check it and try again.')
+      setBusy(false)
+    }
+  }
+
+  const request = async () => {
+    setBusy(true)
+    setFeedback('')
+    try {
+      await requestAccess({})
+      setFeedback('Request sent. You can sign in anytime to check your access.')
+    } catch {
+      setFeedback('Your request could not be sent. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (access.status === 'blocked') return <main className="onboarding-page"><section className="onboarding-card access-setup-card">
+    <Badge className="mode-badge live"><ShieldCheck size={15} /> Account access</Badge>
+    <h1>This account is not enabled</h1>
+    <p>Contact the person running this Saath deployment if you think this is a mistake.</p>
+    <Button className="secondary large" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
+  </section></main>
+
+  return <main className="onboarding-page access-onboarding">
+    <button className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</button>
+    <section className="onboarding-card access-setup-card">
+      <Badge className="mode-badge live"><KeyRound size={15} /> Choose your AI access</Badge>
+      <h1>Bring your keys or request access</h1>
+      <p>Your OpenRouter key unlocks chat, images, and structured decisions for <strong>{family.space.name}</strong>. Or request managed access from this deployment's administrator.</p>
+      {family.membership.role === 'owner' ? <form onSubmit={saveKeys} className="onboarding-key-form">
+        <label htmlFor="onboarding-openrouter">OpenRouter API key <small>required for BYOK</small></label>
+        <input id="onboarding-openrouter" type="password" autoComplete="off" value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-…" required />
+        <Button className="primary large" type="submit" disabled={busy || openRouterKey.trim().length < 20}>{busy ? 'Saving securely…' : 'Save key and start'} <ArrowRight /></Button>
+      </form> : <p className="form-notice">Ask a family owner to add an OpenRouter key, or request deployment access below.</p>}
+      <div className="access-divider"><span>or</span></div>
+      <Button className="secondary large" onClick={() => void request()} disabled={busy || access.requestedAt !== null}>{access.requestedAt ? 'Access requested' : 'Request access from the administrator'}</Button>
+      {feedback && <p className="form-notice" role="status">{feedback}</p>}
+      <ModelCatalog />
+      <div className="security-note"><ShieldCheck /><span><strong>Encrypted and private</strong>Keys are encrypted at rest, never returned to the browser, and shared only inside this family.</span></div>
+    </section>
+  </main>
+}
+
+function ModelCatalog() {
+  return <details className="onboarding-models"><summary>Models used by this build</summary><ul>
+    <li><strong>Chat:</strong> DeepSeek V4.1 Flash, GPT-5.6 Luna, Grok 4.6, or GPT-5.6 Sol through OpenRouter</li>
+    <li><strong>Images:</strong> Meta Muse Image through OpenRouter</li>
+    <li><strong>Voice:</strong> GPT Live 1 with GPT-5 mini delegation through OpenAI</li>
+    <li><strong>Email and photo extraction:</strong> GPT-5 mini through OpenAI</li>
+    <li><strong>Routing and safety:</strong> your selected OpenRouter model for BYOK, or TypeSafe System One for managed access</li>
+  </ul></details>
 }
 
 function UsernameSetup({ onExit }: { onExit: () => void }) {
@@ -148,7 +240,7 @@ function UsernameSetup({ onExit }: { onExit: () => void }) {
   </main>
 }
 
-function CreateFirstFamily({ onExit }: { onExit: () => void }) {
+function CreateFirstFamily({ onExit, isSuperadmin = false }: { onExit: () => void; isSuperadmin?: boolean }) {
   const createSpace = useMutation(api.spaces.create)
   const createInbox = useAction(api.agentmailInboxes.createForFamily)
   const [name, setName] = useState('')
@@ -191,6 +283,7 @@ function CreateFirstFamily({ onExit }: { onExit: () => void }) {
           <button className="primary large" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create private family space'} <Plus /></button>
         </form>
         {error && <p className="form-error" role="alert">{error}</p>}
+        {isSuperadmin && <Button className="secondary large" type="button" onClick={openAdminDashboard}><ShieldCheck /> Open superadmin dashboard</Button>}
         <div className="security-note"><ShieldCheck /><span><strong>Separate by default</strong>You can belong to multiple families without sharing information between them.</span></div>
       </section>
     </main>
@@ -316,6 +409,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
         <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
         {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Debug</span></button>}
+        {isBenchmarkAdmin && <button className="rail-action" onClick={openAdminDashboard}><ShieldCheck /><span>Access</span></button>}
         {isBenchmarkAdmin && <button className={`rail-action ${benchmarkAdminOpen ? 'active' : ''}`} onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /><span>Benchmarks</span></button>}
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
@@ -1450,10 +1544,11 @@ function ByokKeys({ spaceId }: { spaceId: Id<'spaces'> }) {
   const keys = useQuery(api.spaces.providerKeyStatus, { spaceId })
   const saveKey = useMutation(api.spaces.saveProviderKey)
   const removeKey = useMutation(api.spaces.removeProviderKey)
-  const [provider, setProvider] = useState<'openai' | 'openrouter' | 'codex'>('openai')
+  const [provider, setProvider] = useState<'openai' | 'openrouter' | 'codex'>('openrouter')
   const [secret, setSecret] = useState('')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [removingProvider, setRemovingProvider] = useState<'openai' | 'openrouter' | 'codex' | null>(null)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -1470,8 +1565,22 @@ function ByokKeys({ spaceId }: { spaceId: Id<'spaces'> }) {
     }
   }
 
+  const remove = async (providerToRemove: 'openai' | 'openrouter' | 'codex') => {
+    setBusy(true)
+    setFeedback('')
+    try {
+      await removeKey({ spaceId, provider: providerToRemove })
+      setFeedback('Key removed. Add another key before using this provider again.')
+      setRemovingProvider(null)
+    } catch {
+      setFeedback('That key could not be removed. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <div className="byok-card">
-    <p>Paste an OpenAI, OpenRouter, or Codex API key. ChatGPT login is not an API. The secret is encrypted; only the last four characters are shown.</p>
+    <p>Paste an OpenRouter, OpenAI, or Codex API key. OpenRouter powers chat, images, routing, and safety decisions for BYOK families. The secret is encrypted and only its last four characters are shown.</p>
     <form onSubmit={submit}>
       <div className="chip-row" role="radiogroup" aria-label="Provider">
         {([
@@ -1488,7 +1597,9 @@ function ByokKeys({ spaceId }: { spaceId: Id<'spaces'> }) {
     {feedback && <small role="status">{feedback}</small>}
     {(keys ?? []).map(key => <div className="byok-row" key={key.provider}>
       <span><strong>{key.provider === 'openrouter' ? 'OpenRouter' : key.provider === 'codex' ? 'Codex' : 'OpenAI'}</strong><small>ending {key.lastFour}</small></span>
-      <button type="button" onClick={() => void removeKey({ spaceId, provider: key.provider })}>Remove</button>
+      {removingProvider === key.provider
+        ? <span className="byok-remove-confirm"><button type="button" onClick={() => void remove(key.provider)} disabled={busy}>Confirm remove</button><button type="button" onClick={() => setRemovingProvider(null)} disabled={busy}>Cancel</button></span>
+        : <button type="button" onClick={() => setRemovingProvider(key.provider)}>Remove</button>}
     </div>)}
   </div>
 }
@@ -1734,6 +1845,23 @@ function convexErrorCode(error: unknown) {
   if (!error || typeof error !== 'object' || !('data' in error)) return ''
   const data = (error as { data?: unknown }).data
   return data && typeof data === 'object' && 'code' in data && typeof data.code === 'string' ? data.code : ''
+}
+
+function adminModeFromUrl() {
+  return new URLSearchParams(window.location.search).get('admin') === 'access'
+}
+
+function openAdminDashboard() {
+  const url = new URL(window.location.href)
+  url.searchParams.set('mode', 'live')
+  url.searchParams.set('admin', 'access')
+  window.location.assign(`${url.pathname}${url.search}${url.hash}`)
+}
+
+function closeAdminDashboard() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('admin')
+  window.location.assign(`${url.pathname}${url.search}${url.hash}`)
 }
 
 function invitationToken() {

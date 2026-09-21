@@ -3,7 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
-import { requireRoomPermission } from "./lib/authz";
+import { requireAiAccess, requireRoomPermission } from "./lib/authz";
 import { DEFAULT_MODEL_TIER, resolveModelTier } from "./lib/modelTiers";
 import { containsSaathiMention, mentionedUsernames, SAATHI_SYSTEM_PROMPT, stripSaathiMention } from "./lib/saathi";
 
@@ -61,6 +61,7 @@ export const post = mutation({
 
     const shouldInvokeSaathi = room.assistantMode !== "off";
     if (shouldInvokeSaathi) {
+      await requireAiAccess(ctx, room.spaceId, "openrouter");
       const agentRate = await limits.limit(ctx, "mentionSaathi", { key: `${room.spaceId}:${userId}` });
       if (!agentRate.ok) {
         if (explicitlyMentioned) throw new ConvexError({ code: "RATE_LIMITED", retryAfter: agentRate.retryAfter });

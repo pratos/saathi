@@ -15,7 +15,11 @@ describe("Jev decision records", () => {
       const now = Date.now();
       const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
       const memberId = await ctx.db.insert("users", { email: "member@example.test" });
-      const adminId = await ctx.db.insert("users", { email: "Prathamesh.B.Sarang@gmail.com" });
+      const adminId = await ctx.db.insert("users", {
+        email: "admin@example.test",
+        platformRole: "superadmin",
+        accessStatus: "approved",
+      });
       const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "jev-family", createdAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
       await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: now });
@@ -45,7 +49,7 @@ describe("Jev decision records", () => {
     expect(rows[0].inputPreview).toHaveLength(500);
     expect(rows[0].inputPreview).not.toContain("\n");
     await expect(member.query(api.jev.recent, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
-    await expect(owner.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).resolves.toBeNull();
+    await expect(owner.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).resolves.toBe(seeded.ownerId);
     await expect(member.mutation(internal.jev.prepareLab, { spaceId: seeded.spaceId })).rejects.toThrow(/permission/i);
     await expect(owner.query(api.jev.canViewBenchmarks, {})).resolves.toBe(false);
     await expect(member.query(api.jev.canViewBenchmarks, {})).resolves.toBe(false);

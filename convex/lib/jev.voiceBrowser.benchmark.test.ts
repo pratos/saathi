@@ -79,7 +79,7 @@ describe("Jev voice browser benchmark corpus", () => {
     for (const benchmark of cases) {
       const actions = buildBrowserActions(SNAPSHOT, benchmark.instruction);
       const fingerprint = pageFingerprint(SNAPSHOT);
-      const decision = await decideBrowserStep(apiKey, {
+      const decision = await decideBrowserStep({ kind: "managed_typesafe", apiKey }, {
         goal: benchmark.instruction,
         latestVoiceInstruction: benchmark.instruction,
         page: { url: "https://shop.example.test", fingerprint },

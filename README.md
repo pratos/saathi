@@ -23,6 +23,15 @@ npm run dev:backend
 
 Follow [convex/README.md](./convex/README.md) for the server-side variable checklist and to configure email OTP, AgentMail, Firecrawl, optional Composio Gmail ingestion, and static hosting. Provider secrets belong in Convex deployment environment variables, not browser-visible Vite variables.
 
+## Self-hosting
+
+1. Install dependencies and link a Convex deployment.
+2. Configure Convex Auth and AgentMail for email OTP.
+3. Set `BYOK_ENCRYPTION_KEY` and `SUPERADMIN_EMAILS` in the Convex deployment. Configure `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, and `TYPESAFE_API_KEY` when offering administrator-approved managed access; family owners can instead add an OpenRouter key during onboarding.
+4. Run the frontend and backend, sign in with a superadmin email, and open **Access** to review accounts that requested deployment-funded AI access.
+
+New accounts can create a family and add a family-scoped OpenRouter key immediately. BYOK families use that key and the family's selected model for structured routing and safety decisions. Accounts without an OpenRouter key remain in the access-request screen until a superadmin approves managed access; managed decision workloads use the deployment's TypeSafe key. Chrome shows the in-app install action first when the browser reports that the PWA is installable.
+
 Run static checks with:
 
 ```sh

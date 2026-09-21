@@ -31,7 +31,16 @@ export default defineConfig(({ mode }) => {
             includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png'],
             workbox: {
               globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+              globIgnores: ['**/PreviewWorkspace-*.*', '**/LiveWorkspace-*.*'],
               navigateFallback: 'index.html',
+              runtimeCaching: [{
+                urlPattern: /\/assets\/(?:PreviewWorkspace|LiveWorkspace)-[^/]+\.(?:js|css)$/,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'saath-feature-chunks',
+                  expiration: { maxEntries: 16, maxAgeSeconds: 30 * 24 * 60 * 60 },
+                },
+              }],
             },
             manifest: {
               id: '/',
@@ -40,8 +49,8 @@ export default defineConfig(({ mode }) => {
               description: 'A multilingual family inbox and shared messenger.',
               lang: 'en',
               dir: 'ltr',
-              theme_color: '#372a38',
-              background_color: '#e36d4f',
+              theme_color: '#233f72',
+              background_color: '#f4f0e8',
               display: 'standalone',
               display_override: ['standalone', 'minimal-ui'],
               orientation: 'portrait-primary',

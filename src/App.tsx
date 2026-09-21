@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { lazy, Suspense, useState, type FormEvent } from 'react'
 import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react'
 import {
   ArrowLeft,
@@ -11,14 +11,17 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
-import { LiveWorkspace } from './LiveWorkspace'
-import { PreviewWorkspace } from './PreviewWorkspace'
+import { PwaInstallCard, PwaInstallReminder } from './PwaInstallPrompt'
+import { usePwaInstall, type PwaInstallController } from './usePwaInstall'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
 import './App.css'
 
 type ExperienceMode = 'choose' | 'preview' | 'live'
+
+const PreviewWorkspace = lazy(() => import('./PreviewWorkspace').then(module => ({ default: module.PreviewWorkspace })))
+const LiveWorkspace = lazy(() => import('./LiveWorkspace').then(module => ({ default: module.LiveWorkspace })))
 
 function modeFromUrl(): ExperienceMode {
   const mode = new URLSearchParams(window.location.search).get('mode')
@@ -34,31 +37,33 @@ function setModeInUrl(mode: ExperienceMode) {
 
 export default function App({ backendAvailable }: { backendAvailable: boolean }) {
   const [mode, setMode] = useState<ExperienceMode>(modeFromUrl)
+  const pwaInstall = usePwaInstall()
 
   const chooseMode = (nextMode: ExperienceMode) => {
     setModeInUrl(nextMode)
     setMode(nextMode)
   }
 
-  if (mode === 'preview') return <PreviewWorkspace onExit={() => chooseMode('choose')} />
-  if (mode === 'live' && backendAvailable) return <LiveExperience onExit={() => chooseMode('choose')} />
+  if (mode === 'preview') return <Suspense fallback={<FullPageStatus message="Opening the guided preview…" />}><PreviewWorkspace onExit={() => chooseMode('choose')} /></Suspense>
+  if (mode === 'live' && backendAvailable) return <LiveExperience onExit={() => chooseMode('choose')} pwaInstall={pwaInstall} />
   if (mode === 'live') return <BackendUnavailable onBack={() => chooseMode('choose')} />
-  return <ModeChooser onChoose={chooseMode} backendAvailable={backendAvailable} />
+  return <ModeChooser onChoose={chooseMode} backendAvailable={backendAvailable} pwaInstall={pwaInstall} />
 }
 
 function ModeChooser({
   onChoose,
   backendAvailable,
+  pwaInstall,
 }: {
   onChoose: (mode: ExperienceMode) => void
   backendAvailable: boolean
+  pwaInstall: PwaInstallController
 }) {
   return (
     <main className="welcome-page">
       <section className="welcome-story">
         <div className="auth-brand"><span className="brand-mark">स</span> Saath</div>
         <div className="welcome-copy">
-          <span className="eyebrow light">A calmer family inbox</span>
           <h1>Keep the whole family in the loop.</h1>
           <p>Bills, school notes, travel plans, and family conversations—understood in the language each person prefers.</p>
           <div className="trust-list">
@@ -72,16 +77,17 @@ function ModeChooser({
 
       <section className="mode-panel" aria-labelledby="mode-title">
         <div className="mode-picker">
-          <span className="eyebrow">Choose how to begin</span>
           <h2 id="mode-title">Welcome to Saath</h2>
           <p className="mode-intro">Explore safely with sample information, or open your private family workspace.</p>
+
+          <PwaInstallCard controller={pwaInstall} />
 
           <Button variant="outline" className="mode-card live-card" onClick={() => onChoose('live')} disabled={!backendAvailable}>
             <span className="mode-icon"><LockKeyhole size={25} /></span>
             <span className="mode-card-copy">
               <strong>Open my family workspace</strong>
               <small>Sign in with a secure code sent to your email. Your real family information appears here.</small>
-              {!backendAvailable && <em>Live mode needs a connected Convex deployment.</em>}
+              {!backendAvailable && <em>The live workspace is still being set up on this site.</em>}
             </span>
             <ArrowRight size={22} />
           </Button>
@@ -103,12 +109,15 @@ function ModeChooser({
   )
 }
 
-function LiveExperience({ onExit }: { onExit: () => void }) {
+function LiveExperience({ onExit, pwaInstall }: { onExit: () => void; pwaInstall: PwaInstallController }) {
   const { isLoading, isAuthenticated } = useConvexAuth()
 
   if (isLoading) return <FullPageStatus message="Opening Saath securely…" />
   if (!isAuthenticated) return <EmailOtpSignIn onBack={onExit} />
-  return <LiveWorkspace onExit={onExit} />
+  return <>
+    <Suspense fallback={<FullPageStatus message="Opening your family space…" />}><LiveWorkspace onExit={onExit} /></Suspense>
+    <PwaInstallReminder controller={pwaInstall} />
+  </>
 }
 
 function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
@@ -214,8 +223,12 @@ function BackendUnavailable({ onBack }: { onBack: () => void }) {
   return (
     <main className="centered-status">
       <LockKeyhole size={34} />
-      <h1>Live mode is not connected</h1>
-      <p>Set the browser-safe <code>VITE_CONVEX_URL</code> for this environment, then reload Saath.</p>
+      <h1>Saath needs a quick setup</h1>
+      <p>This family workspace is not connected yet. Ask the person who set up Saath to finish the connection, then reload this page.</p>
+      <details className="status-details">
+        <summary>Setup details</summary>
+        <p>Set the browser-safe <code>VITE_CONVEX_URL</code> for this environment.</p>
+      </details>
       <button className="secondary large" onClick={onBack}><ArrowLeft size={19} /> Back to choices</button>
     </main>
   )

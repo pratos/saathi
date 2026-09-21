@@ -1,13 +1,16 @@
 import { convexTest, type TestConvex } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("family BYOK", () => {
   test("only owners can save a key, members see last four, and the secret is never returned", async () => {
+    vi.stubEnv("BYOK_ENCRYPTION_KEY", "test-only-byok-encryption-key");
     const t = convexTest(schema, modules);
     const { spaceId, ownerId, memberId } = await seedFamily(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
@@ -26,12 +29,35 @@ describe("family BYOK", () => {
     const publicJson = JSON.stringify(await owner.query(api.spaces.providerKeyStatus, { spaceId }));
     expect(publicJson).not.toContain("sk-test-family-key-1234567890");
     expect(await t.query(internal.spaces.resolveProviderKey, { spaceId, provider: "openai" })).toBe("sk-test-family-key-1234567890");
+    expect(await t.run(async ctx => (await ctx.db.query("providerKeys").unique())?.sealedSecret)).toMatch(/^v2:/);
 
     await owner.mutation(api.spaces.removeProviderKey, { spaceId, provider: "openai" });
     expect(await owner.query(api.spaces.providerKeyStatus, { spaceId })).toEqual([]);
     expect(await t.query(internal.spaces.resolveProviderKey, { spaceId, provider: "openai" })).toBeNull();
+
+    const legacySecret = "sk-test-legacy-family-key-1234567890";
+    await t.run(async ctx => {
+      await ctx.db.insert("providerKeys", {
+        spaceId,
+        provider: "openai",
+        sealedSecret: await legacySeal(legacySecret),
+        lastFour: "7890",
+        updatedBy: ownerId,
+        updatedAt: Date.now(),
+      });
+    });
+    expect(await t.query(internal.spaces.resolveProviderKey, { spaceId, provider: "openai" })).toBe(legacySecret);
   });
 });
+
+async function legacySeal(secret: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("saathi-byok:saathi-local-byok"));
+  const key = await crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(secret));
+  const toHex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+  return `${toHex(iv)}:${toHex(new Uint8Array(encrypted))}`;
+}
 
 async function seedFamily(t: TestConvex<typeof schema>) {
   return t.run(async ctx => {

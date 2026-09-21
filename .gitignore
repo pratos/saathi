@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 .vite-portal
+.vercel
+.impeccable
 *.local
 
 # Editor directories and files

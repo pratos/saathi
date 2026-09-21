@@ -1,0 +1,37 @@
+import { ArrowRight, Download, X } from 'lucide-react'
+import { Button } from './components/ui/button'
+import type { PwaInstallController } from './usePwaInstall'
+import './PwaInstallPrompt.css'
+
+export function PwaInstallCard({ controller }: { controller: PwaInstallController }) {
+  if (!controller.mode) return null
+  const copy = controller.mode === 'native'
+    ? 'Open it like an app, with a home-screen icon and a focused window.'
+    : 'On iPhone or iPad, tap Share, then choose Add to Home Screen.'
+  const content = <>
+    <span className="pwa-install-icon"><Download size={28} /></span>
+    <span><strong>Install Saath on this device</strong><small>{copy}</small></span>
+    {controller.mode === 'native' && <ArrowRight size={24} />}
+  </>
+  return controller.mode === 'native'
+    ? <Button className="pwa-install-card" onClick={() => void controller.install()}>{content}</Button>
+    : <div className="pwa-install-card pwa-install-card-manual" role="note">{content}</div>
+}
+
+export function PwaInstallReminder({ controller }: { controller: PwaInstallController }) {
+  if (!controller.mode) return null
+  return <aside className="pwa-install-reminder" aria-label="Install Saath">
+    <span className="pwa-install-reminder-icon"><Download size={21} /></span>
+    <div>
+      <strong>Keep Saath one tap away</strong>
+      <small>{controller.mode === 'native'
+        ? 'Install the app for a focused window and home-screen icon.'
+        : 'Tap Share, then Add to Home Screen.'}</small>
+      <span className="pwa-install-reminder-actions">
+        {controller.mode === 'native' && <Button onClick={() => void controller.install()}>Install</Button>}
+        <button type="button" onClick={controller.dismiss}>Not now</button>
+      </span>
+    </div>
+    <button type="button" className="pwa-install-reminder-close" onClick={controller.dismiss} aria-label="Dismiss install reminder"><X size={18} /></button>
+  </aside>
+}

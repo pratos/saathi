@@ -2,6 +2,7 @@ import { start, vResultValidator, vWorkflowId, WorkflowManager } from "@convex-d
 import { z } from "zod";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { env, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { parsePublicDocument } from "./lib/firecrawlParse";
 import { attachmentHint, extractPasswordHints, findDocumentUrls, inferDirection } from "./lib/inboxExtract";
@@ -10,6 +11,7 @@ import {
   inboxClassificationResultValidator,
   type InboxClassificationResult,
 } from "./lib/inboxClassification";
+import { resolveOpenAiKey, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 
 const category = v.union(
   v.literal("bills"),
@@ -99,18 +101,23 @@ export const itemForExtraction = internalQuery({
     sender: v.string(),
     familyInboxId: v.union(v.string(), v.null()),
     agentmailMessageId: v.string(),
+    spaceId: v.id("spaces"),
+    credentialUserId: v.id("users"),
   }),
   handler: async (ctx, args) => {
     const item = await ctx.db.get(args.inboxItemId);
     if (!item) throw new Error("Inbox item no longer exists");
     const space = await ctx.db.get(item.spaceId);
+    if (!space) throw new Error("Family space no longer exists");
     return {
       subject: item.subject,
       originalText: item.originalText,
       originalHtml: item.originalHtml ?? null,
       sender: item.sender,
-      familyInboxId: space?.agentmailInboxId ?? null,
+      familyInboxId: space.agentmailInboxId ?? null,
       agentmailMessageId: item.agentmailMessageId,
+      spaceId: item.spaceId,
+      credentialUserId: space.createdBy,
     };
   },
 });
@@ -126,8 +133,11 @@ export const classifyForTelemetry = internalAction({
       sender: string;
       familyInboxId: string | null;
       agentmailMessageId: string;
+      spaceId: Id<"spaces">;
+      credentialUserId: Id<"users">;
     } = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
-    return await classifyInboxEmail(env.TYPESAFE_API_KEY?.trim(), {
+    const credential = await resolveOptionalDecisionCredential(ctx, item.spaceId, item.credentialUserId);
+    return await classifyInboxEmail(credential ?? undefined, {
       sender: item.sender,
       subject: item.subject,
       text: item.originalText,
@@ -210,7 +220,12 @@ export const extract = internalAction({
   handler: async (ctx, args) => {
     const item = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
     const fallbackDirection = inferDirection(item.sender, item.familyInboxId ?? undefined, item.originalText);
-    const apiKey = process.env.OPENAI_API_KEY;
+    let apiKey = "";
+    try {
+      apiKey = await resolveOpenAiKey(ctx, item.spaceId, item.credentialUserId);
+    } catch {
+      // Inbox ingestion remains useful without OpenAI; document parsing and manual review still work.
+    }
     if (!apiKey) {
       return {
         category: "needs_review" as const,
@@ -230,7 +245,7 @@ export const extract = internalAction({
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.OPENAI_EXTRACTION_MODEL ?? "gpt-5-mini",
+        model: "gpt-5-mini",
         input: [
           {
             role: "system",
@@ -363,7 +378,7 @@ export const applyExtraction = internalMutation({
         spaceId: item.spaceId,
         userId,
         provider: "openai",
-        model: process.env.OPENAI_EXTRACTION_MODEL ?? "gpt-5-mini",
+        model: "gpt-5-mini",
         unit: "request",
         quantity: 1,
         costClass: "email_extraction",

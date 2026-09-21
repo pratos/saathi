@@ -225,7 +225,7 @@ function safety(id: string, language: Language, text: string): BenchmarkCase {
 }
 
 async function evaluateMemoryIntent(apiKey: string, benchmark: BenchmarkCase) {
-  return await decideMemory(apiKey, {
+  return await decideMemory({ kind: "managed_typesafe", apiKey }, {
     originalText: benchmark.text,
     languageHint: benchmark.language,
     existingCandidates: benchmark.existingCandidates,

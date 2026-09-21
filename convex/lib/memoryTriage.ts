@@ -1,4 +1,12 @@
 import { choice, noul, score, TypeSafeClient } from "@typesafe-ai/sdk";
+import {
+  boundedScore,
+  probability,
+  probabilityRecord,
+  probabilityRecordSchema,
+  runOpenRouterDecision,
+  type DecisionCredential,
+} from "./decisionProvider.js";
 import { MULTILINGUAL_INTENT_GUIDANCE } from "./jev.js";
 
 export const MEMORY_OPERATIONS = {
@@ -80,81 +88,152 @@ const MIN_EXPLICIT_WRITE = 0.8;
 const MIN_EXPLICIT_REMOVE = 0.85;
 const MAX_SENSITIVE_CONFIDENCE = 0.2;
 
-export async function decideMemory(apiKey: string, input: {
+export async function decideMemory(credential: DecisionCredential, input: {
   originalText: string;
   languageHint?: "en" | "hi" | "mr" | "unknown";
   existingCandidates?: Array<{ category: MemoryCategory; scope: MemoryScope; originalText: string }>;
 }): Promise<MemorySemanticDecision> {
   const startedAt = Date.now();
-  const response = await new TypeSafeClient({ apiKey, logLevel: "error", timeout: 10_000 }).systemOne({
-    state: {
-      latest_user_request: input.originalText.slice(0, 12_000),
-      language_hint: input.languageHint ?? "unknown",
-      existing_candidates: (input.existingCandidates ?? []).slice(0, 20).map(candidate => ({
-        ...candidate,
-        originalText: candidate.originalText.slice(0, 1_200),
-      })),
-      interpretation_policy: MULTILINGUAL_INTENT_GUIDANCE,
-      memory_policy: {
-        explicit_writes_only: "A write requires a direct, present request to remember, save, change, or correct information.",
-        no_inference: "Incidental, quoted, hypothetical, negated, or merely useful information is not a write request.",
-        sensitive: "Credentials, OTPs, authentication secrets, payment credentials, and exact financial account or government identifiers must never be retained.",
-        authorization: "Classify requested scope only. Application code determines authorization and confirmation.",
+  const state = {
+    latest_user_request: input.originalText.slice(0, 12_000),
+    language_hint: input.languageHint ?? "unknown",
+    existing_candidates: (input.existingCandidates ?? []).slice(0, 20).map(candidate => ({
+      ...candidate,
+      originalText: candidate.originalText.slice(0, 1_200),
+    })),
+    interpretation_policy: MULTILINGUAL_INTENT_GUIDANCE,
+    memory_policy: {
+      explicit_writes_only: "A write requires a direct, present request to remember, save, change, or correct information.",
+      no_inference: "Incidental, quoted, hypothetical, negated, or merely useful information is not a write request.",
+      sensitive: "Credentials, OTPs, authentication secrets, payment credentials, and exact financial account or government identifiers must never be retained.",
+      authorization: "Classify requested scope only. Application code determines authorization and confirmation.",
+    },
+  };
+  if (credential.kind === "managed_typesafe") {
+    const response = await new TypeSafeClient({ apiKey: credential.apiKey, logLevel: "error", timeout: 10_000 }).systemOne({
+      state,
+      questions: {
+        operation: choice({
+          question: "Which memory operation does `latest_user_request` explicitly request now?",
+          focus: "Apply the interpretation and memory policies. Use relevance only when asked to judge or use candidate memory for this request. Existing candidates distinguish merge from store.",
+        }, MEMORY_OPERATIONS),
+        category: choice({
+          question: "Which compact memory category best describes the information involved?",
+          focus: "Use profile for reusable defaults such as a usual home or departure city. Use plan only for a specific event or dated commitment. Use excluded_sensitive whenever durable retention is prohibited, even when storage is explicitly requested.",
+        }, MEMORY_CATEGORIES),
+        requested_scope: choice({
+          question: "What memory scope does the person explicitly request?",
+          focus: "Classify only expressed person, family, or current-conversation scope. Do not infer authorization.",
+        }, MEMORY_SCOPES),
+        explicit_write: noul("Does the person directly and currently ask Saathi to store or merge memory?", {
+          true: "A direct present-tense store, correction, replacement, or merge request.",
+          false: "Ordinary, incidental, quoted, hypothetical, negated, recall-only, remove-only, or relevance-only language.",
+        }),
+        explicit_remove: noul("Does the person directly and currently ask Saathi to remove retained memory?"),
+        sensitive: noul("Would retaining the information violate `memory_policy.sensitive`?"),
+        relevance: score("How relevant is candidate retained information to answering the current request?", [
+          "Not relevant.", "Weakly related.", "Possibly useful.", "Directly useful.", "Required to answer correctly.",
+        ]),
+        durability: score("How durable should this information be if deterministic policy allowed retention?", [
+          "Must not be retained.", "Current turn only.", "Temporary until a date or event.", "Useful but expected to change.", "A reusable default or stable fact retained until changed or removed.",
+        ]),
+      },
+    });
+    return {
+      originalText: input.originalText,
+      operation: signal(response.answers.operation),
+      category: signal(response.answers.category),
+      requestedScope: signal(response.answers.requested_scope),
+      explicitWrite: response.answers.explicit_write.noul,
+      explicitRemove: response.answers.explicit_remove.noul,
+      sensitive: response.answers.sensitive.noul,
+      relevance: response.answers.relevance.score,
+      durability: response.answers.durability.score,
+      model: response.model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      latencyMs: Date.now() - startedAt,
+      status: "classified",
+    };
+  }
+
+  const operationIds = Object.keys(MEMORY_OPERATIONS) as MemoryOperation[];
+  const categoryIds = Object.keys(MEMORY_CATEGORIES) as MemoryCategory[];
+  const scopeIds = Object.keys(MEMORY_SCOPES) as MemoryScope[];
+  const result = await runOpenRouterDecision<{
+    operation: MemoryOperation;
+    operationConfidence: number;
+    operationProbabilities: Record<MemoryOperation, number>;
+    category: MemoryCategory;
+    categoryConfidence: number;
+    categoryProbabilities: Record<MemoryCategory, number>;
+    requestedScope: MemoryScope;
+    requestedScopeConfidence: number;
+    requestedScopeProbabilities: Record<MemoryScope, number>;
+    explicitWrite: number;
+    explicitRemove: number;
+    sensitive: number;
+    relevance: number;
+    durability: number;
+  }>(credential, {
+    name: "saath_memory_decision",
+    state,
+    instructions: `Classify the memory request using operations ${JSON.stringify(MEMORY_OPERATIONS)}, categories ${JSON.stringify(MEMORY_CATEGORIES)}, and scopes ${JSON.stringify(MEMORY_SCOPES)}. Apply memory_policy exactly. Confidence fields and boolean likelihoods range from 0 to 1. Include a complete probability distribution for each choice that sums approximately to 1. relevance and durability range from 0 to 4.`,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["operation", "operationConfidence", "operationProbabilities", "category", "categoryConfidence", "categoryProbabilities", "requestedScope", "requestedScopeConfidence", "requestedScopeProbabilities", "explicitWrite", "explicitRemove", "sensitive", "relevance", "durability"],
+      properties: {
+        operation: { type: "string", enum: operationIds },
+        operationConfidence: { type: "number", minimum: 0, maximum: 1 },
+        operationProbabilities: probabilityRecordSchema(operationIds),
+        category: { type: "string", enum: categoryIds },
+        categoryConfidence: { type: "number", minimum: 0, maximum: 1 },
+        categoryProbabilities: probabilityRecordSchema(categoryIds),
+        requestedScope: { type: "string", enum: scopeIds },
+        requestedScopeConfidence: { type: "number", minimum: 0, maximum: 1 },
+        requestedScopeProbabilities: probabilityRecordSchema(scopeIds),
+        explicitWrite: { type: "number", minimum: 0, maximum: 1 },
+        explicitRemove: { type: "number", minimum: 0, maximum: 1 },
+        sensitive: { type: "number", minimum: 0, maximum: 1 },
+        relevance: { type: "number", minimum: 0, maximum: 4 },
+        durability: { type: "number", minimum: 0, maximum: 4 },
       },
     },
-    questions: {
-      operation: choice({
-        question: "Which memory operation does `latest_user_request` explicitly request now?",
-        focus: "Apply the interpretation and memory policies. Use relevance only when asked to judge or use candidate memory for this request. Existing candidates distinguish merge from store.",
-      }, MEMORY_OPERATIONS),
-      category: choice({
-        question: "Which compact memory category best describes the information involved?",
-        focus: "Use profile for reusable defaults such as a usual home or departure city. Use plan only for a specific event or dated commitment. Use excluded_sensitive whenever durable retention is prohibited, even when storage is explicitly requested.",
-      }, MEMORY_CATEGORIES),
-      requested_scope: choice({
-        question: "What memory scope does the person explicitly request?",
-        focus: "Classify only expressed person, family, or current-conversation scope. Do not infer authorization.",
-      }, MEMORY_SCOPES),
-      explicit_write: noul("Does the person directly and currently ask Saathi to store or merge memory?", {
-        true: "A direct present-tense store, correction, replacement, or merge request.",
-        false: "Ordinary, incidental, quoted, hypothetical, negated, recall-only, remove-only, or relevance-only language.",
-      }),
-      explicit_remove: noul("Does the person directly and currently ask Saathi to remove retained memory?"),
-      sensitive: noul("Would retaining the information violate `memory_policy.sensitive`?"),
-      relevance: score("How relevant is candidate retained information to answering the current request?", [
-        "Not relevant.", "Weakly related.", "Possibly useful.", "Directly useful.", "Required to answer correctly.",
-      ]),
-      durability: score("How durable should this information be if deterministic policy allowed retention?", [
-        "Must not be retained.", "Current turn only.", "Temporary until a date or event.", "Useful but expected to change.", "A reusable default or stable fact retained until changed or removed.",
-      ]),
-    },
   });
-
+  if (!operationIds.includes(result.output.operation)
+    || !categoryIds.includes(result.output.category)
+    || !scopeIds.includes(result.output.requestedScope)) {
+    throw new Error("OpenRouter returned an unknown memory decision");
+  }
+  const operationConfidence = probability(result.output.operationConfidence);
+  const categoryConfidence = probability(result.output.categoryConfidence);
+  const requestedScopeConfidence = probability(result.output.requestedScopeConfidence);
   return {
     originalText: input.originalText,
-    operation: signal(response.answers.operation),
-    category: signal(response.answers.category),
-    requestedScope: signal(response.answers.requested_scope),
-    explicitWrite: response.answers.explicit_write.noul,
-    explicitRemove: response.answers.explicit_remove.noul,
-    sensitive: response.answers.sensitive.noul,
-    relevance: response.answers.relevance.score,
-    durability: response.answers.durability.score,
-    model: response.model,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
+    operation: { value: result.output.operation, confidence: operationConfidence, probabilities: probabilityRecord(operationIds, result.output.operationProbabilities) },
+    category: { value: result.output.category, confidence: categoryConfidence, probabilities: probabilityRecord(categoryIds, result.output.categoryProbabilities) },
+    requestedScope: { value: result.output.requestedScope, confidence: requestedScopeConfidence, probabilities: probabilityRecord(scopeIds, result.output.requestedScopeProbabilities) },
+    explicitWrite: probability(result.output.explicitWrite),
+    explicitRemove: probability(result.output.explicitRemove),
+    sensitive: probability(result.output.sensitive),
+    relevance: boundedScore(result.output.relevance, 4),
+    durability: boundedScore(result.output.durability, 4),
+    model: result.model,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
     latencyMs: Date.now() - startedAt,
     status: "classified",
   };
 }
 
 export async function safelyDecideMemory(
-  apiKey: string,
+  credential: DecisionCredential,
   input: Parameters<typeof decideMemory>[1],
   classify: typeof decideMemory = decideMemory,
 ): Promise<MemorySemanticDecision> {
   try {
-    return await classify(apiKey, input);
+    return await classify(credential, input);
   } catch {
     return unavailableMemoryDecision(input.originalText);
   }

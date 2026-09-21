@@ -8,8 +8,10 @@ import { action, env, internalAction, type ActionCtx } from "./_generated/server
 import { composioDownloadUrl, gmailAttachmentDescriptors, isPdfAttachment } from "./lib/gmailAttachments";
 import { extractPasswordHints } from "./lib/inboxExtract";
 import { parsePublicDocument } from "./lib/firecrawlParse";
+import type { DecisionCredential } from "./lib/decisionProvider";
 import { decideEmail, type JevEmailDecision } from "./lib/jev";
 import { isConfidentEmailIgnore } from "./lib/inboxClassification";
+import { resolveOpenAiKey, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 
 export const beginConnection = action({
   args: { spaceId: v.id("spaces") },
@@ -307,8 +309,8 @@ async function classifyEmail(
   connection: Doc<"gmailConnections">,
   email: { sender: string; subject: string; text: string },
 ) {
-  const typesafeKey = env.TYPESAFE_API_KEY?.trim();
-  const jev = typesafeKey ? await safeEmailDecision(typesafeKey, email) : null;
+  const decisionCredential = await resolveOptionalDecisionCredential(ctx, connection.spaceId, connection.userId);
+  const jev = decisionCredential ? await safeEmailDecision(decisionCredential, email) : null;
   if (jev) {
     const ignored = shouldIgnoreEmail(jev);
     await ctx.runMutation(internal.jev.record, {
@@ -327,8 +329,7 @@ async function classifyEmail(
       return { useful: false, summary: "", category: "receipts" as const, amount: undefined, merchant: undefined };
     }
   }
-  const apiKey = env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+  const apiKey = await resolveOpenAiKey(ctx, connection.spaceId, connection.userId);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -371,9 +372,9 @@ export function shouldIgnoreEmail(decision: JevEmailDecision) {
   return isConfidentEmailIgnore(decision);
 }
 
-async function safeEmailDecision(apiKey: string, email: { sender: string; subject: string; text: string }) {
+async function safeEmailDecision(credential: DecisionCredential, email: { sender: string; subject: string; text: string }) {
   try {
-    return await decideEmail(apiKey, email);
+    return await decideEmail(credential, email);
   } catch (error) {
     console.warn("JEV_EMAIL_DECISION_FAILED", error instanceof Error ? error.name : "unknown");
     return null;

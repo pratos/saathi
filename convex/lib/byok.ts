@@ -21,16 +21,19 @@ export function keyLastFour(secret: string) {
 }
 
 export async function sealSecret(secret: string) {
-  const key = await wrappingKey();
+  const key = await currentWrappingKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(secret.trim()));
-  return `${toHex(iv)}:${toHex(new Uint8Array(encrypted))}`;
+  return `v2:${toHex(iv)}:${toHex(new Uint8Array(encrypted))}`;
 }
 
 export async function openSecret(sealed: string) {
-  const [ivHex, dataHex] = sealed.split(":");
+  const parts = sealed.split(":");
+  const versioned = parts[0] === "v2";
+  const ivHex = parts[versioned ? 1 : 0];
+  const dataHex = parts[versioned ? 2 : 1];
   if (!ivHex || !dataHex) throw new Error("Stored key is invalid.");
-  const key = await wrappingKey();
+  const key = versioned ? await currentWrappingKey() : await legacyWrappingKey();
   const decrypted = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: fromHex(ivHex) },
     key,
@@ -39,8 +42,18 @@ export async function openSecret(sealed: string) {
   return new TextDecoder().decode(decrypted);
 }
 
-async function wrappingKey() {
-  const material = env.OPENROUTER_API_KEY || env.OPENAI_API_KEY || "saathi-local-byok";
+async function currentWrappingKey() {
+  const material = env.BYOK_ENCRYPTION_KEY?.trim() || env.OPENROUTER_API_KEY?.trim() || env.OPENAI_API_KEY?.trim();
+  if (!material) throw new Error("Set BYOK_ENCRYPTION_KEY before saving provider keys.");
+  return wrappingKey(material);
+}
+
+function legacyWrappingKey() {
+  const material = env.OPENROUTER_API_KEY?.trim() || env.OPENAI_API_KEY?.trim() || "saathi-local-byok";
+  return wrappingKey(material);
+}
+
+async function wrappingKey(material: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`saathi-byok:${material}`));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
 }

@@ -1,0 +1,50 @@
+/* Install-first onboarding and authenticated reminders */
+.pwa-install-card {
+  width: 100%; min-height: 118px; display: grid; grid-template-columns: 58px minmax(0, 1fr) 24px;
+  gap: 18px; align-items: center; margin: 0 0 22px; padding: 20px; border: 2px solid #233f72;
+  border-radius: 16px; color: #fffdf8; background: linear-gradient(135deg, #233f72, #315d46);
+  text-align: left; box-shadow: 0 16px 36px rgba(35,63,114,.2);
+}
+.pwa-install-card:hover { transform: translateY(-2px); box-shadow: 0 20px 44px rgba(35,63,114,.28); }
+.pwa-install-card-manual { grid-template-columns: 58px minmax(0, 1fr); }
+.pwa-install-card-manual:hover { transform: none; box-shadow: 0 16px 36px rgba(35,63,114,.2); }
+.pwa-install-icon { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 15px; color: #17233a; background: #e8b54d; }
+.pwa-install-card span:nth-child(2) { display: grid; gap: 4px; }
+.pwa-install-card strong { font-size: 19px; }
+.pwa-install-card small { color: #fffaf0; font-size: 12px; line-height: 1.45; }
+.pwa-install-reminder {
+  position: fixed; z-index: 80; right: 20px; bottom: 20px; width: min(390px, calc(100vw - 40px));
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 12px; align-items: start;
+  padding: 15px; border: 1px solid #38495b; border-radius: 15px; color: #f7f4ee; background: #111b25;
+  box-shadow: 0 18px 52px rgba(10,16,23,.3);
+}
+.pwa-install-reminder-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: #17233a; background: #e8b54d; }
+.pwa-install-reminder > div { display: grid; gap: 4px; padding-top: 2px; }
+.pwa-install-reminder strong { font-size: 15px; }
+.pwa-install-reminder small { color: #b8c4cb; font-size: 12px; line-height: 1.45; }
+.pwa-install-reminder-actions { display: flex; gap: 8px; align-items: center; margin-top: 7px; }
+.pwa-install-reminder-actions button { min-height: 44px; padding: 0 12px; border-radius: 9px; color: #dce6e8; font-size: 12px; font-weight: 800; }
+.pwa-install-reminder-actions button:first-child { color: #032521; background: #6ee7d8; }
+.pwa-install-reminder-actions button:first-child:hover { background: #8df0e3; }
+.pwa-install-reminder-actions button:last-child:hover { background: #1e2b37; }
+.pwa-install-reminder-close { width: 44px; min-height: 44px; display: grid; place-items: center; border-radius: 10px; color: #9dabb3; }
+.pwa-install-reminder-close:hover { color: #f7f4ee; background: #1e2b37; }
+
+@media (max-width: 700px) {
+  .pwa-install-card { grid-template-columns: 48px minmax(0, 1fr) 20px; gap: 13px; min-height: 104px; padding: 16px; }
+  .pwa-install-card-manual { grid-template-columns: 48px minmax(0, 1fr); }
+  .pwa-install-icon { width: 48px; height: 48px; }
+  .pwa-install-card strong { font-size: 16px; }
+  .pwa-install-reminder { right: 12px; bottom: calc(86px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-install-card { transition: none; }
+  .pwa-install-card:hover { transform: none; }
+}
+
+@media (max-width: 760px) {
+  .pwa-install-card { grid-template-columns: 48px minmax(0, 1fr); min-height: 108px; padding: 16px; }
+  .pwa-install-icon { width: 48px; height: 48px; }
+  .pwa-install-card > svg { display: none; }
+}

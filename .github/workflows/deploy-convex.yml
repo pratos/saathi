@@ -64,7 +64,7 @@ jobs:
         run: npx convex env set SITE_URL "$SITE_URL" --prod
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-          SITE_URL: https://giant-caiman-748.convex.site
+          SITE_URL: https://saathi.tarp.sh
 
       # Static Hosting builds with the production VITE_CONVEX_URL, deploys the
       # Convex backend, then atomically publishes dist/ to convex.site.

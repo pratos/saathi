@@ -865,6 +865,7 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
   const [message, setMessage] = useState('')
   const [imageDraft, setImageDraft] = useState('')
   const [imageOpen, setImageOpen] = useState(false)
+  const [expandedImage, setExpandedImage] = useState<{ url: string; prompt: string } | null>(null)
   const profile = useQuery(api.users.current)
   const [imageStyle, setImageStyle] = useState<(typeof IMAGE_PRESETS)[number]['id']>(profile?.preferredImageStyle ?? 'warm_family')
   const [busy, setBusy] = useState(false)
@@ -1071,7 +1072,7 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
         {timeline.map((entry) => entry.kind === 'image'
           ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
               <span className="message-avatar assistant"><Bot /></span>
-              <div><h3>Saathi <small>· {imageKindLabel(entry.item.kind)}</small></h3><figure className="generated-image-card"><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><figcaption>{entry.item.prompt}</figcaption></figure></div>
+              <div><h3>Saathi <small>· {imageKindLabel(entry.item.kind)}</small></h3><figure className="generated-image-card"><button type="button" className="generated-image-open" onClick={() => setExpandedImage({ url: entry.item.url!, prompt: entry.item.prompt })} aria-label={`View generated image full size: ${entry.item.prompt}`}><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><span>View full size</span></button><figcaption>{entry.item.prompt}</figcaption></figure></div>
             </article>
           : entry.kind === 'attachment'
             ? <article className="outgoing-message attachment-message" key={`attachment-${entry.item._id}`}>
@@ -1186,6 +1187,7 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
         {error && <p className="dark-form-error" role="alert">{error}</p>}
         {voice.error && <p className="dark-form-error" role="alert">{voice.error}</p>}
       </footer>
+      {expandedImage && <GeneratedImageLightbox image={expandedImage} onClose={() => setExpandedImage(null)} />}
       {isVoiceCallOpen(voice.status) && <VoiceCallOverlay
         status={voice.status}
         turns={voice.turns}
@@ -1198,6 +1200,32 @@ function LiveRoom({ room, family, families, onBack, onInvite }: {
       />}
     </section>
   )
+}
+
+function GeneratedImageLightbox({ image, onClose }: {
+  image: { url: string; prompt: string }
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onClose])
+
+  return <div className="image-lightbox" role="presentation" onMouseDown={onClose}>
+    <section className="image-lightbox-panel" role="dialog" aria-modal="true" aria-label="Generated image preview" onMouseDown={event => event.stopPropagation()}>
+      <header><strong>Generated image</strong><span><a href={image.url} target="_blank" rel="noreferrer">Open original</a><button type="button" onClick={onClose} aria-label="Close image preview" autoFocus><X /></button></span></header>
+      <div className="image-lightbox-canvas"><img src={image.url} alt={image.prompt} /></div>
+      <p>{image.prompt}</p>
+    </section>
+  </div>
 }
 
 function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, voiceSeconds, onMute, onEnd }: {

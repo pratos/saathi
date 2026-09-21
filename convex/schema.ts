@@ -10,7 +10,7 @@ void _authUsers;
 
 export default defineSchema({
   ...authTablesWithoutUsers,
-  // Convex Auth's users table, extended with Saath-owned profile fields.
+  // Convex Auth's users table, extended with Saathi-owned profile fields.
   users: defineTable({
     name: v.optional(v.string()), image: v.optional(v.string()), email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.number()), phone: v.optional(v.string()),

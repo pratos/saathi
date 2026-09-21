@@ -62,7 +62,7 @@ function ModeChooser({
   return (
     <main className="welcome-page">
       <section className="welcome-story">
-        <div className="auth-brand"><span className="brand-mark">स</span> Saath</div>
+        <div className="auth-brand"><span className="brand-mark">स</span> Saathi</div>
         <div className="welcome-copy">
           <h1>Keep the whole family in the loop.</h1>
           <p>Bills, school notes, travel plans, and family conversations—understood in the language each person prefers.</p>
@@ -77,7 +77,7 @@ function ModeChooser({
 
       <section className="mode-panel" aria-labelledby="mode-title">
         <div className="mode-picker">
-          <h2 id="mode-title">Welcome to Saath</h2>
+          <h2 id="mode-title">Welcome to Saathi</h2>
           <p className="mode-intro">Explore safely with sample information, or open your private family workspace.</p>
 
           <PwaInstallCard controller={pwaInstall} />
@@ -112,7 +112,7 @@ function ModeChooser({
 function LiveExperience({ onExit, pwaInstall }: { onExit: () => void; pwaInstall: PwaInstallController }) {
   const { isLoading, isAuthenticated } = useConvexAuth()
 
-  if (isLoading) return <FullPageStatus message="Opening Saath securely…" />
+  if (isLoading) return <FullPageStatus message="Opening Saathi securely…" />
   if (!isAuthenticated) return <EmailOtpSignIn onBack={onExit} />
   return <>
     <Suspense fallback={<FullPageStatus message="Opening your family space…" />}><LiveWorkspace onExit={onExit} /></Suspense>
@@ -183,7 +183,7 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
     <main className="live-auth-page">
       <button className="back-link" onClick={onBack}><ArrowLeft size={19} /> Back</button>
       <Card className="live-auth-card">
-        <div className="auth-brand dark"><span className="brand-mark">स</span> Saath</div>
+        <div className="auth-brand dark"><span className="brand-mark">स</span> Saathi</div>
         <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
         <h1>{step === 'email' ? 'Sign in with your email' : step === 'code' ? 'Enter your six-digit code' : 'Opening your family space'}</h1>
         <p>{step === 'email'
@@ -223,8 +223,8 @@ function BackendUnavailable({ onBack }: { onBack: () => void }) {
   return (
     <main className="centered-status">
       <LockKeyhole size={34} />
-      <h1>Saath needs a quick setup</h1>
-      <p>This family workspace is not connected yet. Ask the person who set up Saath to finish the connection, then reload this page.</p>
+      <h1>Saathi needs a quick setup</h1>
+      <p>This family workspace is not connected yet. Ask the person who set up Saathi to finish the connection, then reload this page.</p>
       <details className="status-details">
         <summary>Setup details</summary>
         <p>Set the browser-safe <code>VITE_CONVEX_URL</code> for this environment.</p>

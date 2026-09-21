@@ -1,4 +1,4 @@
-# Saath application flow
+# Saathi application flow
 
 > Descriptive map of the running React + Convex application. Product intent lives in [PRODUCT.md](./PRODUCT.md). This document traces how a request actually moves through the UI, Convex functions, and external providers.
 
@@ -125,7 +125,7 @@ LiveRoom composer
   → transcript persisted on agentMessages; reply written as assistant message
 ```
 
-Saathi **cannot** send email, unsubscribe, pay, delete, or invite. Those stay on confirmable Saath mutations. Chat attachments go `attachments.generateUploadUrl` → Convex storage → `attachments.submit` → photo/document read actions.
+Saathi **cannot** send email, unsubscribe, pay, delete, or invite. Those stay on confirmable Saathi mutations. Chat attachments go `attachments.generateUploadUrl` → Convex storage → `attachments.submit` → photo/document read actions.
 
 ### B. Family inbox (AgentMail)
 

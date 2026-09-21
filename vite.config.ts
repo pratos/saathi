@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
                 urlPattern: /\/assets\/(?:PreviewWorkspace|LiveWorkspace)-[^/]+\.(?:js|css)$/,
                 handler: 'CacheFirst',
                 options: {
+                  // Stable legacy key: existing installed PWAs already use this runtime cache.
                   cacheName: 'saath-feature-chunks',
                   expiration: { maxEntries: 16, maxAgeSeconds: 30 * 24 * 60 * 60 },
                 },
@@ -44,8 +45,8 @@ export default defineConfig(({ mode }) => {
             },
             manifest: {
               id: '/',
-              name: 'Saath',
-              short_name: 'Saath',
+              name: 'Saathi',
+              short_name: 'Saathi',
               description: 'A multilingual family inbox and shared messenger.',
               lang: 'en',
               dir: 'ltr',

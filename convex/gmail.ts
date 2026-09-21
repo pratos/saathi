@@ -23,7 +23,7 @@ export const beginConnection = action({
     callback.searchParams.set("gmailSpace", String(spaceId));
     const session = await gmailSession(userId);
     const request = await session.authorize("gmail", {
-      alias: `saath-${String(spaceId).slice(-6)}-${Date.now().toString(36)}`,
+      alias: `saathi-${String(spaceId).slice(-6)}-${Date.now().toString(36)}`,
       callbackUrl: callback.toString(),
     });
     const redirectUrl = request.redirectUrl;
@@ -58,7 +58,7 @@ export const confirmConnection = action({
     const composio = composioClient();
     const accounts = await composio.connectedAccounts.list({ userIds: [composioUserId(userId)], toolkitSlugs: ["gmail"], statuses: ["ACTIVE"] });
     const account = accounts.items.find(item => item.id === connectedAccountId);
-    if (!account) throw new ConvexError({ code: "GMAIL_CONNECT_INCOMPLETE", message: "Finish connecting Gmail before returning to Saath" });
+    if (!account) throw new ConvexError({ code: "GMAIL_CONNECT_INCOMPLETE", message: "Finish connecting Gmail before returning to Saathi" });
     const session = await gmailSession(userId, connectedAccountId);
     const profile = await session.execute("GMAIL_WHO_AM_I", {}, { account: connectedAccountId });
     if (profile.error) throw new ConvexError({ code: "GMAIL_CONNECT_FAILED", message: "Could not read the connected Gmail identity" });

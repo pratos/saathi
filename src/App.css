@@ -330,7 +330,7 @@ button { border: 0; background: none; color: inherit; }
 }
 
 /* Warm, dignified conversation system */
-.saath-workspace {
+.saathi-workspace {
   --night: #141817;
   --panel: #18201b;
   --panel-raised: #252f28;
@@ -357,7 +357,7 @@ button { border: 0; background: none; color: inherit; }
   background: var(--panel);
   box-shadow: 0 24px 80px rgba(0, 0, 0, .24);
 }
-.saath-workspace button { min-height: 48px; }
+.saathi-workspace button { min-height: 48px; }
 .workspace-rail { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px 10px; background: var(--rail); }
 .workspace-logo { width: 58px; height: 58px; display: grid; place-items: center; margin-bottom: 7px; border-radius: 16px; color: #17312b; background: var(--amber); font-size: 30px; font-weight: 700; }
 .rail-action { width: 70px; min-height: 76px !important; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: 18px; color: #d9e1de; font-size: 14px; }
@@ -551,13 +551,13 @@ button { border: 0; background: none; color: inherit; }
 .dark-connect-card small { color: #f2a99a; line-height: 1.4; }
 
 @media (max-width: 1180px) {
-  .saath-workspace { grid-template-columns: 86px 250px minmax(450px, 1fr); }
+  .saathi-workspace { grid-template-columns: 86px 250px minmax(450px, 1fr); }
   .conversation-context { display: none; }
   .live-conversation-workspace.is-family-open { grid-template-columns: 86px 250px minmax(380px, 1fr); }
 }
 
 @media (max-width: 820px) {
-  .saath-workspace { left: max(14px, calc((100vw - 760px) / 2)); right: max(14px, calc((100vw - 760px) / 2)); grid-template-columns: 1fr; }
+  .saathi-workspace { left: max(14px, calc((100vw - 760px) / 2)); right: max(14px, calc((100vw - 760px) / 2)); grid-template-columns: 1fr; }
   .live-conversation-workspace.is-family-open,
   .live-conversation-workspace.is-family-open.is-mobile-family { grid-template-columns: 1fr; }
   .workspace-rail, .conversation-list, .conversation-context { display: none; }
@@ -601,7 +601,7 @@ button { border: 0; background: none; color: inherit; }
 }
 
 @media (max-width: 600px) {
-  .saath-workspace { inset: 12px; width: auto; height: auto; min-height: 0; margin: 0; border-radius: 27px; }
+  .saathi-workspace { inset: 12px; width: auto; height: auto; min-height: 0; margin: 0; border-radius: 27px; }
   .conversation-header { position: relative; min-height: 94px; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; padding: 12px 14px; }
   .live-room-header { min-height: 190px; }
   .mobile-chat-back { width: 34px; min-height: 48px; }
@@ -734,7 +734,7 @@ button { border: 0; background: none; color: inherit; }
 }
 
 /* Live chat: edge-to-edge workspace with conversational, borderless surfaces. */
-.saath-workspace.live-conversation-workspace {
+.saathi-workspace.live-conversation-workspace {
   inset: 0;
   min-height: 0;
   border: 0;
@@ -1004,13 +1004,13 @@ button { border: 0; background: none; color: inherit; }
 .family-dialog > p { margin: 16px 0 0; color: var(--text-soft); font-size: 13px; line-height: 1.5; }
 
 @media (max-width: 820px) {
-  .saath-workspace.live-conversation-workspace { inset: 0; border-radius: 0; }
+  .saathi-workspace.live-conversation-workspace { inset: 0; border-radius: 0; }
 }
 
 @media (max-width: 600px) {
   .live-conversation-workspace.is-family-open,
   .live-conversation-workspace.is-family-open.is-mobile-family { grid-template-columns: 1fr; }
-  .saath-workspace.live-conversation-workspace { inset: 0; border-radius: 0; }
+  .saathi-workspace.live-conversation-workspace { inset: 0; border-radius: 0; }
   .composer-guidance span { display: none; }
   .composer-guidance { justify-content: flex-start; padding-left: 2px; }
   .live-room-header { min-height: 94px; }
@@ -1064,7 +1064,7 @@ button { border: 0; background: none; color: inherit; }
 /* Shared interaction and surface refinements */
 button, a, summary, input, textarea, [role="button"] { transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
 
-.saath-workspace {
+.saathi-workspace {
   --night: #070b10;
   --panel: #0d131b;
   --panel-raised: #151e28;
@@ -1178,7 +1178,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   letter-spacing: -.025em;
 }
 
-.saath-workspace {
+.saathi-workspace {
   --night: #17233a;
   --panel: #fbfaf6;
   --panel-raised: #fffdf8;
@@ -1455,7 +1455,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .voice-call-controls .is-muted { color: #17233a; background: #e9c88c; }
 
 @media (max-width: 820px) {
-  .saath-workspace { inset: 0; }
+  .saathi-workspace { inset: 0; }
 }
 
 @media (max-width: 600px) {

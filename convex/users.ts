@@ -5,7 +5,7 @@ import { imageStyleValidator } from "./lib/imageSafety";
 import { effectiveAccessStatus, isConfiguredSuperadmin, isSuperadminUser } from "./lib/platformAccess";
 import { validateUsername } from "./lib/usernames";
 
-// Convex Auth creates the row; this provisions Saath-owned profile defaults.
+// Convex Auth creates the row; this provisions Saathi-owned profile defaults.
 export const ensureCurrent = mutation({
   args: {
     displayName: v.optional(v.string()),

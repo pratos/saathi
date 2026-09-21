@@ -1,18 +1,18 @@
-# Saath Product and Technical Specification
+# Saathi Product and Technical Specification
 
 > **Product source of truth.** Product direction, scope, and implementation decisions belong in this document. Update it when a decision changes; do not let the application and this specification drift apart.
 
 **Status:** Working specification, updated 11 September 2026
-**Name:** **Saath** (साथ, “together”); **Saathi** is the AI participant  
+**Name:** **Saathi** (साथी, “companion”); the same name identifies the AI participant in each family workspace.
 **Audience:** Households and small trusted groups whose members use different languages and have different levels of comfort with technology
 
 ## Product decision
 
-Build Saath as a multilingual family operations inbox and shared messenger. A household gets one place for conversations, forwarded email, subscriptions, bills, school notices, bookings, attachments, decisions, and follow-ups. People participate through the web app or a scoped email thread. Saathi translates, summarizes, extracts important dates and amounts, researches current public information, and drafts actions without taking externally visible action without confirmation.
+Build Saathi as a multilingual family operations inbox and shared messenger. A household gets one place for conversations, forwarded email, subscriptions, bills, school notices, bookings, attachments, decisions, and follow-ups. People participate through the web app or a scoped email thread. Saathi translates, summarizes, extracts important dates and amounts, researches current public information, and drafts actions without taking externally visible action without confirmation.
 
 The hackathon application is a standalone React and TypeScript web app backed by Convex. Convex is the system of record and authorization boundary. DeepSeek V4.1 Flash through OpenRouter handles routine multilingual chat and translation. OpenAI retains a narrow, real product role for structured email extraction and suggested replies so the submission clearly satisfies sponsor-stack requirements. Firecrawl retrieves current public evidence, and AgentMail provides the household inbox and threaded email delivery.
 
-box.ascii.dev, bring-your-own API keys, SMS authentication, and billing are not required for the core product loop and are deferred until the measured product need justifies them. Saathi uses Pi as a bounded durable agent loop inside Convex; Pi does not weaken Saath's authorization or confirmation boundaries.
+box.ascii.dev, bring-your-own API keys, SMS authentication, and billing are not required for the core product loop and are deferred until the measured product need justifies them. Saathi uses Pi as a bounded durable agent loop inside Convex; Pi does not weaken Saathi's authorization or confirmation boundaries.
 
 ## Product promise
 
@@ -51,7 +51,7 @@ The visual system is warm and dignified: deep green-black surfaces, restrained t
 - Keep household email and conversations in one understandable place.
 - Understand mixed-language family communication without relying on one person as translator.
 - Turn bills, notices, bookings, and subscription emails into dates, amounts, decisions, and clear next steps.
-- Include an outside participant by email without requiring a Saath account.
+- Include an outside participant by email without requiring a Saathi account.
 - Ask Saathi for help within the authorized conversation and source material.
 - Research current public information with visible URLs and retrieval times.
 - Catch up on unread items, decisions, unresolved questions, renewals, and responsibilities.
@@ -60,11 +60,11 @@ The visual system is warm and dignified: deep green-black surfaces, restrained t
 
 One account can create or join multiple family spaces—for example, a household, a parent’s household, and a resident group. The user chooses an active space from a switcher; switching changes the complete authorization and data scope rather than applying a client-side filter.
 
-Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, follow-ups, and model context are forbidden. A personal Gmail mailbox belongs to one Saath user. That user may opt a family in to receive private copies in My Saathi; sharing into a family inbox is explicit per space and can be repeated for another family. A family AgentMail address is chosen when the family is created, or later by an owner, and must be unused.
+Each space independently owns its members, AgentMail inbox, room grants, inbox items, usage limits, audit history, language mix, and retention settings. A membership row grants a user a role in exactly one space. Cross-space search, summaries, follow-ups, and model context are forbidden. A personal Gmail mailbox belongs to one Saathi user. That user may opt a family in to receive private copies in My Saathi; sharing into a family inbox is explicit per space and can be repeated for another family. A family AgentMail address is chosen when the family is created, or later by an owner, and must be unused.
 
 ## Family inbox
 
-Each family space can receive one AgentMail-powered address, for example `kapoor-family@saath.email`. Owners pick the alias when creating the family (availability is checked first) or connect it later. Members can use it as a subscription contact or forward existing email into it.
+Each family space can receive one AgentMail-powered address, for example `kapoor-family@saathi.email`. Owners pick the alias when creating the family (availability is checked first) or connect it later. Members can use it as a subscription contact or forward existing email into it.
 
 Incoming items are classified into views such as:
 
@@ -82,8 +82,8 @@ Classification is metadata, not a separate copy of the message. An inbox item ca
 
 1. AgentMail sends a signed inbound webhook.
 2. Convex acknowledges promptly, verifies authenticity, and schedules processing.
-3. Saath deduplicates using the AgentMail message ID.
-4. Saath maps the inbox and thread to a family space.
+3. Saathi deduplicates using the AgentMail message ID.
+4. Saathi maps the inbox and thread to a family space.
 5. Known routing rules determine initial visibility; uncertain or unknown senders enter **Needs review**.
 6. OpenAI classifies the item and extracts bounded fields such as amount, due date, renewal date, reference number, and requested action.
 7. The original email and attachments remain available beside all derived fields.
@@ -134,7 +134,7 @@ Saathi cannot autonomously send email, unsubscribe, make a purchase, follow a pa
 
 Each Saathi agent belongs to exactly one room and family space. Creating an agent requires room-manager permission; prompting requires room-post permission; reading its transcript requires room-read permission. A per-agent FIFO mailbox serializes prompts. Convex persists a bounded 200-message context and explicit key/value memories, while a Node 22 action runs Pi against OpenRouter `deepseek/deepseek-v4.1-flash` with at most 12 turns per job.
 
-Every client request has an idempotency key and AI prompts are rate limited per family and user. A running job has an attempt-specific lease. Recovery requeues only the exact expired lease, and completion accepts only the current lease, preventing a late worker from duplicating or replacing a retry's transcript. Pi tools are limited to explicit family memory; external email, membership, payment, deletion, and other consequential tools remain outside the agent and require Saath's normal reviewed confirmation operations.
+Every client request has an idempotency key and AI prompts are rate limited per family and user. A running job has an attempt-specific lease. Recovery requeues only the exact expired lease, and completion accepts only the current lease, preventing a late worker from duplicating or replacing a retry's transcript. Pi tools are limited to explicit family memory; external email, membership, payment, deletion, and other consequential tools remain outside the agent and require Saathi's normal reviewed confirmation operations.
 
 ## Mobile-first account setup
 
@@ -263,7 +263,7 @@ The Photon iMessage component is a candidate for later SMS, RCS, and iMessage de
 - **Hackathon OpenAI role:** direct OpenAI for structured email-to-task extraction and suggested replies, regardless of whether a member changes their conversational profile.
 - **Optional image generation:** OpenRouter `meta/muse-image` for deliberately requested family cards or visual explainers. As of 11 September 2026, Muse Image is fifth on Artificial Analysis' Text to Image leaderboard and, at $0.01 per image, the cheapest model in its top ten. Recheck this time-sensitive routing decision periodically.
 
-Luna, Terra, Sol, and Astra are stable Saath product profiles, not claimed OpenAI API model IDs. A server-side routing table maps them to currently approved provider model IDs. Every run persists both the requested profile and resolved provider/model for reproducibility and usage accounting. A space owner can cap the highest available profile; members may switch within that policy, and expensive High or Ultra work can require a visible estimate and confirmation. No physical dial UI is part of the present implementation.
+Luna, Terra, Sol, and Astra are stable Saathi product profiles, not claimed OpenAI API model IDs. A server-side routing table maps them to currently approved provider model IDs. Every run persists both the requested profile and resolved provider/model for reproducibility and usage accounting. A space owner can cap the highest available profile; members may switch within that policy, and expensive High or Ultra work can require a visible estimate and confirmation. No physical dial UI is part of the present implementation.
 
 One OpenRouter key covers both DeepSeek and Muse Image. Generated images are stored in Convex file storage and remain protected by room authorization.
 
@@ -284,7 +284,7 @@ Use one AgentMail inbox per family space and one email thread per case.
 AgentMail provides:
 
 - inbound household mail and forwarded messages;
-- scoped participation for people without Saath accounts;
+- scoped participation for people without Saathi accounts;
 - attachments and email provenance;
 - outbound invitations, notifications, and confirmed replies;
 - standard email threading for app-to-email conversations.
@@ -487,7 +487,7 @@ The official hackathon requires a new app, Convex as the backend, meaningful wor
 
 | Decision | Current choice | Revisit when |
 | --- | --- | --- |
-| Product name | Saath; assistant is Saathi | Before domain purchase |
+| Product name | Saathi across product and assistant surfaces | Before domain purchase |
 | Product center | Family operations inbox plus multilingual conversation | User testing contradicts it |
 | Launch languages | English, Hindi, Marathi | First household research |
 | Authentication | Convex Auth v2 with AgentMail-delivered email OTP only; OAuth and mobile OTP later | Recovery or user research requires another method |

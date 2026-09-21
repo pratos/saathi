@@ -165,7 +165,7 @@ function AiAccessSetup({ family, access, onExit }: {
   if (access.status === 'blocked') return <main className="onboarding-page"><section className="onboarding-card access-setup-card">
     <Badge className="mode-badge live"><ShieldCheck size={15} /> Account access</Badge>
     <h1>This account is not enabled</h1>
-    <p>Contact the person running this Saath deployment if you think this is a mistake.</p>
+    <p>Contact the person running this Saathi deployment if you think this is a mistake.</p>
     <Button className="secondary large" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
   </section></main>
 
@@ -356,7 +356,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
     setGmailMessage('Finishing Gmail setup…')
     void confirmGmailConnection({ spaceId: family.space._id, connectedAccountId: callback.connectedAccountId })
       .then(() => setGmailMessage('Gmail connected. Saathi is privately reviewing the last 30 days.'))
-      .catch(() => setGmailMessage('Gmail connected at Google, but Saath could not finish setup. Please try again.'))
+      .catch(() => setGmailMessage('Gmail connected at Google, but Saathi could not finish setup. Please try again.'))
       .finally(() => { setGmailBusy(false); clearGmailCallback() })
   }, [confirmGmailConnection, family.space._id])
 
@@ -401,7 +401,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
       : 'home'
 
   return (
-    <main className={`saath-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}${isBenchmarkAdmin ? ' is-benchmark-admin' : ''}`}>
+    <main className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}${isBenchmarkAdmin ? ' is-benchmark-admin' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Home</span></button>

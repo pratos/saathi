@@ -57,9 +57,9 @@ export const createAndSend = action({
         headers: { Authorization: `Bearer ${env.AGENTMAIL_API_KEY.trim()}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           to: created.targetEmail,
-          subject: `Join ${created.familyName} on Saath`,
-          text: `You have been invited to join ${created.familyName} on Saath. Sign in with this email address to accept:\n\n${inviteUrl}\n\nThis invitation expires in 7 days.`,
-          labels: ["saath-family-invitation"],
+          subject: `Join ${created.familyName} on Saathi`,
+          text: `You have been invited to join ${created.familyName} on Saathi. Sign in with this email address to accept:\n\n${inviteUrl}\n\nThis invitation expires in 7 days.`,
+          labels: ["saathi-family-invitation"],
         }),
       },
     );

@@ -37,9 +37,9 @@ const sendVerificationRequest = (async (
       },
       body: JSON.stringify({
         to: normalizedEmail,
-        subject: "Your Saath sign-in code",
-        text: `Your Saath sign-in code is ${token}. It expires at ${expires.toISOString()}. If you did not request it, ignore this email.`,
-        labels: ["saath-auth-otp"],
+        subject: "Your Saathi sign-in code",
+        text: `Your Saathi sign-in code is ${token}. It expires at ${expires.toISOString()}. If you did not request it, ignore this email.`,
+        labels: ["saathi-auth-otp"],
       }),
     },
   );
@@ -64,9 +64,10 @@ export const checkOtpLimit = internalMutation({
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Email({
+      // Stable provider ID: changing it would break existing authentication sessions.
       id: "saath-email",
       name: "Email code",
-      from: "Saath",
+      from: "Saathi",
       maxAge: 10 * 60,
       generateVerificationToken: () => {
         const bytes = new Uint32Array(1);

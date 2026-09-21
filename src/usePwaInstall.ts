@@ -13,6 +13,7 @@ export type PwaInstallController = {
   dismiss: () => void
 }
 
+// Keep the legacy key so existing installations retain their reminder preference.
 const DISMISSED_UNTIL_KEY = 'saath:pwa-install-dismissed-until'
 const DISMISSAL_MS = 7 * 24 * 60 * 60 * 1_000
 

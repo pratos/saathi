@@ -44,7 +44,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   return <main className="access-admin-page">
     <header className="access-admin-header">
-      <button type="button" onClick={onClose}><ArrowLeft /> Back to Saath</button>
+      <button type="button" onClick={onClose}><ArrowLeft /> Back to Saathi</button>
       <div><span><ShieldCheck /> Superadmin</span><h1>Account access</h1><p>Approve people who can use deployment-funded AI keys. Families with their own OpenRouter key can start without approval.</p></div>
     </header>
     <section className="access-admin-toolbar">
@@ -64,7 +64,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
         <div className="access-user-identity"><span>{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><a href={`mailto:${encodeURIComponent(user.email)}`}>{user.email}</a><small>Joined {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(user.createdAt)}{user.requestedAt ? ` · requested ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(user.requestedAt)}` : ''}</small></div></div>
         <span className="access-status">{user.isSuperadmin ? 'superadmin' : user.status}</span>
         <div className="access-user-actions">
-          <a href={`mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('Your Saath access')}`}><Mail /> Email</a>
+          <a href={`mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('Your Saathi access')}`}><Mail /> Email</a>
           {!user.isSuperadmin && user.status !== 'approved' && <button disabled={busyUserId === user._id} onClick={() => void update(user._id, 'approved')}><UserRoundCheck /> Approve</button>}
           {!user.isSuperadmin && user.status !== 'blocked' && (confirmingBlockId === user._id
             ? <><button className="danger" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'blocked')}><Ban /> Confirm block</button><button disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(null)}>Cancel</button></>

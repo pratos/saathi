@@ -119,14 +119,14 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
       {demoStep === 0 && (
         <section className="preview-demo-stage preview-auth-stage">
           <form className="live-auth-card preview-flow-card" onSubmit={(event) => { event.preventDefault(); goToStep(1) }}>
-            <div className="auth-brand dark"><span className="brand-mark">स</span> Saath</div>
+            <div className="auth-brand dark"><span className="brand-mark">स</span> Saathi</div>
             <span className="mode-badge preview-flow-badge"><Sparkles size={15} /> Simulated preview</span>
             <h1>Sign in with your email</h1>
-            <p>In live mode, Saath emails a one-time code. Here, we’ll safely replay that step without sending anything.</p>
+            <p>In live mode, Saathi emails a one-time code. Here, we’ll safely replay that step without sending anything.</p>
             <label htmlFor="preview-email">Sample email address</label>
             <div className="field-with-icon"><Mail size={20} /><input id="preview-email" type="email" value={previewEmail} onChange={(event) => setPreviewEmail(event.target.value)} required /></div>
             <button className="primary large" type="submit">Email me a sample code <ArrowRight size={20} /></button>
-            <div className="security-note"><ShieldCheck size={18} /><span><strong>Sample data only</strong>No account is created and no email leaves Saath.</span></div>
+            <div className="security-note"><ShieldCheck size={18} /><span><strong>Sample data only</strong>No account is created and no email leaves Saathi.</span></div>
           </form>
         </section>
       )}
@@ -150,7 +150,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
           <form className="onboarding-card preview-flow-card" onSubmit={(event) => { event.preventDefault(); goToStep(3) }}>
             <span className="mode-badge preview-flow-badge"><Sparkles size={15} /> Simulated preview</span>
             <h1>Create your first family space</h1>
-            <p>Each family keeps its conversations, inbox, members, and Saath context separate.</p>
+            <p>Each family keeps its conversations, inbox, members, and Saathi context separate.</p>
             <label htmlFor="preview-family-name">What should we call this family?</label>
             <input id="preview-family-name" value={familyName} onChange={(event) => setFamilyName(event.target.value)} minLength={2} maxLength={80} required />
             <button className="primary large" type="submit">Create sample family <ArrowRight size={20} /></button>
@@ -159,7 +159,7 @@ export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
         </section>
       )}
 
-      {demoStep >= 3 && <section className="saath-workspace seeded-workspace">
+      {demoStep >= 3 && <section className="saathi-workspace seeded-workspace">
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className="rail-action active"><MessageSquareText /><span>Home</span></button>

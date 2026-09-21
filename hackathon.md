@@ -1,6 +1,6 @@
 # Hackathon log
 
-- **Project:** Saath
+- **Project:** Saathi
 - **Event:** Convex All Gas Hackathon
 - **What it does:** A multilingual family operations inbox for shared email, conversations, translations, decisions, and follow-ups.
 - **Live app:** https://giant-caiman-748.convex.site
@@ -17,7 +17,7 @@
 ## Log
 
 ### 2026-09-10 - b92bca9
-Established Saath as a multilingual family operations inbox and documented the
+Established Saathi as a multilingual family operations inbox and documented the
 product boundary, source-linked translations, human confirmation gates, and the
 initial responsive React interface (`PRODUCT.md`, `src/App.tsx`).
 

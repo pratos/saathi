@@ -122,7 +122,7 @@ function FamilyAccessEntry({ families, family, onSelectFamily, onExit }: {
   const access = useQuery(api.spaces.aiAccess, { spaceId: family.space._id })
   if (access === undefined) return <LiveStatus message="Checking AI access…" />
   if (!access.ready) return <AiAccessSetup family={family} access={access} onExit={onExit} />
-  return <LiveFamilyShell families={families} family={family} onSelectFamily={onSelectFamily} onExit={onExit} />
+  return <LiveFamilyShell families={families} family={family} onSelectFamily={onSelectFamily} onExit={onExit} isSuperadmin={access.isSuperadmin} />
 }
 
 function AiAccessSetup({ family, access, onExit }: {
@@ -290,11 +290,12 @@ function CreateFirstFamily({ onExit, isSuperadmin = false }: { onExit: () => voi
   )
 }
 
-function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
+function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmin }: {
   families: FamilyRow[]
   family: FamilyRow
   onSelectFamily: (spaceId: Id<'spaces'>) => void
   onExit: () => void
+  isSuperadmin: boolean
 }) {
   const { signOut } = useAuthActions()
   const user = useQuery(api.users.current)
@@ -409,7 +410,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         <button className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
         <button className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
         {family.membership.role === 'owner' && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Debug</span></button>}
-        {isBenchmarkAdmin && <button className="rail-action" onClick={openAdminDashboard}><ShieldCheck /><span>Access</span></button>}
+        {isSuperadmin && <button className="rail-action" onClick={openAdminDashboard}><ShieldCheck /><span>Access</span></button>}
         {isBenchmarkAdmin && <button className={`rail-action ${benchmarkAdminOpen ? 'active' : ''}`} onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /><span>Benchmarks</span></button>}
         <div className="rail-session">
           <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
@@ -532,6 +533,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit }: {
         </details>
         {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
         {family.membership.role === 'owner' && <section className="jev-settings-card"><span>Jev debug</span><p>Preview routing and inspect recent chat, Voice, and Gmail decision logs without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Debug</button></section>}
+        {isSuperadmin && <section className="jev-settings-card"><span>Deployment access</span><p>Approve or block accounts that request deployment-funded AI access.</p><button type="button" className="connect-gmail" onClick={openAdminDashboard}><ShieldCheck /> Open access dashboard</button></section>}
         {isBenchmarkAdmin && <section className="jev-settings-card"><span>Private benchmark report</span><p>Review multilingual quality, routing safety, cost estimates, and prompt-cache tradeoffs.</p><button type="button" className="connect-gmail" onClick={() => setBenchmarkAdminOpen(true)}><ChartBar /> Open benchmarks</button></section>}
         </div>
       </aside>

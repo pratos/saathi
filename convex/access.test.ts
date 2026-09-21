@@ -88,6 +88,23 @@ describe("AI access onboarding", () => {
     })).rejects.toThrow(/blocked/i);
   });
 
+  test("lets configured superadmins use managed access without adding a family key", async () => {
+    vi.stubEnv("SUPERADMIN_EMAILS", " owner@example.test, another-admin@example.test ");
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const seeded = await seedAccessFamily(t);
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+
+    await expect(owner.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: true });
+    await expect(owner.query(api.spaces.aiAccess, { spaceId: seeded.spaceId })).resolves.toMatchObject({
+      status: "approved",
+      ready: true,
+      source: "platform",
+      hasOpenRouter: false,
+      isSuperadmin: true,
+    });
+  });
+
   test("records requests and restricts access decisions to superadmins", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);

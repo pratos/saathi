@@ -60,11 +60,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Configure production auth origin
-        run: npx convex env set SITE_URL "$SITE_URL" --prod
+      - name: Configure production auth and superadmin
+        run: |
+          npx convex env set SITE_URL "$SITE_URL" --prod
+          npx convex env set SUPERADMIN_EMAILS "$SUPERADMIN_EMAILS" --prod
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           SITE_URL: https://saathi.tarp.sh
+          SUPERADMIN_EMAILS: prathamesh.b.sarang@gmail.com
 
       # Static Hosting builds with the production VITE_CONVEX_URL, deploys the
       # Convex backend, then atomically publishes dist/ to convex.site.

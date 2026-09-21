@@ -146,6 +146,7 @@ export default defineSchema({
   gmailProcessedMessages: defineTable({
     connectionId: v.id("gmailConnections"), externalMessageId: v.string(), useful: v.boolean(), processedAt: v.number(),
   }).index("by_connection_message", ["connectionId", "externalMessageId"]),
+  // Legacy budget rows remain declared for a non-destructive rollout. No product API reads or writes these tables.
   familyBudgets: defineTable({
     spaceId: v.id("spaces"),
     category: v.literal("food"),

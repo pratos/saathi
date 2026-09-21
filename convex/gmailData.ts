@@ -300,24 +300,6 @@ export const shareWithFamily = mutation({
       idempotencyKey: `gmail-shared:${item.agentmailMessageId}`,
       createdAt: now,
     });
-    if (isFoodMerchant(item.sender, item.subject, item.originalText) && item.extractedAmount) {
-      const amount = parseAmount(item.extractedAmount);
-      if (amount !== null) {
-        const existingSpend = await ctx.db.query("familySpend").withIndex("by_source_inbox", q => q.eq("sourceInboxItemId", item._id)).unique();
-        if (!existingSpend) {
-          await ctx.db.insert("familySpend", {
-            spaceId: item.spaceId,
-            category: "food",
-            amount,
-            currency: "INR",
-            merchant: foodMerchantName(item.sender, item.subject),
-            sourceInboxItemId: item._id,
-            createdBy: userId,
-            spentAt: item.receivedAt,
-          });
-        }
-      }
-    }
     await ctx.db.insert("auditEvents", {
       spaceId: item.spaceId,
       actorUserId: userId,
@@ -393,19 +375,6 @@ export const shareWithSpace = mutation({
       idempotencyKey: `gmail-shared:${spaceId}:${item.agentmailMessageId}`,
       createdAt: now,
     });
-    if (isFoodMerchant(item.sender, item.subject, item.originalText) && item.extractedAmount) {
-      const amount = parseAmount(item.extractedAmount);
-      if (amount !== null) {
-        const existingSpend = await ctx.db.query("familySpend").withIndex("by_source_inbox", q => q.eq("sourceInboxItemId", copyId)).unique();
-        if (!existingSpend) {
-          await ctx.db.insert("familySpend", {
-            spaceId, category: "food", amount, currency: "INR",
-            merchant: foodMerchantName(item.sender, item.subject),
-            sourceInboxItemId: copyId, createdBy: userId, spentAt: item.receivedAt,
-          });
-        }
-      }
-    }
     await ctx.db.patch(item._id, { forwardedSpaceIds: uniqueSpaceIds([...(item.forwardedSpaceIds ?? []), spaceId]) });
     await ctx.db.insert("auditEvents", {
       spaceId, actorUserId: userId, action: "gmail.shared_with_family",
@@ -433,21 +402,4 @@ function moneyReviewText(args: { sender: string; subject: string; summary: strin
   const amount = args.amount ? `\nAmount: ${args.amount}` : "";
   const merchant = args.merchant ? `\nMerchant: ${args.merchant}` : "";
   return `${kind} from ${args.sender}\n\n${args.subject}${amount}${merchant}\n\n${args.summary}\n\nShare this with the family inbox if the household should track it.`;
-}
-
-function isFoodMerchant(sender: string, subject: string, text: string) {
-  return /swiggy|zomato|eatclub|foodpanda|uber\s*eats/i.test(`${sender} ${subject} ${text}`);
-}
-
-function foodMerchantName(sender: string, subject: string) {
-  if (/swiggy/i.test(`${sender} ${subject}`)) return "Swiggy";
-  if (/zomato/i.test(`${sender} ${subject}`)) return "Zomato";
-  return "Food delivery";
-}
-
-function parseAmount(value: string) {
-  const match = value.replace(/,/g, "").match(/(\d+(?:\.\d{1,2})?)/);
-  if (!match) return null;
-  const amount = Number(match[1]);
-  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }

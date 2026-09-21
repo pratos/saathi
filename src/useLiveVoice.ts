@@ -524,7 +524,6 @@ export function finishVoiceToolActivity(
 function voiceActionDetail(name: ApplicationAssistantToolName, args: Record<string, unknown>) {
   if (name === 'set_reading_language') return `Reading language · ${String(args.language ?? '')}`
   if (name === 'set_image_style') return `Image style · ${String(args.style ?? '').replaceAll('_', ' ')}`
-  if (name === 'set_food_budget') return `${String(args.currency ?? '')} ${String(args.amount ?? '')} per month`
   if (name === 'set_model_tier') return `Thinking level · ${String(args.tier ?? '')}`
   if (name === 'remember') return `${String(args.key ?? '')} · ${String(args.value ?? '')}`
   if (name === 'recall') return String(args.key ?? '')

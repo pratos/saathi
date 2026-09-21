@@ -37,12 +37,12 @@ export const TOOL_BUNDLES = {
     tools: ["set_reading_language", "set_image_style"],
   },
   family_settings: {
-    description: "Change owner-controlled family budget or model settings.",
-    tools: ["set_food_budget", "set_model_tier"],
+    description: "Change owner-controlled family model settings.",
+    tools: ["set_model_tier"],
   },
   family_data: {
-    description: "Read authorized family budgets, files, and saved inbox items.",
-    tools: ["get_food_budget", "find_room_files", "search_family_inbox"],
+    description: "Read authorized family files and saved inbox items.",
+    tools: ["find_room_files", "search_family_inbox"],
   },
 } as const satisfies Record<string, { description: string; tools: readonly ApplicationAssistantToolName[] }>;
 

@@ -37,15 +37,15 @@ describe('live voice caption grouping', () => {
       type: 'response.event',
       event: {
         type: 'response.output_item.done',
-        item: { type: 'function_call', name: 'set_food_budget', call_id: 'call_budget_1', arguments: '{"amount":15000,"currency":"INR"}' },
+        item: { type: 'function_call', name: 'set_model_tier', call_id: 'call_model_1', arguments: '{"tier":"high"}' },
       },
-    })).toEqual({ name: 'set_food_budget', callId: 'call_budget_1', arguments: { amount: 15000, currency: 'INR' } })
+    })).toEqual({ name: 'set_model_tier', callId: 'call_model_1', arguments: { tier: 'high' } })
     expect(liveToolCallFromEvent({ type: 'session.output_transcript.delta', delta: 'hello' })).toBeNull()
   })
 
   test('uses the same application capabilities as Pi and routes voice memory and browser calls', () => {
     const names = APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name)
-    expect(names).toHaveLength(14)
+    expect(names).toHaveLength(12)
     expect(assistantProviderTools().map(tool => tool.name)).toEqual(names)
 
     const remember = liveToolCallFromEvent({

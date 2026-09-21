@@ -55,8 +55,8 @@ example:
 | `creation` | image and document generation |
 | `memory` | remember, recall, list, and forget |
 | `personal_settings` | reading language and personal defaults |
-| `family_settings` | family budget and model tier |
-| `family_data` | authorized inbox, files, and budget reads |
+| `family_settings` | family model tier |
+| `family_data` | authorized inbox and file reads |
 
 The application first computes the caller's authorized tools. If the result is
 small, it skips Jev. For a large catalog, one TypeSafe request chooses a primary
@@ -107,7 +107,7 @@ const BUNDLES = {
   memory: "Explicit remember, recall, update, list, or forget requests.",
   personal_settings: "Changing only the caller's own preferences.",
   family_settings: "Reading or changing owner-controlled family settings.",
-  family_data: "Reading authorized family inbox items, files, or budgets.",
+  family_data: "Reading authorized family inbox items or files.",
 } as const;
 
 const SECONDARY_BUNDLES = {

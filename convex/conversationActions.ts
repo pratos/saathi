@@ -10,19 +10,16 @@ import { containsProhibitedSecret } from "./lib/memoryTriage";
 import { MODEL_TIERS } from "./lib/modelTiers";
 
 const language = v.union(v.literal("en"), v.literal("hi"), v.literal("mr"));
-const currency = v.union(v.literal("INR"), v.literal("USD"));
 const modelTier = v.union(v.literal("low"), v.literal("med"), v.literal("high"), v.literal("ultra"));
 
 export const conversationAction = v.union(
   v.object({ type: v.literal("set_language"), language }),
   v.object({ type: v.literal("set_image_style"), style: imageStyleValidator }),
-  v.object({ type: v.literal("set_food_budget"), amount: v.number(), currency }),
   v.object({ type: v.literal("set_model_tier"), tier: modelTier }),
   v.object({ type: v.literal("remember"), key: v.string(), value: v.string() }),
   v.object({ type: v.literal("recall"), key: v.string() }),
   v.object({ type: v.literal("forget_memory"), key: v.string() }),
   v.object({ type: v.literal("list_memories") }),
-  v.object({ type: v.literal("get_food_budget") }),
   v.object({ type: v.literal("find_room_files"), query: v.string() }),
   v.object({ type: v.literal("search_family_inbox"), query: v.string() }),
 );
@@ -118,21 +115,6 @@ async function applyConversationAction(
     else await ctx.db.insert("agentMemory", { agentId, key, value, updatedAt: now });
     return { ok: true, message: `I'll remember ${key}: ${value}` };
   }
-  if (action.type === "get_food_budget") {
-    const budget = await ctx.db.query("familyBudgets").withIndex("by_space_category", q => q.eq("spaceId", spaceId).eq("category", "food")).unique();
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const spending = await ctx.db.query("familySpend").withIndex("by_space_category_spent", q =>
-      q.eq("spaceId", spaceId).eq("category", "food"),
-    ).order("desc").take(100);
-    const spent = spending.filter(row => row.spentAt >= monthStart.getTime()).reduce((total, row) => total + row.amount, 0);
-    const currency = budget?.currency ?? "INR";
-    const symbol = currency === "USD" ? "$" : "₹";
-    if (!budget) return { ok: true, message: `${symbol}${spent.toLocaleString("en-IN")} in food spending is tracked this month. No monthly limit is set.` };
-    const remaining = Math.max(0, budget.monthlyLimit - spent);
-    return { ok: true, message: `Food budget: ${symbol}${spent.toLocaleString("en-IN")} spent of ${symbol}${budget.monthlyLimit.toLocaleString("en-IN")}; ${symbol}${remaining.toLocaleString("en-IN")} remaining.` };
-  }
   if (action.type === "find_room_files") {
     const query = searchQuery(action.query);
     if (!query) return { ok: false, message: "Describe the file you want to find." };
@@ -157,29 +139,6 @@ async function applyConversationAction(
   if (role !== "owner") {
     return { ok: false, message: "Only a family owner can change family-wide settings." };
   }
-  if (action.type === "set_food_budget") {
-    const min = action.currency === "USD" ? 20 : 500;
-    const max = action.currency === "USD" ? 20_000 : 1_000_000;
-    if (!Number.isFinite(action.amount) || action.amount < min || action.amount > max) {
-      return {
-        ok: false,
-        message: action.currency === "USD"
-          ? "Choose a monthly food budget between $20 and $20,000."
-          : "Choose a monthly food budget between ₹500 and ₹10,00,000.",
-      };
-    }
-    const existing = await ctx.db.query("familyBudgets").withIndex("by_space_category", q =>
-      q.eq("spaceId", spaceId).eq("category", "food"),
-    ).unique();
-    const now = Date.now();
-    if (existing) await ctx.db.patch(existing._id, { monthlyLimit: action.amount, currency: action.currency, updatedBy: userId, updatedAt: now });
-    else await ctx.db.insert("familyBudgets", {
-      spaceId, category: "food", monthlyLimit: action.amount, currency: action.currency, updatedBy: userId, updatedAt: now,
-    });
-    const symbol = action.currency === "USD" ? "$" : "₹";
-    return { ok: true, message: `The family food budget is now ${symbol}${action.amount.toLocaleString("en-IN")} per month.` };
-  }
-
   await ctx.db.patch(spaceId, { modelTier: action.tier });
   const rooms = await ctx.db.query("rooms").withIndex("by_space", q => q.eq("spaceId", spaceId)).take(40);
   for (const room of rooms) {

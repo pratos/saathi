@@ -4,13 +4,11 @@ import { GENERATE_IMAGE_TOOL, IMAGE_STYLES, type ImageStyle } from "./imageSafet
 export type ConversationAction =
   | { type: "set_language"; language: "en" | "hi" | "mr" }
   | { type: "set_image_style"; style: ImageStyle }
-  | { type: "set_food_budget"; amount: number; currency: "INR" | "USD" }
   | { type: "set_model_tier"; tier: "low" | "med" | "high" | "ultra" }
   | { type: "remember"; key: string; value: string }
   | { type: "recall"; key: string }
   | { type: "forget_memory"; key: string }
   | { type: "list_memories" }
-  | { type: "get_food_budget" }
   | { type: "find_room_files"; query: string }
   | { type: "search_family_inbox"; query: string };
 
@@ -47,17 +45,6 @@ const SET_IMAGE_STYLE_TOOL = {
   label: "Set image style",
   description: "Change the caller's default image style after they explicitly ask.",
   parameters: Type.Object({ style: Type.Union(IMAGE_STYLES.map(style => Type.Literal(style))) }, { additionalProperties: false }),
-} as const;
-
-const SET_FOOD_BUDGET_TOOL = {
-  type: "function",
-  name: "set_food_budget",
-  label: "Set food budget",
-  description: "Set the family's monthly food budget after an owner explicitly gives an amount and currency.",
-  parameters: Type.Object({
-    amount: Type.Number(),
-    currency: Type.Union([Type.Literal("INR"), Type.Literal("USD")]),
-  }, { additionalProperties: false }),
 } as const;
 
 const SET_MODEL_TIER_TOOL = {
@@ -103,14 +90,6 @@ const LIST_MEMORIES_TOOL = {
   parameters: Type.Object({}, { additionalProperties: false }),
 } as const;
 
-const GET_FOOD_BUDGET_TOOL = {
-  type: "function",
-  name: "get_food_budget",
-  label: "Check food budget",
-  description: "Read the family's current monthly food budget, tracked spending, and remaining amount.",
-  parameters: Type.Object({}, { additionalProperties: false }),
-} as const;
-
 const FIND_ROOM_FILES_TOOL = {
   type: "function",
   name: "find_room_files",
@@ -130,13 +109,11 @@ const SEARCH_FAMILY_INBOX_TOOL = {
 export const CONVERSATION_ACTION_TOOLS = [
   SET_READING_LANGUAGE_TOOL,
   SET_IMAGE_STYLE_TOOL,
-  SET_FOOD_BUDGET_TOOL,
   SET_MODEL_TIER_TOOL,
   REMEMBER_TOOL,
   RECALL_TOOL,
   FORGET_MEMORY_TOOL,
   LIST_MEMORIES_TOOL,
-  GET_FOOD_BUDGET_TOOL,
   FIND_ROOM_FILES_TOOL,
   SEARCH_FAMILY_INBOX_TOOL,
 ] as const;
@@ -151,7 +128,7 @@ export const APPLICATION_ASSISTANT_TOOLS = [
 export type ApplicationAssistantToolName = (typeof APPLICATION_ASSISTANT_TOOLS)[number]["name"];
 export type ConversationActionToolName = (typeof CONVERSATION_ACTION_TOOLS)[number]["name"];
 
-const OWNER_ONLY_TOOLS = new Set<ApplicationAssistantToolName>(["set_food_budget", "set_model_tier"]);
+const OWNER_ONLY_TOOLS = new Set<ApplicationAssistantToolName>(["set_model_tier"]);
 
 export function authorizedAssistantToolNames(role: "owner" | "member") {
   return APPLICATION_ASSISTANT_TOOLS
@@ -172,9 +149,6 @@ export function conversationActionFromTool(name: string, value: unknown): Conver
   if (name === "set_image_style" && typeof args.style === "string" && (IMAGE_STYLES as readonly string[]).includes(args.style)) {
     return { type: "set_image_style", style: args.style as ImageStyle };
   }
-  if (name === "set_food_budget" && typeof args.amount === "number" && (args.currency === "INR" || args.currency === "USD")) {
-    return { type: "set_food_budget", amount: args.amount, currency: args.currency };
-  }
   if (name === "set_model_tier" && (args.tier === "low" || args.tier === "med" || args.tier === "high" || args.tier === "ultra")) {
     return { type: "set_model_tier", tier: args.tier };
   }
@@ -184,7 +158,6 @@ export function conversationActionFromTool(name: string, value: unknown): Conver
   if (name === "recall" && typeof args.key === "string") return { type: "recall", key: args.key };
   if (name === "forget_memory" && typeof args.key === "string") return { type: "forget_memory", key: args.key };
   if (name === "list_memories") return { type: "list_memories" };
-  if (name === "get_food_budget") return { type: "get_food_budget" };
   if (name === "find_room_files" && typeof args.query === "string") return { type: "find_room_files", query: args.query };
   if (name === "search_family_inbox" && typeof args.query === "string") return { type: "search_family_inbox", query: args.query };
   return null;

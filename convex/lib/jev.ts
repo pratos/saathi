@@ -17,7 +17,7 @@ const TURN_ROUTES = {
   image: "The user asks to create an image, infographic, invitation, or artwork.",
   settings: "The user explicitly asks to change a Saathi or family setting.",
   memory: "The user explicitly asks Saathi to remember or recall a stable fact.",
-  family_data: "The user asks to read authorized saved family data such as a budget, room file, or saved inbox item.",
+  family_data: "The user asks to read authorized saved family data such as a room file or saved inbox item.",
   multi_tool: "The request requires two or more distinct tool routes to complete correctly.",
 } as const;
 

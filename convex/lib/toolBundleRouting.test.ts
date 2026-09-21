@@ -28,7 +28,7 @@ describe("shadow tool-bundle routing policy", () => {
 
   test("starts from deterministic caller authorization before bundle intersection", () => {
     expect(authorizedAssistantToolNames("owner")).toHaveLength(APPLICATION_ASSISTANT_TOOLS.length);
-    expect(authorizedAssistantToolNames("member")).not.toContain("set_food_budget");
+    expect(APPLICATION_ASSISTANT_TOOLS.map(tool => tool.name)).not.toEqual(expect.arrayContaining(["set_food_budget", "get_food_budget"]));
     expect(authorizedAssistantToolNames("member")).not.toContain("set_model_tier");
     expect(authorizedAssistantToolNames("member")).toContain("set_reading_language");
   });

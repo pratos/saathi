@@ -301,15 +301,10 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
   const ensurePersonalRoom = useMutation(api.rooms.ensurePersonal)
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
-  const foodBudget = useQuery(api.budget.food, { spaceId: family.space._id })
-  const setFoodLimit = useMutation(api.budget.setFoodLimit)
   const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
   const reusableGmail = useQuery(api.gmailData.reusable, { spaceId: family.space._id })
   const enableGmailHere = useMutation(api.gmailData.enableForSpace)
   const disableGmailHere = useMutation(api.gmailData.disableForSpace)
-  const [budgetDraft, setBudgetDraft] = useState('')
-  const [budgetCurrency, setBudgetCurrency] = useState<'INR' | 'USD'>('INR')
-  const [budgetBusy, setBudgetBusy] = useState(false)
   const beginGmailConnection = useAction(api.gmail.beginConnection)
   const confirmGmailConnection = useAction(api.gmail.confirmConnection)
   const checkGmailNow = useAction(api.gmail.checkNow)
@@ -463,7 +458,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         <div className="settings-scroll">
         <Card className="settings-intro">
           <MessageSquareText />
-          <div><strong>You can just ask</strong><p>Try “Use Hindi for me” or “Set our food budget to ₹15,000.” Voice works the same way.</p></div>
+          <div><strong>You can just ask</strong><p>Try “Use Hindi for me” or “Use a watercolor style for images.” Voice works the same way.</p></div>
         </Card>
         <section className="personal-settings"><span>Your preferences</span><p>These choices affect only you.</p>
           <label>Reading language</label>
@@ -504,17 +499,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
               .finally(() => setGmailBusy(false))
           }} disabled={gmailBusy}>Check for new mail</button>}
           {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
-        </section>
-        <section className="food-budget">
-          <span>Food budget</span>
-          <p>Approved food receipts, including Swiggy and Zomato, count toward this family budget. Family members can see totals; only owners can change the limit.</p>
-          <strong>{foodBudget?.monthlyLimit != null ? `${foodBudget.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget.spentThisMonth)} of ${foodBudget.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget.monthlyLimit)} this month` : `${foodBudget?.currency === 'USD' ? '$' : '₹'}${Math.round(foodBudget?.spentThisMonth ?? 0)} tracked this month`}</strong>
-          {family.membership.role === 'owner' && <form onSubmit={(event) => { event.preventDefault(); const monthlyLimit = Number(budgetDraft); if (!monthlyLimit) return; setBudgetBusy(true); void setFoodLimit({ spaceId: family.space._id, monthlyLimit, currency: budgetCurrency }).then(() => setBudgetDraft('')).finally(() => setBudgetBusy(false)) }}>
-            <div className="chip-row" role="radiogroup" aria-label="Budget currency">
-              {(['INR', 'USD'] as const).map(code => <button type="button" key={code} role="radio" aria-checked={budgetCurrency === code} className={budgetCurrency === code ? 'selected' : ''} onClick={() => setBudgetCurrency(code)}>{code}</button>)}
-            </div>
-            <input type="number" min={budgetCurrency === 'USD' ? 20 : 500} max={budgetCurrency === 'USD' ? 20000 : 1000000} placeholder={budgetCurrency === 'USD' ? 'Monthly limit in $' : 'Monthly limit in ₹'} value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} aria-label="Monthly food budget" /><button type="submit" disabled={budgetBusy || !budgetDraft}>{budgetBusy ? 'Saving…' : 'Set limit'}</button>
-          </form>}
         </section>
         <details className="settings-disclosure">
           <summary><span>Advanced settings</span><small>{accessSource === 'byok' ? 'Family inbox address, AI model, usage, and provider keys' : 'Family inbox address and access controls'}</small></summary>
@@ -666,13 +650,11 @@ const jevRouteLabels: Record<string, string> = {
   generate_image: 'Generate image',
   set_reading_language: 'Set reading language',
   set_image_style: 'Set image style',
-  set_food_budget: 'Set food budget',
   set_model_tier: 'Set thinking level',
   remember: 'Remember fact',
   recall: 'Recall fact',
   forget_memory: 'Forget fact',
   list_memories: 'List memories',
-  get_food_budget: 'Read food budget',
   find_room_files: 'Find room files',
   search_family_inbox: 'Search family inbox',
   execute: 'Allow the action',
@@ -974,7 +956,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
         {messages && generatedImages && attachments && timeline.length === 0 && !imageOpen && <div className="dark-empty-state compact conversation-starter"><MessageSquareText /><h2>{room.type === 'private' ? 'What can Saathi help with?' : 'Start with what your family needs'}</h2><p>{room.type === 'private' ? 'Talk or type naturally. Your settings, images, research, and plans all happen in this conversation.' : 'Write to your family or ask Saathi in the same conversation.'}</p><div className="starter-prompts">
           {(room.type === 'private'
-            ? ['Use Hindi for me', 'Set our food budget to ₹15,000', 'Create a Diwali invitation image']
+            ? ['Use Hindi for me', 'Use watercolor for my images', 'Create a Diwali invitation image']
             : ['Help us plan a family dinner', 'Summarize the file I share', 'Find current train options']
           ).map(prompt => <Button type="button" variant="outline" size="sm" key={prompt} onClick={() => { setMessage(prompt); requestAnimationFrame(() => textareaRef.current?.focus()) }}>{prompt}</Button>)}
         </div></div>}

@@ -35,44 +35,16 @@ describe("conversational actions", () => {
     })).resolves.toEqual({ ok: true, message: "Your reading language is now Marathi." });
     await expect(member.mutation(api.conversationActions.execute, {
       roomId: seeded.roomId,
-      action: { type: "set_food_budget", amount: 15_000, currency: "INR" },
+      action: { type: "set_model_tier", tier: "high" },
     })).resolves.toEqual({ ok: false, message: "Only a family owner can change family-wide settings." });
-    await expect(owner.mutation(api.conversationActions.execute, {
-      roomId: seeded.roomId,
-      action: { type: "set_food_budget", amount: 15_000, currency: "INR" },
-    })).resolves.toEqual({ ok: true, message: "The family food budget is now ₹15,000 per month." });
-    await expect(member.mutation(api.conversationActions.execute, {
-      roomId: seeded.roomId,
-      action: { type: "get_food_budget" },
-    })).resolves.toEqual({ ok: true, message: "Food budget: ₹0 spent of ₹15,000; ₹15,000 remaining." });
     await owner.mutation(api.conversationActions.execute, {
       roomId: seeded.roomId,
       action: { type: "set_model_tier", tier: "high" },
     });
 
     expect(await t.run(ctx => ctx.db.get(seeded.memberId))).toMatchObject({ preferredLanguage: "mr" });
-    expect(await t.run(ctx => ctx.db.query("familyBudgets").unique())).toMatchObject({ monthlyLimit: 15_000, currency: "INR" });
     expect(await t.run(ctx => ctx.db.get(seeded.spaceId))).toMatchObject({ modelTier: "high" });
     expect(await t.run(ctx => ctx.db.query("agents").unique())).toMatchObject({ model: MODEL_TIERS.high.model });
-  });
-
-  test("rejects a budget outside the real API limits without writing it", async () => {
-    const t = convexTest(schema, modules);
-    const seeded = await t.run(async ctx => {
-      const now = Date.now();
-      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
-      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "budget-boundary", createdAt: now });
-      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
-      const roomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt: now });
-      await ctx.db.insert("roomMembers", { roomId, userId: ownerId, role: "manager", createdAt: now });
-      return { ownerId, roomId };
-    });
-    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
-    await expect(owner.mutation(api.conversationActions.execute, {
-      roomId: seeded.roomId,
-      action: { type: "set_food_budget", amount: 499, currency: "INR" },
-    })).resolves.toMatchObject({ ok: false });
-    expect(await t.run(ctx => ctx.db.query("familyBudgets").collect())).toEqual([]);
   });
 
   test("stores normalized facts for one room agent and never leaks them to another room", async () => {

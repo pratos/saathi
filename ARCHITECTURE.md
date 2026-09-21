@@ -31,8 +31,8 @@ Browser SPA (React / Vite)
  messages   inbox.list  attachments  settings  liveVoice
    .post    confirmAction  storage   Gmail     GPT-Live
      │          ▲          │       invites     WebRTC
-     ▼          │          ▼       budget        │
- agentJobs   AgentMail   photo/doc   BYOK        ▼
+     ▼          │          ▼       BYOK          │
+ agentJobs   AgentMail   photo/doc  model tier    ▼
  agentWorker  webhook    readers    model tier  tools +
      │          │                               computer-use
      ▼          ▼                                  │
@@ -82,9 +82,11 @@ users ──< memberships >── spaces
                              │     └── agents ── agentJobs / agentMessages / agentMemory / agentEpisodes
                              ├── inboxItems (AgentMail + shared Gmail)
                              ├── gmailConnections (per user, private until shared)
-                             ├── invitations, providerKeys, familyBudgets / familySpend
+                             ├── invitations, providerKeys
                              └── usageLedger, auditEvents, jevDecisions
 ```
+
+The retired `familyBudgets` and `familySpend` tables remain declared temporarily so rollout does not delete existing rows. No product API, assistant tool, or UI reads or writes them.
 
 - **Space** owns the AgentMail inbox, model tier, BYOK keys, usage, and audit trail.
 - **Rooms:** `private` (one member + Saathi), `shared` (family), `case` (selected members). Assistant mode is `automatic` | `mention` | `off`.
@@ -102,7 +104,7 @@ Desktop: nav rail · conversation list · active conversation · settings/contex
 | Chats | My Saathi + family rooms | `rooms.list`, `rooms.messages` |
 | Updates | Family inbox, suggested actions | `inbox.list` |
 | Files | Space attachments | `attachments.forSpace` |
-| Family | Language, Gmail, food budget, inbox address, BYOK-only model/usage/key controls, invites | `users.current`, `gmailData.mine`, `budget.food`, `spaces.*`, `invitations.list` |
+| Family | Language, Gmail, inbox address, BYOK-only model/usage/key controls, invites | `users.current`, `gmailData.mine`, `spaces.*`, `invitations.list` |
 
 Superadmins can open Jev debug. The backend checks both family access and the configured superadmin role; benchmark reports are not exposed in the product.
 
@@ -121,7 +123,7 @@ LiveRoom composer
   → Jev classifies the turn in parallel and maps its route to trusted UI actions
   → Jev may route tools / memory triage (TypeSafe or family OpenRouter BYOK)
   → tools: search_public_web (Firecrawl), use_computer (Firecrawl Interact),
-           generate_image (Muse), conversation actions (language, budget,
+           generate_image (Muse), conversation actions (language, image style,
            model tier, memory, inbox/file search)
   → transcript persisted on agentMessages; reply and suggested UI actions written as assistant message
 ```
@@ -195,7 +197,7 @@ Convex components: `@convex-dev/auth`, `@convex-dev/rate-limiter`, `@convex-dev/
 
 ## 7. Public vs internal (attack surface)
 
-**Client-reachable (selected):** `users.*`, `spaces.*`, `rooms.list|ensurePersonal|messages`, `messages.post`, `inbox.list|confirmAction|dismissAction|reprocess`, `agents.send|forRoom`, `attachments.*` (public), `gmail.beginConnection|confirmConnection|checkNow`, `gmailData.mine|pendingForRoom|shareWithFamily`, `invitations.list|createAndSend|revoke|accept`, `liveVoice.startSession|searchPublicWeb|finishSession|…`, `images.forRoom|createFromVoice`, `budget.*`, `mentions.candidates`, `conversationActions.execute`, `jev.recent|evaluate`.
+**Client-reachable (selected):** `users.*`, `spaces.*`, `rooms.list|ensurePersonal|messages`, `messages.post`, `inbox.list|confirmAction|dismissAction|reprocess`, `agents.send|forRoom`, `attachments.*` (public), `gmail.beginConnection|confirmConnection|checkNow`, `gmailData.mine|pendingForRoom|shareWithFamily`, `invitations.list|createAndSend|revoke|accept`, `liveVoice.startSession|searchPublicWeb|finishSession|…`, `images.forRoom|createFromVoice`, `mentions.candidates`, `conversationActions.execute`, `jev.recent|evaluate`.
 
 **Internal only:** AgentMail ingest, inbox workflow steps, `agentWorker.run`, Gmail process/backfill, voice-browser controller, photo/document readers, Jev claim/complete, provider-key resolve.
 

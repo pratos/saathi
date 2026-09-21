@@ -14,7 +14,6 @@ import type * as agentmailInboxes from "../agentmailInboxes.js";
 import type * as agents from "../agents.js";
 import type * as attachments from "../attachments.js";
 import type * as auth from "../auth.js";
-import type * as budget from "../budget.js";
 import type * as composioWebhook from "../composioWebhook.js";
 import type * as conversationActions from "../conversationActions.js";
 import type * as email from "../email.js";
@@ -50,7 +49,6 @@ declare const fullApi: ApiFromModules<{
   agents: typeof agents;
   attachments: typeof attachments;
   auth: typeof auth;
-  budget: typeof budget;
   composioWebhook: typeof composioWebhook;
   conversationActions: typeof conversationActions;
   email: typeof email;

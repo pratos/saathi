@@ -3281,6 +3281,71 @@
 }
 .family-member-profile h3 { font-size: 16px; }
 
+.otp-sharing-setting,
+.recategorization-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 18px;
+  align-items: center;
+}
+.otp-sharing-setting > div,
+.recategorization-setting > div { min-width: 0; }
+.otp-sharing-setting > div > p,
+.recategorization-setting > div > p { margin-bottom: 0; }
+.otp-sharing-setting > button[role='switch'] {
+  min-width: 72px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(91,78,129,.14);
+  border-radius: 14px;
+  color: #65606d;
+  background: #f1eef7;
+  font-size: 12px;
+  font-weight: 800;
+}
+.otp-sharing-setting > button[role='switch'] > i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8b8491;
+}
+.otp-sharing-setting > button[role='switch'][aria-checked='true'] { color: #315d46; background: #e8f4ed; }
+.otp-sharing-setting > button[role='switch'][aria-checked='true'] > i { background: #3c8c69; }
+.recategorization-setting > .recategorization-status {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 11px 12px;
+  border-radius: 13px;
+  color: #5f5967;
+  background: rgba(241,238,247,.72);
+  font-size: 12px;
+}
+.recategorization-status strong { color: #383240; }
+.recategorization-setting > button { grid-column: 1 / -1; justify-self: start; }
+.otp-share-actions > p {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  color: #625b69;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.otp-share-actions > p svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; color: #6754a5; }
+
+@media (max-width: 600px) {
+  .otp-sharing-setting { grid-template-columns: 1fr; }
+  .otp-sharing-setting > button[role='switch'],
+  .recategorization-setting > button { width: 100%; justify-self: stretch; }
+}
+
 /* Voice presence should dissolve into the ambient page instead of reading as a hard disc. */
 .voice-call-sheet {
   color: #25212d;

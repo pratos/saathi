@@ -67,6 +67,132 @@ describe("family inbox processing", () => {
     }
   });
 
+  test("recovers renewal type, both paid amounts, merchant, and service period from a Stripe receipt", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test-platform-key");
+    const receipt = `Receipt from Grok xAI $100.00 Paid September 15, 2026
+
+Receipt number 2065-3073 Invoice number 6WIB7DAX-0001 Payment method - 1003
+
+Receipt #2065-3073 Sep 15–Oct 15, 2026 SuperGrok Plus Qty 1 $100.00 Total $100.00 Amount paid $100.00 Charged ₹9,977.07 using 1 USD = 99.7707 INR (includes 4% conversion fee)`;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { model: string; messages: Array<{ role: string; content: string }> };
+      expect(request.model).toBe("deepseek/deepseek-v4.1-flash");
+      const prompt = JSON.parse(request.messages[1].content) as { instructions: string };
+      expect(prompt.instructions).toContain("subscriptions/subscription_renewal");
+      expect(prompt.instructions).toContain("Populate both when both currencies appear");
+      return new Response(JSON.stringify({
+        model: request.model,
+        choices: [{ message: { content: JSON.stringify({
+          category: "subscriptions",
+          subcategory: "other",
+          amount: null,
+          amountInr: null,
+          amountUsd: null,
+          dueAt: null,
+          merchant: null,
+          period: null,
+          direction: "incoming",
+          notes: null,
+          actions: [],
+        }) } }],
+        usage: { prompt_tokens: 180, completion_tokens: 42 },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const t = convexTest(schema, modules);
+      const inboxItemId = await t.run(async ctx => {
+        const createdAt = Date.now();
+        const ownerId = await ctx.db.insert("users", { email: "owner@example.test", accessStatus: "approved" });
+        const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "grok-renewal", createdAt });
+        await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+        return ctx.db.insert("inboxItems", {
+          spaceId,
+          agentmailMessageId: "grok-stripe-receipt",
+          agentmailThreadId: "grok-stripe-thread",
+          sender: "billing@x.ai",
+          subject: "Receipt from Grok xAI",
+          originalText: receipt,
+          visibility: "space",
+          category: "needs_review",
+          status: "processing",
+          receivedAt: createdAt,
+        });
+      });
+
+      await expect(t.action(internal.inboxWorkflow.extract, { inboxItemId })).resolves.toMatchObject({
+        category: "subscriptions",
+        subcategory: "subscription_renewal",
+        amount: "$100.00",
+        amountUsd: "$100.00",
+        amountInr: "₹9,977.07",
+        merchant: "Grok xAI",
+        period: "Sep 15–Oct 15, 2026",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("receipt fallback preserves non-renewal subscription states and chooses labeled totals", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test-platform-key");
+    const outputs = {
+      "Plan renewal receipt": {
+        category: "subscriptions", subcategory: "other", amount: null, amountInr: null, amountUsd: null,
+        dueAt: null, merchant: "Example Cloud", period: null, direction: "incoming", notes: null, actions: [],
+      },
+      "Subscription cancelled": {
+        category: "subscriptions", subcategory: "subscription_cancellation", amount: null, amountInr: null, amountUsd: null,
+        dueAt: null, merchant: "Example Cloud", period: null, direction: "incoming", notes: null, actions: [],
+      },
+      "Hotel receipt": {
+        category: "travel", subcategory: "hotel", amount: null, amountInr: null, amountUsd: null,
+        dueAt: null, merchant: "Harbour Hotel", period: null, direction: "incoming", notes: null, actions: [],
+      },
+    } as const;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { model: string; messages: Array<{ content: string }> };
+      const prompt = JSON.parse(request.messages[1].content) as { state: { subject: keyof typeof outputs } };
+      return new Response(JSON.stringify({
+        model: request.model,
+        choices: [{ message: { content: JSON.stringify(outputs[prompt.state.subject]) } }],
+        usage: { prompt_tokens: 100, completion_tokens: 30 },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    try {
+      const t = convexTest(schema, modules);
+      const ids = await t.run(async ctx => {
+        const now = Date.now();
+        const ownerId = await ctx.db.insert("users", { email: "owner@example.test", accessStatus: "approved" });
+        const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "receipt-boundaries", createdAt: now });
+        await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: now });
+        const insert = (subject: keyof typeof outputs, originalText: string) => ctx.db.insert("inboxItems", {
+          spaceId, agentmailMessageId: `receipt-${subject}`, agentmailThreadId: `thread-${subject}`,
+          sender: "billing@example.test", subject, originalText, visibility: "space" as const,
+          category: "needs_review" as const, status: "processing" as const, receivedAt: now,
+        });
+        return {
+          renewal: await insert("Plan renewal receipt", "Plan renewal paid. Unit $10.00 × 3. Total $30.00. Charged ₹2,995.00. Sep 1–Oct 1, 2026."),
+          cancellation: await insert("Subscription cancelled", "Your subscription has been cancelled. Access ends Oct 1, 2026."),
+          hotel: await insert("Hotel receipt", "Hotel receipt paid CA$400.00. Stay Sep 15–Sep 17, 2026."),
+        };
+      });
+      await expect(t.action(internal.inboxWorkflow.extract, { inboxItemId: ids.renewal })).resolves.toMatchObject({
+        category: "subscriptions", subcategory: "subscription_renewal", amountUsd: "$30.00", amountInr: "₹2,995.00",
+      });
+      await expect(t.action(internal.inboxWorkflow.extract, { inboxItemId: ids.cancellation })).resolves.toMatchObject({
+        category: "subscriptions", subcategory: "subscription_cancellation",
+      });
+      await expect(t.action(internal.inboxWorkflow.extract, { inboxItemId: ids.hotel })).resolves.toMatchObject({
+        category: "travel", subcategory: "hotel", amountUsd: null,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   test("tracks unread family inbox items independently for each member and family", async () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {

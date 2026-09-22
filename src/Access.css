@@ -49,6 +49,10 @@
 .convex-usage-note p { margin: 14px 0; color: #d5dbea; font-size: 11px; line-height: 1.6; }
 .convex-usage-note a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; color: #fff; border-top: 1px solid #526589; font-size: 11px; font-weight: 900; }
 .family-cost-panel { padding-bottom: 8px; }
+.recategorization-admin { margin: 20px clamp(22px, 5vw, 72px) 0; }
+.recategorization-admin .access-status { display: inline-block; }
+.recategorization-admin .recategorization-complete { color: #315d46; background: #e6f1e9; }
+.recategorization-admin .recategorization-failed { color: #903f37; background: #f9e3df; }
 .usage-caveat { margin: -5px 0 0; color: #745d23; font-size: 10px; }
 .access-section-heading { margin-bottom: -2px; }
 .access-admin-toolbar { display: grid; gap: 16px; padding: 28px clamp(22px, 5vw, 72px) 24px; }
@@ -91,6 +95,7 @@
   .usage-summary-cards { grid-template-columns: 1fr; }
   .access-stats { grid-template-columns: repeat(2, 1fr); }
   .usage-admin, .access-admin-toolbar, .access-user-list { padding-left: 16px; padding-right: 16px; }
+  .recategorization-admin { margin-inline: 16px; }
   .access-user-row { grid-template-columns: 1fr; }
   .access-user-actions { justify-content: flex-start; }
 }

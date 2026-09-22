@@ -112,6 +112,40 @@ export const status = query({
   },
 });
 
+export const latestForSpace = query({
+  args: { spaceId: v.id("spaces") },
+  returns: v.union(v.object({
+    jobId: v.id("inboxRecategorizationJobs"),
+    status: jobStatus,
+    startedAt: v.number(),
+    updatedAt: v.number(),
+    discovered: v.number(),
+    total: v.union(v.number(), v.null()),
+    recategorized: v.number(),
+    skipped: v.number(),
+    error: v.union(v.string(), v.null()),
+  }), v.null()),
+  handler: async (ctx, { spaceId }) => {
+    await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const job = await ctx.db.query("inboxRecategorizationJobs")
+      .withIndex("by_space_started_at", q => q.eq("spaceId", spaceId))
+      .order("desc")
+      .first();
+    if (!job) return null;
+    return {
+      jobId: job._id,
+      status: job.status,
+      startedAt: job.startedAt,
+      updatedAt: job.updatedAt,
+      discovered: job.discovered,
+      total: job.scanComplete ? job.discovered : null,
+      recategorized: job.recategorized,
+      skipped: job.skipped,
+      error: job.error ?? null,
+    };
+  },
+});
+
 export const resume = mutation({
   args: { jobId: v.id("inboxRecategorizationJobs") },
   returns: v.id("inboxRecategorizationJobs"),
@@ -237,6 +271,7 @@ export const checkEligibility = internalMutation({
     }
     return item !== null
       && item.spaceId === job.spaceId
+      && item.category !== "security"
       && !isReviewedAfterRecategorizationStarted(item, job.startedAt);
   },
 });

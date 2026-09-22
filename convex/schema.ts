@@ -35,6 +35,7 @@ export default defineSchema({
     createdBy: v.id("users"),
     creationKey: v.string(),
     createdAt: v.number(),
+    otpSharingEnabled: v.optional(v.boolean()),
     modelTier: v.optional(v.union(v.literal("low"), v.literal("med"), v.literal("high"), v.literal("ultra"))),
   }).index("by_agentmail_inbox", ["agentmailInboxId"]).index("by_creator_key", ["createdBy", "creationKey"]),
   providerKeys: defineTable({
@@ -104,6 +105,10 @@ export default defineSchema({
     reviewedAt: v.optional(v.number()),
     heartbeatMessageId: v.optional(v.id("messages")),
     jevDecisionId: v.optional(v.id("jevDecisions")),
+    extractedOtpCode: v.optional(v.string()),
+    ephemeralExpiresAt: v.optional(v.number()),
+    sourceMessageId: v.optional(v.id("messages")),
+    sharedMessageId: v.optional(v.id("messages")),
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
     forwardedSpaceIds: v.optional(v.array(v.id("spaces"))),
     receivedAt: v.number(),

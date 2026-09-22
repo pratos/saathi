@@ -22,6 +22,7 @@ export const GMAIL_USEFUL_CATEGORY_IDS = [
   "home",
   "receipts",
   "bank",
+  "security",
 ] as const;
 
 export type GmailUsefulCategory = (typeof GMAIL_USEFUL_CATEGORY_IDS)[number];

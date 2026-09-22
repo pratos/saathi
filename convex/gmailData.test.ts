@@ -151,6 +151,115 @@ describe("private Gmail ingestion", () => {
     expect(familyMessages.filter(message => message.roomId === seeded.familyRoomId)).toEqual([]);
   });
 
+  test("shares an OTP explicitly and permanently removes every code-bearing row after five minutes", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const createdAt = Date.now();
+      const ownerId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const memberId = await ctx.db.insert("users", { email: "member@example.test" });
+      const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "gmail-otp-share", createdAt });
+      await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+      await ctx.db.insert("memberships", { spaceId, userId: memberId, role: "member", status: "active", joinedAt: createdAt });
+      const familyRoomId = await ctx.db.insert("rooms", { spaceId, type: "shared", title: "Family", assistantMode: "mention", createdBy: ownerId, createdAt });
+      await ctx.db.insert("roomMembers", { roomId: familyRoomId, userId: ownerId, role: "manager", createdAt });
+      await ctx.db.insert("roomMembers", { roomId: familyRoomId, userId: memberId, role: "participant", createdAt });
+      const connectionId = await ctx.db.insert("gmailConnections", {
+        spaceId, userId: memberId, connectedAccountId: "ca_member_otp", alias: "Personal Gmail",
+        triggerId: "ti_member_otp", status: "active", createdAt,
+      });
+      return { connectionId, memberId, ownerId, spaceId };
+    });
+    const member = t.withIdentity({ subject: String(seeded.memberId) });
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+    const inboxItemId = await member.mutation(internal.gmailData.saveClassification, {
+      connectionId: seeded.connectionId,
+      externalMessageId: "otp-message-1",
+      threadId: "otp-thread-1",
+      sender: "signin@example.test",
+      subject: "Your sign-in code",
+      text: "Your OTP is 481921. Private account detail: ending 9001.",
+      html: "<p>Your OTP is 481921. Private account detail: ending 9001.</p>",
+      receivedAt: Date.now(),
+      useful: true,
+      summary: "One-time code available to share for five minutes.",
+      category: "security",
+      otpCode: "481921",
+    });
+    expect(inboxItemId).not.toBeNull();
+    await member.mutation(api.gmailData.shareWithFamily, { inboxItemId: inboxItemId! });
+    const shared = await owner.query(api.inbox.list, { spaceId: seeded.spaceId });
+    expect(shared).toEqual([expect.objectContaining({
+      _id: inboxItemId,
+      category: "security",
+      subcategory: "otp",
+      extractedOtpCode: "481921",
+      ephemeralExpiresAt: expect.any(Number),
+    })]);
+    expect(shared[0]?.originalHtml).toBeUndefined();
+    expect(shared[0]?.originalText).not.toContain("9001");
+    expect(shared[0]?.subject).toBe("Shared one-time code");
+    await expect(owner.mutation(api.inbox.reprocess, { inboxItemId: inboxItemId! })).rejects.toThrow(/cannot be reprocessed/i);
+
+    const expiredAt = Date.now() - 1;
+    await t.run(async ctx => ctx.db.patch(inboxItemId!, { category: "needs_review", ephemeralExpiresAt: expiredAt }));
+    await t.mutation(internal.gmailData.expireOtp, { inboxItemId: inboxItemId!, expiresAt: expiredAt });
+    const afterExpiry = await t.run(async ctx => ({
+      inbox: await ctx.db.query("inboxItems").collect(),
+      messages: await ctx.db.query("messages").collect(),
+      markers: await ctx.db.query("gmailProcessedMessages").collect(),
+      audit: await ctx.db.query("auditEvents").collect(),
+    }));
+    expect(afterExpiry.inbox).toEqual([]);
+    expect(afterExpiry.messages).toEqual([]);
+    expect(JSON.stringify(afterExpiry.markers)).not.toContain("481921");
+    expect(JSON.stringify(afterExpiry.audit)).not.toContain("481921");
+
+    await owner.mutation(api.spaces.setOtpSharing, { spaceId: seeded.spaceId, enabled: false });
+    await expect(member.query(internal.gmailData.otpSharingPolicy, { connectionId: seeded.connectionId })).resolves.toBe(false);
+  });
+
+  test("applies each family's OTP policy independently for one connected Gmail account", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async ctx => {
+      const now = Date.now();
+      const userId = await ctx.db.insert("users", { email: "owner@example.test" });
+      const disabledSpaceId = await ctx.db.insert("spaces", { name: "Disabled", createdBy: userId, creationKey: "otp-disabled", createdAt: now, otpSharingEnabled: false });
+      const enabledSpaceId = await ctx.db.insert("spaces", { name: "Enabled", createdBy: userId, creationKey: "otp-enabled", createdAt: now, otpSharingEnabled: true });
+      for (const spaceId of [disabledSpaceId, enabledSpaceId]) {
+        await ctx.db.insert("memberships", { spaceId, userId, role: "owner", status: "active", joinedAt: now });
+      }
+      const disabledConnectionId = await ctx.db.insert("gmailConnections", {
+        spaceId: disabledSpaceId, userId, connectedAccountId: "ca_shared_otp", alias: "Gmail", triggerId: "disabled-trigger", status: "active", createdAt: now,
+      });
+      const enabledConnectionId = await ctx.db.insert("gmailConnections", {
+        spaceId: enabledSpaceId, userId, connectedAccountId: "ca_shared_otp", alias: "Gmail", triggerId: "enabled-trigger", status: "active", createdAt: now,
+      });
+      return { userId, disabledConnectionId, enabledConnectionId };
+    });
+    const owner = t.withIdentity({ subject: String(seeded.userId) });
+    const email = {
+      externalMessageId: "same-otp",
+      threadId: "same-otp-thread",
+      sender: "signin@example.test",
+      subject: "Your code",
+      text: "OTP is 604912",
+      receivedAt: Date.now(),
+      useful: true,
+      summary: "One-time code available to share for five minutes.",
+      category: "security" as const,
+      otpCode: "604912",
+    };
+    await expect(owner.mutation(internal.gmailData.saveClassification, { ...email, connectionId: seeded.disabledConnectionId })).resolves.toBeNull();
+    await expect(owner.mutation(internal.gmailData.saveClassification, { ...email, connectionId: seeded.enabledConnectionId })).resolves.not.toBeNull();
+    const persisted = await t.run(async ctx => ({
+      items: await ctx.db.query("inboxItems").collect(),
+      markers: await ctx.db.query("gmailProcessedMessages").collect(),
+    }));
+    expect(persisted.items).toHaveLength(1);
+    expect(persisted.items[0]?.extractedOtpCode).toBe("604912");
+    expect(persisted.markers.map(marker => marker.useful).sort()).toEqual([false, true]);
+  });
+
   test("the same Gmail can be enabled in another family and shared there independently", async () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {

@@ -353,8 +353,12 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
   const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
   const reusableGmail = useQuery(api.gmailData.reusable, { spaceId: family.space._id })
+  const latestRecategorization = useQuery(api.recategorization.latestForSpace, family.membership.role === 'owner' ? { spaceId: family.space._id } : 'skip')
   const enableGmailHere = useMutation(api.gmailData.enableForSpace)
   const disableGmailHere = useMutation(api.gmailData.disableForSpace)
+  const setOtpSharing = useMutation(api.spaces.setOtpSharing)
+  const startRecategorization = useMutation(api.recategorization.startForSpace)
+  const resumeRecategorization = useMutation(api.recategorization.resume)
   const beginGmailConnection = useAction(api.gmail.beginConnection)
   const confirmGmailConnection = useAction(api.gmail.confirmConnection)
   const checkGmailNow = useAction(api.gmail.checkNow)
@@ -363,6 +367,9 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const [gmailBusy, setGmailBusy] = useState(false)
   const [gmailMessage, setGmailMessage] = useState('')
   const [gmailRemovalId, setGmailRemovalId] = useState<string | null>(null)
+  const [otpSettingBusy, setOtpSettingBusy] = useState(false)
+  const [recategorizationBusy, setRecategorizationBusy] = useState(false)
+  const [recategorizationMessage, setRecategorizationMessage] = useState('')
   const [pane, setPane] = useState<'chats' | 'updates' | 'files' | 'family'>('chats')
   const [mobileNav, setMobileNav] = useState<'home' | 'detail'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('hub')
@@ -660,6 +667,32 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
 
           {settingsSection === 'advanced' && <>
             <section className="settings-detail-section"><span>Family inbox</span>{family.space.agentmailInboxId ? <div className="agentmail-id"><p className="confirmed"><Check /> Family inbox connected</p><code>{family.space.agentmailEmail ?? family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailEmail ?? family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy address'}</button></div> : family.membership.role === 'owner' ? <ConnectInbox spaceId={family.space._id} /> : <p>Ask a family owner to create the family inbox.</p>}</section>
+            {family.membership.role === 'owner' && <section className="settings-detail-section otp-sharing-setting"><div><span>Share one-time codes</span><p>Allow family members to explicitly share Gmail OTPs. The private code, shared message, and inbox record are permanently deleted after five minutes.</p></div><button
+              type="button"
+              role="switch"
+              aria-checked={family.space.otpSharingEnabled !== false}
+              aria-label="Allow sharing one-time codes"
+              disabled={otpSettingBusy}
+              onClick={() => {
+                setOtpSettingBusy(true)
+                void setOtpSharing({ spaceId: family.space._id, enabled: family.space.otpSharingEnabled === false })
+                  .finally(() => setOtpSettingBusy(false))
+              }}
+            ><i />{family.space.otpSharingEnabled !== false ? 'On' : 'Off'}</button></section>}
+            {family.membership.role === 'owner' && <section className="settings-detail-section recategorization-setting"><div><span>Email categorization</span><p>Re-run the current category, subtype, amount, merchant, and period extraction in the durable background queue.</p></div>
+              {latestRecategorization
+                ? <div className="recategorization-status" aria-live="polite"><strong>{recategorizationStatusLabel(latestRecategorization.status)}</strong><small>{latestRecategorization.recategorized} updated · {latestRecategorization.skipped} skipped · {latestRecategorization.total ?? latestRecategorization.discovered} found</small>{latestRecategorization.error && <small>{latestRecategorization.error}</small>}</div>
+                : <p className="recategorization-status">No background recategorization has run for this family.</p>}
+              <Button type="button" variant="secondary" size="lg" disabled={recategorizationBusy || latestRecategorization?.status === 'queued' || latestRecategorization?.status === 'running'} onClick={() => {
+                setRecategorizationBusy(true)
+                setRecategorizationMessage('')
+                const request = latestRecategorization?.status === 'failed'
+                  ? resumeRecategorization({ jobId: latestRecategorization.jobId })
+                  : startRecategorization({ spaceId: family.space._id })
+                void request.then(() => setRecategorizationMessage('Background recategorization queued. You can leave this page.')).catch(() => setRecategorizationMessage('Could not start recategorization. Try again.')).finally(() => setRecategorizationBusy(false))
+              }}><RefreshCw />{latestRecategorization?.status === 'failed' ? 'Resume recategorization' : latestRecategorization?.status === 'queued' || latestRecategorization?.status === 'running' ? 'Recategorization running' : 'Re-run email categorization'}</Button>
+              {recategorizationMessage && <small className="gmail-status" role="status">{recategorizationMessage}</small>}
+            </section>}
             {family.membership.role === 'owner' && accessSource === 'byok' && <section className="settings-detail-section"><span>Models and usage</span><ModelTierControls spaceId={family.space._id} /></section>}
             {family.membership.role === 'owner' && accessSource === 'byok' && <section className="settings-detail-section"><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
           </>}
@@ -1594,10 +1627,19 @@ function ShareFamilyMailButtons({ item, family, families, onShareHere, onShareTh
   onShareThere: (inboxItemId: Id<'inboxItems'>, spaceId: Id<'spaces'>) => void
 }) {
   const others = families.filter(row => row.space._id !== family.space._id && !item.forwardedSpaceIds?.includes(row.space._id))
-  return <div className="share-family-mail-row">
-    {!item.sharedAt && <Button type="button" size="lg" className="share-family-mail min-h-11 h-auto max-w-full whitespace-normal" onClick={() => onShareHere(item._id)}><UsersRound /> Share with {family.space.name}</Button>}
-    {others.map(row => <Button type="button" size="lg" className="share-family-mail min-h-11 h-auto max-w-full whitespace-normal" key={row.space._id} onClick={() => onShareThere(item._id, row.space._id)}><UsersRound /> Share with {row.space.name}</Button>)}
+  const isOtp = item.category === 'security' && Boolean(item.ephemeralExpiresAt)
+  return <div className={`share-family-mail-row${isOtp ? ' otp-share-actions' : ''}`}>
+    {isOtp && <p><ShieldCheck /> Shared codes and their inbox records are permanently deleted after five minutes.</p>}
+    {!item.sharedAt && <Button type="button" size="lg" className="share-family-mail min-h-11 h-auto max-w-full whitespace-normal" onClick={() => onShareHere(item._id)}><UsersRound /> {isOtp ? `Share code with ${family.space.name}` : `Share with ${family.space.name}`}</Button>}
+    {others.map(row => <Button type="button" size="lg" className="share-family-mail min-h-11 h-auto max-w-full whitespace-normal" key={row.space._id} onClick={() => onShareThere(item._id, row.space._id)}><UsersRound /> {isOtp ? `Share code with ${row.space.name}` : `Share with ${row.space.name}`}</Button>)}
   </div>
+}
+
+function recategorizationStatusLabel(status: 'queued' | 'running' | 'complete' | 'failed') {
+  if (status === 'queued') return 'Queued'
+  if (status === 'running') return 'Running in the background'
+  if (status === 'complete') return 'Last run complete'
+  return 'Last run needs attention'
 }
 
 function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
@@ -2182,7 +2224,7 @@ function attachmentMediaType(file: File) {
 }
 
 function canReadGmailPdf(item: Doc<'inboxItems'>) {
-  if (item.status === 'processing' || item.status === 'failed' || !item.agentmailMessageId.startsWith('gmail:')) return false
+  if (item.ephemeralExpiresAt || item.status === 'processing' || item.status === 'failed' || !item.agentmailMessageId.startsWith('gmail:')) return false
   if (item.documentParseStatus === undefined) return true
   return item.documentParseStatus === 'none' && Boolean(item.processingNotes?.includes('no public document link'))
 }

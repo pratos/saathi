@@ -81,6 +81,26 @@ export const members = query({
   },
 });
 
+export const setOtpSharing = mutation({
+  args: { spaceId: v.id("spaces"), enabled: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, { spaceId, enabled }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "configure_inbox");
+    const space = await ctx.db.get(spaceId);
+    if (!space) throw new ConvexError({ code: "NOT_FOUND", message: "Family space not found" });
+    await ctx.db.patch(spaceId, { otpSharingEnabled: enabled });
+    await ctx.db.insert("auditEvents", {
+      spaceId,
+      actorUserId: userId,
+      action: enabled ? "space.otp_sharing_enabled" : "space.otp_sharing_disabled",
+      resourceType: "space",
+      resourceId: String(spaceId),
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const prepareInboxCreation = internalQuery({
   args: { spaceId: v.id("spaces") },
   returns: v.object({ name: v.string(), existingInboxId: v.union(v.string(), v.null()) }),

@@ -101,6 +101,7 @@ export const reprocess = mutation({
   handler: async (ctx, { inboxItemId }) => {
     const { item } = await requireInboxItemPermission(ctx, inboxItemId, "read");
     if (item.visibility !== "space") throw new ConvexError({ code: "FORBIDDEN", message: "Only shared family inbox items can be reprocessed here" });
+    if (item.ephemeralExpiresAt) throw new ConvexError({ code: "EPHEMERAL_ITEM", message: "One-time codes cannot be reprocessed" });
     if (item.status === "processing") return item._id;
     await ctx.db.patch(item._id, {
       status: "processing",

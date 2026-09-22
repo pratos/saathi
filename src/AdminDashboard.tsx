@@ -11,6 +11,7 @@ type AccessStatus = 'pending' | 'approved' | 'blocked'
 
 export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const users = useQuery(api.admin.listUsers)
+  const recategorizations = useQuery(api.admin.recentRecategorizations)
   const [reportNow, setReportNow] = useState(() => Date.now())
   const usage = useQuery(api.admin.usageOverview, { now: reportNow })
   const setAccessStatus = useMutation(api.admin.setAccessStatus)
@@ -88,6 +89,14 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           </section>
           {(usage.totals.unknownCostRows > 0 || usage.rowLimitReached || usage.familyLimitReached) && <p className="usage-caveat">{usage.totals.unknownCostRows > 0 ? `Estimate excludes ${usage.totals.unknownCostRows} visible row${usage.totals.unknownCostRows === 1 ? '' : 's'} without a usable USD cost. ` : ''}{usage.rowLimitReached ? 'Totals use only the latest 5,000 ledger rows. ' : ''}{usage.familyLimitReached ? 'The family table is limited to 200 families represented in those rows.' : ''}</p>}
         </>}
+    </section>
+    <section className="usage-panel recategorization-admin" aria-labelledby="recategorization-heading">
+      <div className="usage-panel-title"><div><h2 id="recategorization-heading">Email recategorization</h2><p>Latest durable background runs across family inboxes.</p></div></div>
+      <div className="usage-table-wrap"><table><thead><tr><th>Family</th><th>Status</th><th>Updated</th><th>Result</th></tr></thead><tbody>
+        {recategorizations === undefined && <tr><td colSpan={4}>Loading recategorization jobs…</td></tr>}
+        {recategorizations?.length === 0 && <tr><td colSpan={4}>No recategorization has been started yet.</td></tr>}
+        {recategorizations?.map(job => <tr key={job.jobId}><td><strong>{job.familyName}</strong><small>Started {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(job.startedAt)}</small></td><td><span className={`access-status recategorization-${job.status}`}>{job.status}</span></td><td>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(job.updatedAt)}</td><td>{job.recategorized} updated · {job.skipped} skipped · {job.discovered} found{job.error ? <small>{job.error}</small> : null}</td></tr>)}
+      </tbody></table></div>
     </section>
     <section className="access-admin-toolbar">
       <div className="access-section-heading"><h2>Account access</h2><p>Approve people who can use deployment-funded AI keys.</p></div>

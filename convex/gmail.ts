@@ -12,6 +12,7 @@ import type { DecisionCredential } from "./lib/decisionProvider";
 import { decideEmail, type JevEmailDecision } from "./lib/jev";
 import { isConfidentEmailIgnore } from "./lib/inboxClassification";
 import { GMAIL_USEFUL_CATEGORY_IDS } from "./lib/emailTaxonomy";
+import { extractOtpCode } from "./lib/otpSharing";
 import { resolveOpenAiKey, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 
 export const beginConnection = action({
@@ -273,6 +274,7 @@ export const processIncoming = internalAction({
           category: classification.category,
           amount: classification.amount,
           merchant: classification.merchant,
+          otpCode: classification.otpCode,
         });
         await ctx.runMutation(internal.gmailData.touchSynced, { connectionId: connection._id });
       }
@@ -328,6 +330,7 @@ async function processCandidate(ctx: ActionCtx, connection: Doc<"gmailConnection
     category: classification.category,
     amount: classification.amount,
     merchant: classification.merchant,
+    otpCode: classification.otpCode,
   });
 }
 
@@ -338,6 +341,31 @@ async function classifyEmail(
 ) {
   const decisionCredential = await resolveOptionalDecisionCredential(ctx, connection.spaceId, connection.userId);
   const jev = decisionCredential ? await safeEmailDecision(decisionCredential, email) : null;
+  const otpCode = extractOtpCode(`${email.subject}\n${email.text}`);
+  if (otpCode) {
+    if (jev) {
+      await ctx.runMutation(internal.jev.record, {
+        spaceId: connection.spaceId,
+        source: "gmail",
+        inputPreview: `${email.sender} — one-time code email`,
+        decision: "security",
+        confidence: Math.max(jev.confidence, jev.containsOtpOrLoginCode),
+        details: jev,
+        model: jev.model,
+        latencyMs: jev.latencyMs,
+        inputTokens: jev.inputTokens,
+        disposition: "ephemeral_candidate",
+      });
+    }
+    return {
+      useful: true,
+      summary: "One-time code available to share for five minutes.",
+      category: "security" as const,
+      amount: undefined,
+      merchant: undefined,
+      otpCode,
+    };
+  }
   if (jev) {
     const ignored = shouldIgnoreEmail(jev);
     await ctx.runMutation(internal.jev.record, {
@@ -353,7 +381,7 @@ async function classifyEmail(
       disposition: ignored ? "ignored" : "retained_for_extraction",
     });
     if (ignored) {
-      return { useful: false, summary: "", category: "receipts" as const, amount: undefined, merchant: undefined };
+      return { useful: false, summary: "", category: "receipts" as const, amount: undefined, merchant: undefined, otpCode: undefined };
     }
   }
   const apiKey = await resolveOpenAiKey(ctx, connection.spaceId, connection.userId);
@@ -392,6 +420,7 @@ async function classifyEmail(
     category,
     amount: typeof parsed.amount === "string" ? parsed.amount.slice(0, 40) : undefined,
     merchant: typeof parsed.merchant === "string" ? parsed.merchant.slice(0, 120) : undefined,
+    otpCode: undefined,
   };
 }
 

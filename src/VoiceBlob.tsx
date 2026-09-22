@@ -28,38 +28,39 @@ void main() {
   vec2 c2 = vec2(cos(t * 0.37 + 1.3), sin(t * 0.63 + 0.4)) * (0.11 + 0.05 * energy);
   vec2 c3 = vec2(sin(t * 0.49 + 2.2), cos(t * 0.33 + 1.1)) * 0.10;
 
-  float f = field(uv, c0, 0.33 * breathe)
-    + field(uv, c1, 0.19 + 0.06 * energy)
-    + field(uv, c2, 0.16 + 0.05 * energy)
-    + field(uv, c3, 0.13);
+  float f = field(uv, c0, 0.28 * breathe)
+    + field(uv, c1, 0.21 + 0.07 * energy)
+    + field(uv, c2, 0.18 + 0.06 * energy)
+    + field(uv, c3, 0.16);
 
-  float body = smoothstep(0.96, 1.34, f);
+  float angle = atan(uv.y, uv.x);
+  float organic = 0.10 * sin(angle * 3.0 + t * 0.24) + 0.04 * sin(angle * 5.0 - t * 0.18);
+  float body = smoothstep(0.96 + organic, 1.34 + organic, f);
   float halo = max(smoothstep(0.38, 1.08, f) - body, 0.0);
-  float rim = smoothstep(0.98, 1.18, f) * (1.0 - smoothstep(1.34, 1.72, f));
+  float edge = body * (1.0 - smoothstep(1.18, 1.76, f));
   float depth = smoothstep(1.08, 3.4, f);
   float highlight = exp(-length(uv - vec2(-0.13, 0.17)) * 7.6) * body;
   float drift = 0.5 + 0.5 * sin(uv.x * 3.2 - uv.y * 2.7 + t * 0.34);
 
-  vec3 navy = vec3(0.055, 0.065, 0.16);
-  vec3 indigo = vec3(0.12, 0.11, 0.28);
-  vec3 cyan = vec3(0.16, 0.70, 0.78);
-  vec3 violet = vec3(0.43, 0.28, 0.78);
-  vec3 rose = vec3(0.76, 0.30, 0.52);
+  vec3 pearl = vec3(0.91, 0.93, 0.99);
+  vec3 sky = vec3(0.48, 0.73, 0.94);
+  vec3 lilac = vec3(0.61, 0.51, 0.91);
+  vec3 blush = vec3(0.96, 0.58, 0.71);
 
-  vec3 color = mix(navy, indigo, depth * 0.72 + drift * 0.08 * energy);
-  float cyanEdge = rim * smoothstep(-0.36, 0.32, uv.y - uv.x);
-  float roseEdge = rim * smoothstep(-0.08, 0.42, -uv.y - uv.x * 0.35);
-  color = mix(color, violet, rim * 0.28);
-  color += cyan * cyanEdge * (0.18 + 0.10 * energy);
-  color += rose * roseEdge * (0.10 + 0.06 * energy);
-  color += vec3(0.48, 0.66, 0.92) * highlight * 0.12;
-  color += mix(violet, cyan, 0.45) * halo * (0.10 + 0.08 * energy);
+  float softCore = clamp(depth * 0.74 + drift * 0.05 * energy, 0.0, 1.0);
+  vec3 color = mix(lilac, pearl, softCore);
+  float cyanEdge = edge * smoothstep(-0.36, 0.32, uv.y - uv.x);
+  float roseEdge = edge * smoothstep(-0.08, 0.42, -uv.y - uv.x * 0.35);
+  color += sky * cyanEdge * (0.16 + 0.07 * energy);
+  color += blush * roseEdge * (0.12 + 0.05 * energy);
+  color += vec3(1.0, 0.98, 1.0) * highlight * 0.22;
+  color += mix(lilac, sky, 0.5) * halo * (0.10 + 0.08 * energy);
 
   if (u_muted > 0.5) {
-    color = mix(color, vec3(0.18, 0.16, 0.29), 0.34);
+    color = mix(color, vec3(0.73, 0.71, 0.82), 0.30);
   }
 
-  float alpha = clamp(body * 0.72 + halo * 0.26 + rim * 0.06, 0.0, 0.78);
+  float alpha = clamp(body * 0.92 + halo * 0.24, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
 }`
 

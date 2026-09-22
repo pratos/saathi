@@ -50,6 +50,40 @@ export const listUsers = query({
   },
 });
 
+const recategorizationStatus = v.union(
+  v.literal("queued"), v.literal("running"), v.literal("complete"), v.literal("failed"),
+);
+
+export const recentRecategorizations = query({
+  args: {},
+  returns: v.array(v.object({
+    jobId: v.id("inboxRecategorizationJobs"),
+    familyName: v.string(),
+    status: recategorizationStatus,
+    startedAt: v.number(),
+    updatedAt: v.number(),
+    discovered: v.number(),
+    recategorized: v.number(),
+    skipped: v.number(),
+    error: v.union(v.string(), v.null()),
+  })),
+  handler: async (ctx) => {
+    await requireSuperadmin(ctx);
+    const jobs = await ctx.db.query("inboxRecategorizationJobs").order("desc").take(100);
+    return Promise.all(jobs.map(async job => ({
+      jobId: job._id,
+      familyName: (await ctx.db.get(job.spaceId))?.name ?? "Deleted family",
+      status: job.status,
+      startedAt: job.startedAt,
+      updatedAt: job.updatedAt,
+      discovered: job.discovered,
+      recategorized: job.recategorized,
+      skipped: job.skipped,
+      error: job.error ?? null,
+    })));
+  },
+});
+
 const usageTotalsFields = {
   trackedCostUsd: v.number(),
   platformCostUsd: v.number(),

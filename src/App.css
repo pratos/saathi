@@ -509,7 +509,7 @@ button { border: 0; background: none; color: inherit; }
 .live-conversation-workspace .family-switcher button { border: 0; }
 .live-conversation-workspace .assistant-card,
 .live-conversation-workspace .simple-message { border: 0; }
-.live-conversation-workspace .conversation-feed { scroll-behavior: smooth; overscroll-behavior: contain; }
+.live-conversation-workspace .conversation-feed { overscroll-behavior: contain; }
 .live-conversation-workspace .conversation-composer {
   padding-top: 10px;
   background: linear-gradient(180deg, rgba(26,35,30,0), #1a231e 20%);
@@ -725,24 +725,11 @@ button { border: 0; background: none; color: inherit; }
 .pending-invitation strong { font-size: 12px; }
 .pending-invitation small { margin-top: 3px; color: var(--text-soft); font-size: 11px; text-transform: capitalize; }
 .pending-invitation button { min-height: 34px !important; flex: 0 0 auto; color: #f2b3a4; font-size: 11px; }
-.gmail-connections > p { margin: 7px 0 12px; color: var(--text-soft); font-size: 12px; line-height: 1.45; }
-.gmail-account { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 9px 10px; border-radius: 12px; background: #202b25; }
-.gmail-disable { min-height: 32px !important; padding: 0 8px; border-radius: 8px; color: var(--text-soft); background: #2a352e; font-size: 11px; font-weight: 700; }
-.gmail-account + .gmail-account { margin-top: 6px; }
-.gmail-account > svg:first-child { width: 19px; color: #efb869; }
-.gmail-account > svg:last-child { width: 16px; color: var(--aqua); }
-.gmail-account span { min-width: 0; }
-.gmail-account strong, .gmail-account small { display: block; overflow-wrap: anywhere; }
-.gmail-connections { min-width: 0; }
-.gmail-account strong { color: var(--text-warm); font-size: 12px; }
-.gmail-account small { margin-top: 3px; color: var(--text-soft); font-size: 11px; }
 .connect-gmail { width: 100%; min-height: 42px !important; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 9px; border-radius: 11px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
 .connect-gmail svg { width: 17px; }
 .connect-gmail:disabled { cursor: wait; opacity: .62; }
 .connect-gmail.secondary { color: var(--text-warm); background: #2a3730; }
 .gmail-status { display: block; margin-top: 8px; color: #c5cec8; font-size: 11px; line-height: 1.4; }
-.share-family-mail-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.share-family-mail { min-height: 36px !important; margin-top: 0; padding: 0 12px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
 .alias-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-size: 13px; }
 .family-alias-fields { display: grid; gap: 6px; margin: 8px 0 12px; }
 .family-alias-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
@@ -821,7 +808,6 @@ button { border: 0; background: none; color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-conversation-workspace .conversation-feed { scroll-behavior: auto; }
   .typing-indicator i, .upload-spinner, .transcript-cursor, .voice-call-status i, .voice-blob-glow, .voice-call-sheet { animation: none; }
 }
 

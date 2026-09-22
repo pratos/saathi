@@ -58,11 +58,11 @@
 .rail-brand strong { font-size: 13px; }
 .rail-brand small { color: var(--muted); font-size: 9px; }
 .journey-rail nav { display: grid; gap: 2px; }
-.journey-rail nav button { min-height: 53px; display: grid; grid-template-columns: 27px minmax(0, 1fr) 17px; gap: 8px; align-items: center; padding: 6px 8px; text-align: left; }
+.journey-rail nav button { width: 100%; min-width: 0; min-height: 53px; display: grid; grid-template-columns: 27px minmax(0, 1fr) 18px; gap: 8px; align-items: center; padding: 6px 8px; text-align: left; }
 .journey-rail nav button > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
-.journey-rail nav button strong { font-size: 10px; line-height: 1.2; }
-.journey-rail nav button small { overflow: hidden; color: #74838c; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.journey-rail nav button > svg { width: 15px; color: #87949b; }
+.journey-rail nav button strong { min-width: 0; font-size: 10px; line-height: 1.2; overflow-wrap: anywhere; }
+.journey-rail nav button small { min-width: 0; color: #74838c; font-size: 8px; line-height: 1.25; overflow-wrap: anywhere; }
+.journey-rail nav button > svg { width: 18px; height: 18px; justify-self: end; color: #87949b; }
 .journey-rail nav button.active { color: #103f38; border-color: #9dc9bf; background: #d9ebe7; box-shadow: inset 3px 0 var(--teal); }
 .journey-rail nav button.done:not(.active) { color: #305c54; }
 .rail-index { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #bbc7cc; border-radius: 3px; color: #586b75; background: #f5f8f9; font: 800 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -201,8 +201,13 @@
 .draft-meta dt { color: var(--muted); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .draft-meta dd { overflow-wrap: anywhere; margin: 0; font-size: 9px; font-weight: 750; }
 .draft-body { padding: 13px; color: #41545e; background: #edf1f3; font-size: 10px; line-height: 1.55; }
-.draft-card .draft-review { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; margin-top: 13px; padding: 8px 0; font-size: 10px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; cursor: pointer; }
-.draft-card .draft-review [data-slot="checkbox"] { width: 22px; height: 22px; flex: 0 0 22px; border-color: #748a82; }
+.draft-card .draft-review { width: 100%; min-height: 48px; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 12px; margin-top: 13px; padding: 8px 10px; border-radius: 14px; color: #332d3b; font-size: 12px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; cursor: pointer; }
+.draft-card .draft-review:hover { background: rgba(238,233,255,.58); }
+.draft-card .draft-review [data-slot="checkbox"] { width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 0; border: 2px solid #7b7087; border-radius: 7px; color: #fff; background: rgba(255,255,255,.84); box-shadow: none; }
+.draft-card .draft-review [data-slot="checkbox"][data-state="checked"] { border-color: #6f59bd; background: #6f59bd; }
+.draft-card .draft-review [data-slot="checkbox"]:focus-visible { outline: 3px solid rgba(111,89,189,.32); outline-offset: 3px; }
+.draft-card .draft-review [data-slot="checkbox"]:disabled { border-color: #aca6b4; color: #fff; background: #8f80c6; cursor: not-allowed; opacity: .72; }
+.draft-card .draft-review:has([data-slot="checkbox"]:disabled) { color: #6f6977; cursor: not-allowed; }
 .confirmation-gate { display: grid; justify-items: center; align-content: center; text-align: center; }
 .confirmation-gate > svg { width: 38px; height: 38px; padding: 8px; color: #986021; background: #f2e6d3; }
 .confirmation-gate > span { margin-top: 13px; color: var(--amber); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -432,8 +437,8 @@
 .rail-brand small { font-size: 10px; }
 .journey-rail nav { gap: 5px; }
 .journey-rail nav button { min-height: 58px; border-radius: 16px; }
-.journey-rail nav button strong { font-size: 11px; }
-.journey-rail nav button small { color: #706b79; font-size: 9px; }
+.journey-rail nav button strong { font-size: 11px; line-height: 1.3; }
+.journey-rail nav button small { color: #706b79; font-size: 9px; line-height: 1.3; }
 .journey-rail nav button.active {
   color: #3d315f;
   border-color: transparent;

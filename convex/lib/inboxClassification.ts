@@ -2,7 +2,11 @@ import { v } from "convex/values";
 import type { DecisionCredential } from "./decisionProvider";
 import { decideEmail, type JevEmailDecision } from "./jev";
 
-const emailCategory = v.union(v.literal("bills"), v.literal("receipts"), v.literal("bank"), v.literal("ignore"));
+const emailCategory = v.union(
+  v.literal("bills"), v.literal("receipts"), v.literal("bank"), v.literal("security"),
+  v.literal("school"), v.literal("travel"), v.literal("appointments"),
+  v.literal("subscriptions"), v.literal("home"), v.literal("ignore"),
+);
 
 export const inboxClassificationResultValidator = v.union(
   v.object({
@@ -82,9 +86,9 @@ export function inboxDisposition(decision: JevEmailDecision): Exclude<InboxClass
 }
 
 export function isConfidentEmailIgnore(decision: JevEmailDecision) {
-  return decision.category === "ignore"
-    && decision.confidence >= 0.65
-    && (decision.tracksHouseholdMoney <= 0.45 || decision.containsOtpOrLoginCode >= 0.65);
+  if (decision.confidence < 0.65) return false;
+  if (decision.category === "security") return decision.containsOtpOrLoginCode >= 0.65;
+  return decision.category === "ignore" && decision.tracksHouseholdMoney <= 0.45;
 }
 
 function unavailable(reason: "not_configured" | "classification_failed", startedAt: number): InboxClassificationResult {

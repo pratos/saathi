@@ -22,7 +22,7 @@ describe("OpenRouter-backed decision workloads", () => {
       },
       saath_email_route: {
         category: "bills", confidence: 0.9,
-        probabilities: distribution("bills", ["bills", "receipts", "bank", "ignore"]),
+        probabilities: distribution("bills", ["bills", "school", "travel", "appointments", "subscriptions", "home", "receipts", "bank", "security", "ignore"]),
         tracksHouseholdMoney: 0.94, containsOtpOrLoginCode: 0.01,
       },
       saath_memory_decision: {

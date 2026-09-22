@@ -15,6 +15,7 @@ describe("family inbox processing", () => {
         model: request.model,
         choices: [{ message: { content: JSON.stringify({
           category: "subscriptions",
+          subcategory: "subscription_renewal",
           amount: "$30.00",
           amountInr: null,
           amountUsd: "$30.00",
@@ -52,6 +53,7 @@ describe("family inbox processing", () => {
 
       await expect(t.action(internal.inboxWorkflow.extract, { inboxItemId })).resolves.toMatchObject({
         category: "subscriptions",
+        subcategory: "subscription_renewal",
         amountUsd: "$30.00",
         merchant: "Grok xAI",
         model: "deepseek/deepseek-v4.1-flash",
@@ -197,6 +199,7 @@ describe("family inbox processing", () => {
     await owner.mutation(internal.inboxWorkflow.applyExtraction, {
       inboxItemId: seeded.inboxItemId,
       category: "bills",
+      subcategory: "utility_bill",
       amount: "1200",
       amountInr: "1200",
       amountUsd: null,
@@ -215,7 +218,7 @@ describe("family inbox processing", () => {
     });
     const item = await t.run(ctx => ctx.db.get(seeded.inboxItemId));
     expect(item).toMatchObject({
-      category: "bills", status: "ready", direction: "incoming", documentParseStatus: "parsed",
+      category: "bills", subcategory: "utility_bill", status: "ready", direction: "incoming", documentParseStatus: "parsed",
       documentParseRetryable: false, extractedMerchant: "BEST",
     });
     expect(item?.heartbeatMessageId).toBeTruthy();

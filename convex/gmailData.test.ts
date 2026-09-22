@@ -66,12 +66,12 @@ describe("private Gmail ingestion", () => {
     const useful = {
       ...common,
       externalMessageId: "useful-1",
-      sender: "statements@hdfcbank.test",
-      subject: "Credit card statement due 21 Sep",
-      text: "Your credit card bill of Rs 4,320 is due on 21 Sep.",
+      sender: "trips@greenwood-school.test",
+      subject: "Field trip payment due 21 Sep",
+      text: "The class field trip fee of Rs 4,320 is due on 21 Sep.",
       useful: true,
-      summary: "HDFC credit card bill of Rs 4,320 is due 21 Sep.",
-      category: "bills" as const,
+      summary: "Greenwood field trip fee of Rs 4,320 is due 21 Sep.",
+      category: "school" as const,
       amount: "4320",
     };
     await expect(member.mutation(internal.gmailData.saveClassification, useful)).resolves.not.toBeNull();
@@ -107,7 +107,7 @@ describe("private Gmail ingestion", () => {
     }));
     expect(persisted.markers).toHaveLength(2);
     expect(persisted.inbox).toHaveLength(1);
-    expect(persisted.inbox[0]).toMatchObject({ visibility: "space", category: "bills" });
+    expect(persisted.inbox[0]).toMatchObject({ visibility: "space", category: "school" });
     expect(persisted.messages).toHaveLength(2);
     expect(persisted.jobs).toEqual([]);
   });

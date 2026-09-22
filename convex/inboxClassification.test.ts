@@ -40,7 +40,10 @@ describe("shared inbox classification telemetry", () => {
       decision: {
         category: "bills" as const,
         confidence: 0.93,
-        probabilities: { bills: 0.93, receipts: 0.03, bank: 0.02, ignore: 0.02 },
+        probabilities: {
+          bills: 0.93, school: 0, travel: 0, appointments: 0, subscriptions: 0,
+          home: 0, receipts: 0.03, bank: 0.02, security: 0, ignore: 0.02,
+        },
         tracksHouseholdMoney: 0.96,
         containsOtpOrLoginCode: 0.01,
         model: "jev-latest",

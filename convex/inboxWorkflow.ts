@@ -6,6 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { env, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { parsePublicDocument } from "./lib/firecrawlParse";
 import { attachmentHint, extractPasswordHints, findDocumentUrls, inferDirection } from "./lib/inboxExtract";
+import { INBOX_CATEGORY_IDS, INBOX_SUBCATEGORY_IDS } from "./lib/emailTaxonomy";
 import {
   classifyInboxEmail,
   inboxClassificationResultValidator,
@@ -19,11 +20,31 @@ const category = v.union(
   v.literal("bills"),
   v.literal("school"),
   v.literal("travel"),
+  v.literal("appointments"),
   v.literal("subscriptions"),
   v.literal("home"),
   v.literal("receipts"),
   v.literal("bank"),
+  v.literal("security"),
   v.literal("needs_review"),
+);
+
+const subcategory = v.union(
+  v.literal("utility_bill"), v.literal("credit_card_bill"), v.literal("loan_payment"),
+  v.literal("insurance_premium"), v.literal("tax_payment"), v.literal("rent"),
+  v.literal("medical_bill"), v.literal("school_fee"), v.literal("purchase_receipt"),
+  v.literal("food_delivery"), v.literal("refund"), v.literal("warranty"),
+  v.literal("bank_transaction"), v.literal("bank_statement"), v.literal("credit_card_statement"),
+  v.literal("investment"), v.literal("demat"), v.literal("otp"), v.literal("login_code"),
+  v.literal("sign_in_alert"), v.literal("password_reset"), v.literal("field_trip"),
+  v.literal("school_event"), v.literal("permission_form"), v.literal("report_card"),
+  v.literal("timetable"), v.literal("school_transport"), v.literal("flight"),
+  v.literal("train"), v.literal("bus"), v.literal("hotel"), v.literal("visa"),
+  v.literal("itinerary"), v.literal("booking_change"), v.literal("medical_appointment"),
+  v.literal("service_appointment"), v.literal("government_appointment"), v.literal("reservation"),
+  v.literal("subscription_renewal"), v.literal("subscription_price_change"), v.literal("trial_ending"),
+  v.literal("subscription_cancellation"), v.literal("home_maintenance"), v.literal("delivery"),
+  v.literal("community_notice"), v.literal("household_service"), v.literal("other"),
 );
 
 const actionValidator = v.object({
@@ -34,7 +55,8 @@ const actionValidator = v.object({
 });
 
 const extractionSchema = z.object({
-  category: z.enum(["bills", "school", "travel", "subscriptions", "home", "receipts", "bank", "needs_review"]),
+  category: z.enum(INBOX_CATEGORY_IDS),
+  subcategory: z.enum(INBOX_SUBCATEGORY_IDS),
   amount: z.string().nullable(),
   amountInr: z.string().nullable(),
   amountUsd: z.string().nullable(),
@@ -53,6 +75,7 @@ const extractionSchema = z.object({
 
 type InboxExtraction = {
   category: z.infer<typeof extractionSchema>["category"];
+  subcategory: z.infer<typeof extractionSchema>["subcategory"];
   amount: string | null;
   amountInr: string | null;
   amountUsd: string | null;
@@ -70,9 +93,10 @@ type InboxExtraction = {
 const extractionJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["category", "amount", "amountInr", "amountUsd", "dueAt", "merchant", "period", "direction", "notes", "actions"],
+  required: ["category", "subcategory", "amount", "amountInr", "amountUsd", "dueAt", "merchant", "period", "direction", "notes", "actions"],
   properties: {
-    category: { type: "string", enum: ["bills", "school", "travel", "subscriptions", "home", "receipts", "bank", "needs_review"] },
+    category: { type: "string", enum: INBOX_CATEGORY_IDS },
+    subcategory: { type: "string", enum: INBOX_SUBCATEGORY_IDS },
     amount: { type: ["string", "null"] },
     amountInr: { type: ["string", "null"] },
     amountUsd: { type: ["string", "null"] },
@@ -295,6 +319,7 @@ export const extract = internalAction({
   args: { inboxItemId: v.id("inboxItems"), documentMarkdown: v.optional(v.string()) },
   returns: v.object({
     category,
+    subcategory,
     amount: v.union(v.string(), v.null()),
     amountInr: v.union(v.string(), v.null()),
     amountUsd: v.union(v.string(), v.null()),
@@ -329,6 +354,7 @@ export const extract = internalAction({
     if (!apiKey) {
       return {
         category: "needs_review" as const,
+        subcategory: "other" as const,
         amount: null,
         amountInr: null,
         amountUsd: null,
@@ -358,7 +384,7 @@ export const extract = internalAction({
         email: item.originalText.slice(0, 16_000),
         document: (args.documentMarkdown ?? "").slice(0, 12_000),
       },
-      instructions: "Classify this household email. Subscriptions, tax invoices, and software receipts are purchases. Extract the exact paid amount in INR and USD when stated (amountInr, amountUsd), plus merchant and billing period. direction is incoming unless the family clearly sent money. Suggest confirmable household actions such as unsubscribe, pay_bill, or review_statement. Never invent URLs. dueAt must be a Unix timestamp in milliseconds or null.",
+      instructions: "Classify this family email into a broad category and the most specific allowed subcategory. Extract exact amounts in INR and USD when stated (amountInr, amountUsd), due date, merchant or institution, billing or service period, direction, and up to four confirmable next steps. Use school/field_trip or school/school_fee for school trip notices as appropriate; security/otp, security/login_code, security/sign_in_alert, or security/password_reset for authentication mail; travel for bookings and itinerary changes; appointments for medical, service, government, and reservation reminders; and bank for transaction, statement, card, demat, investment, and loan notices. Never copy an OTP, login code, password-reset token, account number, or other credential into notes or actions. direction is incoming unless the family clearly sent money. Never invent URLs. dueAt must be a Unix timestamp in milliseconds or null.",
       schema: extractionJsonSchema,
     });
     const parsed = extractionSchema.parse(result.output);
@@ -382,6 +408,7 @@ export const applyExtraction = internalMutation({
   args: {
     inboxItemId: v.id("inboxItems"),
     category,
+    subcategory,
     amount: v.union(v.string(), v.null()),
     amountInr: v.union(v.string(), v.null()),
     amountUsd: v.union(v.string(), v.null()),
@@ -427,6 +454,7 @@ export const applyExtraction = internalMutation({
     }
     await ctx.db.patch(item._id, {
       category: args.category,
+      subcategory: args.subcategory,
       extractedAmount: args.amount ?? args.amountInr ?? args.amountUsd ?? undefined,
       extractedAmountInr: args.amountInr ?? undefined,
       extractedAmountUsd: args.amountUsd ?? undefined,

@@ -5,6 +5,7 @@ import { components, internal } from "./_generated/api";
 import { env, internalMutation } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { buildOtpEmail } from "./lib/otpEmail";
 
 const otpLimits = new RateLimiter(components.rateLimiter, {
   emailOtpV2: { kind: "fixed window", rate: 10, period: HOUR },
@@ -26,6 +27,7 @@ const sendVerificationRequest = (async (
   if (!apiKey || !inboxId) {
     throw new ConvexError({ kind: "OtpConfigurationMissing" });
   }
+  const email = buildOtpEmail(token, expires);
 
   const response = await fetch(
     `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`,
@@ -37,8 +39,7 @@ const sendVerificationRequest = (async (
       },
       body: JSON.stringify({
         to: normalizedEmail,
-        subject: "Your Saathi sign-in code",
-        text: `Your Saathi sign-in code is ${token}. It expires at ${expires.toISOString()}. If you did not request it, ignore this email.`,
+        ...email,
         labels: ["saathi-auth-otp"],
       }),
     },

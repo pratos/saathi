@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { ThinkingState } from '@aicss/react/thinking-state'
 import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
@@ -42,6 +42,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Unlink,
   Upload,
   UserRound,
   UserPlus,
@@ -62,7 +63,10 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Textarea } from './components/ui/textarea'
 import { AdminDashboard } from './AdminDashboard'
 import { VoiceBlob } from './VoiceBlob'
+import { prepareAssistantMarkdown } from './assistantMarkdown'
+import { isNearLatestMessage } from './chatScroll'
 import { emailBodyHtml } from './emailFormatting'
+import { inboxExtractionRecovery } from './inboxRecovery'
 import { useLiveVoice, type VoiceStatus, type VoiceToolActivity, type VoiceTurn } from './useLiveVoice'
 import './LiveTools.css'
 import './Access.css'
@@ -356,6 +360,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const [selectedRoomId, setSelectedRoomId] = useState<Id<'rooms'> | null>(null)
   const [gmailBusy, setGmailBusy] = useState(false)
   const [gmailMessage, setGmailMessage] = useState('')
+  const [gmailRemovalId, setGmailRemovalId] = useState<string | null>(null)
   const [pane, setPane] = useState<'chats' | 'updates' | 'files' | 'family'>('chats')
   const [mobileNav, setMobileNav] = useState<'home' | 'detail'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('hub')
@@ -363,6 +368,11 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const [profileOpen, setProfileOpen] = useState(false)
   const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
   const [jevOpen, setJevOpen] = useState(false)
+  const profileTriggerRef = useRef<HTMLButtonElement>(null)
+  const mobileProfileTriggerRef = useRef<HTMLButtonElement>(null)
+  const profileReturnFocusRef = useRef<HTMLButtonElement | null>(null)
+  const sessionMenuRef = useRef<HTMLDivElement>(null)
+  const mobileProfileDialogRef = useRef<HTMLElement>(null)
   const createSpace = useMutation(api.spaces.create)
   const ownedFamilyCount = families.filter(row => row.membership.role === 'owner').length
   const spaceFiles = useQuery(api.attachments.forSpace, { spaceId: family.space._id, limit: 40 })
@@ -418,6 +428,50 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [membersOpen])
 
+  useEffect(() => {
+    if (!profileOpen) return
+    const focusMenu = window.requestAnimationFrame(() => {
+      const surface = window.matchMedia('(max-width: 820px)').matches ? mobileProfileDialogRef.current : sessionMenuRef.current
+      surface?.querySelector<HTMLButtonElement>('button')?.focus()
+    })
+    const closeMenu = (restoreFocus: boolean) => {
+      setProfileOpen(false)
+      if (restoreFocus) window.requestAnimationFrame(() => profileReturnFocusRef.current?.focus())
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      closeMenu(true)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (sessionMenuRef.current?.contains(target)
+        || mobileProfileDialogRef.current?.contains(target)
+        || profileTriggerRef.current?.contains(target)
+        || mobileProfileTriggerRef.current?.contains(target)) return
+      closeMenu(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      window.cancelAnimationFrame(focusMenu)
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [profileOpen])
+
+  const toggleProfileMenu = (trigger: HTMLButtonElement) => {
+    profileReturnFocusRef.current = trigger
+    setProfileOpen(open => !open)
+  }
+
+  const openProfileSettings = (section: SettingsSection) => {
+    setProfileOpen(false)
+    setSettingsSection(section)
+    setPane('family')
+    setMobileNav('detail')
+  }
+
   const openHome = () => {
     setPane('chats')
     setMobileNav('home')
@@ -467,10 +521,11 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         {isSuperadmin && <button className={`rail-action ${jevOpen ? 'active' : ''}`} onClick={() => setJevOpen(true)}><Sparkles /><span>Jev Debug</span></button>}
         {isSuperadmin && <button className="rail-action" onClick={openAdminDashboard}><ShieldCheck /><span>Access</span></button>}
         <div className="rail-session">
-          <button className="rail-profile" onClick={() => setProfileOpen(open => !open)} aria-expanded={profileOpen} aria-label="Account menu">{initials}</button>
-          {profileOpen && <div className="session-menu" role="menu">
+          <button ref={profileTriggerRef} className="rail-profile" onClick={(event) => toggleProfileMenu(event.currentTarget)} aria-expanded={profileOpen} aria-haspopup="menu" aria-controls="desktop-account-menu" aria-label="Account menu">{initials}</button>
+          {profileOpen && <div ref={sessionMenuRef} id="desktop-account-menu" className="session-menu" role="menu" aria-label="Account menu">
             <p>{user?.email ?? user?.displayName ?? 'Signed in'}</p>
-            <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /> Settings</button>
+            <button type="button" role="menuitem" onClick={() => openProfileSettings('you')}><UserRound /> Account &amp; profile</button>
+            <button type="button" role="menuitem" onClick={() => openProfileSettings('hub')}><Settings2 /> Settings</button>
             <button type="button" role="menuitem" onClick={() => void signOut()}><LogOut /> Sign out</button>
           </div>}
         </div>
@@ -479,7 +534,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       <aside className="conversation-list live-conversation-list">
         <div className="mobile-home-header">
           <div><span>YOUR FAMILY</span><h1>{family.space.name}</h1><p>Chats, inbox, and shared files</p></div>
-          <m.button type="button" layoutId="mobile-companion-avatar" onClick={() => setProfileOpen(true)} aria-label="Open family and account hub">{initials}</m.button>
+          <m.button ref={mobileProfileTriggerRef} type="button" layoutId="mobile-companion-avatar" onClick={(event) => toggleProfileMenu(event.currentTarget)} aria-expanded={profileOpen} aria-haspopup="dialog" aria-label="Open family and account hub">{initials}</m.button>
         </div>
         <span className="family-select-label" id="family-switcher-label">Current family</span>
         <div className="family-switcher" role="group" aria-labelledby="family-switcher-label">
@@ -556,9 +611,32 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
           </>}
 
           {settingsSection === 'apps' && <section className="gmail-connections settings-detail-section"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi in families you allow. Other members cannot see your connected accounts.</p>
-            {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><button type="button" className="gmail-disable" onClick={() => { setGmailBusy(true); void disableGmailHere({ spaceId: family.space._id, connectedAccountId: connection.connectedAccountId }).then(() => setGmailMessage('Removed from this family. Mail stays in other families you enabled.')).catch(() => setGmailMessage('Could not update Gmail for this family.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}>Remove here</button></div>)}
-            {(reusableGmail ?? []).map(account => <button type="button" className="connect-gmail" key={account.connectedAccountId} disabled={gmailBusy} onClick={() => { setGmailBusy(true); void enableGmailHere({ spaceId: family.space._id, connectedAccountId: account.connectedAccountId }).then(() => setGmailMessage(`Added ${account.email ?? account.alias} to this family.`)).catch(() => setGmailMessage('Could not add that Gmail to this family.')).finally(() => setGmailBusy(false)) }}><Plus /> Use {account.email ?? account.alias} here</button>)}
-            <div className="settings-inline-actions"><button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>{(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary" onClick={() => { setGmailBusy(true); setGmailMessage('Checking connected Gmail…'); void checkGmailNow({ spaceId: family.space._id }).then(count => setGmailMessage(count ? 'Checking inboxes now. New bills and receipts appear in My Saathi first.' : 'No Gmail accounts are connected yet.')).catch(() => setGmailMessage('Could not check Gmail right now.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}><RefreshCw /> Check mail</button>}</div>
+            {(gmailConnections ?? []).map(connection => {
+              const accountLabel = connection.email ?? connection.alias
+              const confirmingRemoval = gmailRemovalId === connection._id
+              const removeFromFamily = () => {
+                setGmailBusy(true)
+                void disableGmailHere({ spaceId: family.space._id, connectedAccountId: connection.connectedAccountId })
+                  .then(() => setGmailMessage('Removed from this family. Mail stays in other families you enabled.'))
+                  .catch(() => setGmailMessage('Could not update Gmail for this family.'))
+                  .finally(() => { setGmailBusy(false); setGmailRemovalId(null) })
+              }
+              return <div className="gmail-account" key={connection._id}>
+                <Mail className="gmail-account-icon" />
+                <div className="gmail-account-copy"><strong>{accountLabel}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></div>
+                {confirmingRemoval
+                  ? <div className="gmail-remove-confirm" role="group" aria-label={`Confirm removing ${accountLabel} from ${family.space.name}`}>
+                      <p>Stop adding mail from this Gmail to {family.space.name}? It stays connected to your other families.</p>
+                      <div className="gmail-remove-confirm-actions">
+                        <Button type="button" variant="destructive" size="lg" className="min-h-11 h-auto max-w-full whitespace-normal" onClick={removeFromFamily} disabled={gmailBusy}><Unlink /> Remove from {family.space.name}</Button>
+                        <Button type="button" variant="secondary" size="lg" className="min-h-11 h-auto" onClick={() => setGmailRemovalId(null)} disabled={gmailBusy}>Cancel</Button>
+                      </div>
+                    </div>
+                  : <Button type="button" variant="destructiveQuiet" size="lg" className="gmail-remove-action min-h-11 h-auto" onClick={() => setGmailRemovalId(connection._id)} disabled={gmailBusy}><Unlink /> Remove</Button>}
+              </div>
+            })}
+            {(reusableGmail ?? []).map(account => <Button type="button" size="lg" className="gmail-reuse-action min-h-11 h-auto max-w-full whitespace-normal" key={account.connectedAccountId} disabled={gmailBusy} onClick={() => { setGmailBusy(true); void enableGmailHere({ spaceId: family.space._id, connectedAccountId: account.connectedAccountId }).then(() => setGmailMessage(`Added ${account.email ?? account.alias} to this family.`)).catch(() => setGmailMessage('Could not add that Gmail to this family.')).finally(() => setGmailBusy(false)) }}><Plus /> Add {account.email ?? account.alias} to this family</Button>)}
+            <div className="settings-inline-actions"><Button type="button" size="lg" className="gmail-connect-action min-h-11 h-auto whitespace-normal" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</Button>{(gmailConnections?.length ?? 0) > 0 && <Button type="button" variant="secondary" size="lg" className="gmail-check-action min-h-11 h-auto whitespace-normal" onClick={() => { setGmailBusy(true); setGmailMessage('Checking connected Gmail…'); void checkGmailNow({ spaceId: family.space._id }).then(count => setGmailMessage(count ? 'Checking inboxes now. New bills and receipts appear in My Saathi first.' : 'No Gmail accounts are connected yet.')).catch(() => setGmailMessage('Could not check Gmail right now.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}><RefreshCw /> Check for new mail</Button>}</div>
             {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
           </section>}
 
@@ -586,8 +664,8 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       </nav>
       <AnimatePresence>
         {profileOpen && <m.div className="mobile-companion-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setProfileOpen(false)}>
-          <m.section className="mobile-companion-hub" role="dialog" aria-modal="true" aria-labelledby="companion-hub-title" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: .98 }} transition={{ type: 'spring', stiffness: 410, damping: 34 }} onClick={event => event.stopPropagation()}>
-            <header><m.span layoutId="mobile-companion-avatar">{initials}</m.span><div><small>Current family</small><h2 id="companion-hub-title">{family.space.name}</h2><p>{user?.displayName ?? (user?.email ? <>{user.email.split('@')[0]}@<wbr />{user.email.split('@').slice(1).join('@')}</> : 'Family member')}</p></div><button type="button" onClick={() => setProfileOpen(false)} aria-label="Close account menu"><X /></button></header>
+          <m.section ref={mobileProfileDialogRef} className="mobile-companion-hub" role="dialog" aria-modal="true" aria-labelledby="companion-hub-title" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: .98 }} transition={{ type: 'spring', stiffness: 410, damping: 34 }} onClick={event => event.stopPropagation()}>
+            <header><m.span layoutId="mobile-companion-avatar">{initials}</m.span><div><small>Current family</small><h2 id="companion-hub-title">{family.space.name}</h2><p>{user?.displayName ?? (user?.email ? <>{user.email.split('@')[0]}@<wbr />{user.email.split('@').slice(1).join('@')}</> : 'Family member')}</p></div><button type="button" onClick={() => { setProfileOpen(false); window.requestAnimationFrame(() => mobileProfileTriggerRef.current?.focus()) }} aria-label="Close account menu"><X /></button></header>
             <section className="companion-hub-overview" aria-label="Family activity"><button type="button" onClick={() => { setProfileOpen(false); openPane('updates') }}><Bell /><span><strong>Family inbox</strong><small>{inboxItems?.length ?? 0} recent items</small></span><ArrowRight /></button><button type="button" onClick={() => { setProfileOpen(false); openHome() }}><MessageSquareText /><span><strong>Conversations</strong><small>{rooms?.filter(row => row.room).length ?? 0} available chats</small></span><ArrowRight /></button></section>
             <div className="companion-hub-actions"><button type="button" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /><span><strong>Settings</strong><small>Family and account</small></span></button><button type="button" onClick={() => { setProfileOpen(false); setMembersOpen(true) }}><UserPlus /><span><strong>Invite someone</strong><small>Add a family member</small></span></button></div>
             <div className="companion-hub-status"><i /><span><strong>Saathi is ready</strong><small>Translation and family memory are available</small></span></div>
@@ -763,6 +841,12 @@ const jevRouteLabels: Record<string, string> = {
   bills: 'Keep as a bill',
   receipts: 'Keep as a receipt',
   bank: 'Keep as a bank notice',
+  security: 'Security code or alert',
+  school: 'Keep as a school notice',
+  travel: 'Keep as a travel update',
+  appointments: 'Keep as an appointment',
+  subscriptions: 'Keep as a subscription',
+  home: 'Keep as a household notice',
   ignore: 'Ignore this email',
 }
 
@@ -854,7 +938,9 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
   const receiptInputRef = useRef<HTMLInputElement>(null)
   const captureRef = useRef<'library' | 'camera' | 'receipt'>('library')
   const dragDepthRef = useRef(0)
-  const feedEndRef = useRef<HTMLDivElement>(null)
+  const feedRef = useRef<HTMLDivElement>(null)
+  const initialFeedPositionedRef = useRef(false)
+  const followLatestRef = useRef(true)
   const activeJob = saathi?.jobs.find((job) => job.status === 'running') ?? saathi?.jobs.find((job) => job.status === 'queued')
   const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
   const attachmentMessageIds = useMemo(() => new Set((attachments ?? []).map((item) => item.messageId)), [attachments])
@@ -870,6 +956,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
     ...(generatedImages ?? []).map((item) => ({ kind: 'image' as const, createdAt: item.createdAt, item })),
     ...(attachments ?? []).map((item) => ({ kind: 'attachment' as const, createdAt: item.createdAt, item })),
   ].sort((left, right) => left.createdAt - right.createdAt), [messages, generatedImages, attachments, attachmentMessageIds])
+  const feedReady = messages !== undefined && generatedImages !== undefined && attachments !== undefined
 
   const useUiAction = (action: ConversationUiAction) => {
     if (action.kind === 'open_settings') return onNavigate('family')
@@ -890,9 +977,17 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
     }
   }
 
-  useEffect(() => {
-    feedEndRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages?.length, generatedImages?.length, attachments?.length, activeJob?.responseText, activeJob?.status, activeJob?.computerInteractiveLiveViewUrl, activeJob?.computerLiveViewUrl])
+  useLayoutEffect(() => {
+    const feed = feedRef.current
+    if (!feed || !feedReady) return
+    if (!initialFeedPositionedRef.current) {
+      feed.scrollTop = feed.scrollHeight
+      initialFeedPositionedRef.current = true
+      followLatestRef.current = true
+      return
+    }
+    if (followLatestRef.current) feed.scrollTop = feed.scrollHeight
+  }, [feedReady, messages?.length, generatedImages?.length, attachments?.length, activeJob?.responseText, activeJob?.status, activeJob?.computerInteractiveLiveViewUrl, activeJob?.computerLiveViewUrl])
 
 
   const submit = async (event: FormEvent) => {
@@ -1051,9 +1146,9 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{room.type === 'private' ? 'Only you and Saathi can see this conversation' : `${family.space.name} · private family conversation`}</p></div>
-        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite member</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Saathi can help in this conversation"><Sparkles /></span></div></div>
+        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite member</span></button>}<FamilyMemberCluster spaceId={family.space._id} /></div>
       </header>
-      <div className="conversation-feed live-feed">
+      <div className="conversation-feed live-feed" ref={feedRef} onScroll={(event) => { followLatestRef.current = isNearLatestMessage(event.currentTarget) }}>
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
         {messages && generatedImages && attachments && timeline.length === 0 && !imageOpen && <div className="dark-empty-state compact conversation-starter"><MessageSquareText /><h2>{room.type === 'private' ? 'What can Saathi help with?' : 'Start with what your family needs'}</h2><p>{room.type === 'private' ? 'Talk or type naturally. Your settings, images, research, and plans all happen in this conversation.' : 'Write to your family or ask Saathi in the same conversation.'}</p><div className="starter-prompts">
           {(room.type === 'private'
@@ -1064,7 +1159,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
         {timeline.map((entry) => entry.kind === 'image'
           ? entry.item.url && <article className="person-message assistant-message generated-image-message" key={`image-${entry.item._id}`}>
               <span className="message-avatar assistant"><Bot /></span>
-              <div><h3>Saathi <small>· {imageKindLabel(entry.item.kind)}</small></h3><figure className="generated-image-card"><button type="button" className="generated-image-open" onClick={() => setExpandedImage({ url: entry.item.url!, prompt: entry.item.prompt })} aria-label={`View generated image full size: ${entry.item.prompt}`}><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => feedEndRef.current?.scrollIntoView({ block: 'end' })} /><span>View full size</span></button><figcaption>{entry.item.prompt}</figcaption></figure></div>
+              <div><h3>Saathi <small>· {imageKindLabel(entry.item.kind)}</small></h3><figure className="generated-image-card"><button type="button" className="generated-image-open" onClick={() => setExpandedImage({ url: entry.item.url!, prompt: entry.item.prompt })} aria-label={`View generated image full size: ${entry.item.prompt}`}><img src={entry.item.url} alt={entry.item.prompt} onLoad={() => { const feed = feedRef.current; if (feed && followLatestRef.current) feed.scrollTop = feed.scrollHeight }} /><span>View full size</span></button><figcaption>{entry.item.prompt}</figcaption></figure></div>
             </article>
           : entry.kind === 'attachment'
             ? <article className="outgoing-message attachment-message" key={`attachment-${entry.item._id}`}>
@@ -1124,7 +1219,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
             <div><h3>Saathi <small>· couldn’t respond</small></h3><div className="assistant-card"><p>Could not finish the reply. Try again.</p><button type="button" className="icon-action" onClick={() => void retryFailedResponse()} disabled={retrying} aria-label={retrying ? 'Retrying response' : 'Try response again'} title={retrying ? 'Retrying…' : 'Try again'}><RefreshCcw /></button></div></div>
           </article>
         )}
-        <div ref={feedEndRef} />
+        <div />
       </div>
       <footer className="conversation-composer">
         {uploads.length > 0 && <div className="upload-queue" aria-live="polite">{uploads.map((upload) => <div className={upload.status} key={upload.id}>{upload.status === 'uploading' ? <span className="upload-spinner" /> : <FileText />}<span><strong>{upload.name}</strong><small>{upload.status === 'uploading' ? 'Uploading…' : upload.message}</small></span>{upload.status === 'error' && <button type="button" onClick={() => setUploads((current) => current.filter((item) => item.id !== upload.id))} aria-label={`Dismiss ${upload.name}`}><X /></button>}</div>)}</div>}
@@ -1258,7 +1353,7 @@ function AgentStreamingResponse({ status, activity, responseText }: {
       </div>
       <p>Saathi’s private reasoning is not shown. You can see its actions and sources.</p>
     </details>
-    {responseText && <div className="streaming-markdown"><AssistantText text={responseText} /><i className="response-stream-cursor" aria-hidden="true" /></div>}
+    {responseText && <div className="streaming-markdown"><AssistantText text={responseText} streaming /><i className="response-stream-cursor" aria-hidden="true" /></div>}
   </div>
 }
 
@@ -1384,9 +1479,7 @@ function VoiceActivityPanel({ activities, computerTool }: {
             <iframe title="Saathi voice live browser" src={liveViewUrl} allow="clipboard-write" referrerPolicy="no-referrer" />
           </div>}
           {!compact && activity.imageUrl && <figure className="voice-generated-image"><img src={activity.imageUrl} alt={activity.detail} /><figcaption>Created and saved in this conversation</figcaption></figure>}
-          {!compact && activity.result && activity.name === 'search_public_web'
-            ? <div className="voice-activity-result"><AssistantText text={activity.result} /></div>
-            : !compact && activity.result && <p className="voice-activity-result">{activity.result}</p>}
+          {!compact && activity.result && <div className="voice-activity-result"><AssistantText text={activity.result} /></div>}
         </article>
       })}
     </div>
@@ -1415,12 +1508,12 @@ function isVoiceCallOpen(status: VoiceStatus) {
   return status === 'requesting' || status === 'connecting' || status === 'live' || status === 'muted' || status === 'ending'
 }
 
-function AssistantText({ text }: { text: string }) {
+function AssistantText({ text, streaming = false }: { text: string; streaming?: boolean }) {
   return <div className="assistant-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
     a: ({ href, children }) => href?.startsWith('https://')
       ? <a href={href} target="_blank" rel="noreferrer">{children}</a>
       : <span>{children}</span>,
-  }}>{text}</ReactMarkdown></div>
+  }}>{prepareAssistantMarkdown(text, streaming)}</ReactMarkdown></div>
 }
 
 function MentionText({ text, mentions }: { text: string; mentions?: Doc<'messages'>['mentions'] }) {
@@ -1471,8 +1564,8 @@ function ShareFamilyMailButtons({ item, family, families, onShareHere, onShareTh
 }) {
   const others = families.filter(row => row.space._id !== family.space._id && !item.forwardedSpaceIds?.includes(row.space._id))
   return <div className="share-family-mail-row">
-    {!item.sharedAt && <button type="button" className="share-family-mail" onClick={() => onShareHere(item._id)}>Share with {family.space.name}</button>}
-    {others.map(row => <button type="button" className="share-family-mail" key={row.space._id} onClick={() => onShareThere(item._id, row.space._id)}>Also share with {row.space.name}</button>)}
+    {!item.sharedAt && <Button type="button" size="lg" className="share-family-mail min-h-11 h-auto max-w-full whitespace-normal" onClick={() => onShareHere(item._id)}><UsersRound /> Share with {family.space.name}</Button>}
+    {others.map(row => <Button type="button" size="lg" className="share-family-mail min-h-11 h-auto max-w-full whitespace-normal" key={row.space._id} onClick={() => onShareThere(item._id, row.space._id)}><UsersRound /> Share with {row.space.name}</Button>)}
   </div>
 }
 
@@ -1668,6 +1761,72 @@ function ByokKeys({ spaceId }: { spaceId: Id<'spaces'> }) {
   </div>
 }
 
+type FamilyMember = FunctionReturnType<typeof api.spaces.members>[number]
+
+function FamilyMemberCluster({ spaceId }: { spaceId: Id<'spaces'> }) {
+  const members = useQuery(api.spaces.members, { spaceId })
+  const [selectedMemberId, setSelectedMemberId] = useState<Id<'users'> | null>(null)
+  const clusterRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const selectedMember = members?.find(member => member.userId === selectedMemberId) ?? null
+  const visibleMembers = members?.slice(0, 3) ?? []
+  const hiddenCount = Math.max(0, (members?.length ?? 0) - visibleMembers.length)
+
+  const closeProfile = () => {
+    setSelectedMemberId(null)
+    requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  useEffect(() => {
+    if (!selectedMember) return
+    closeButtonRef.current?.focus()
+    const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeProfile()
+      }
+    }
+    const dismissOutside = (event: PointerEvent) => {
+      if (!clusterRef.current?.contains(event.target as Node)) closeProfile()
+    }
+    window.addEventListener('keydown', dismissOnEscape)
+    window.addEventListener('pointerdown', dismissOutside)
+    return () => {
+      window.removeEventListener('keydown', dismissOnEscape)
+      window.removeEventListener('pointerdown', dismissOutside)
+    }
+  }, [selectedMember])
+
+  const openProfile = (member: FamilyMember, trigger: HTMLButtonElement) => {
+    triggerRef.current = trigger
+    setSelectedMemberId(member.userId)
+  }
+
+  return <div className="participant-stack family-member-cluster" ref={clusterRef} aria-label={members === undefined ? 'Loading family members' : `${members.length} family ${members.length === 1 ? 'member' : 'members'}`}>
+    {members === undefined && <span className="family-member-loading" aria-hidden="true" />}
+    {visibleMembers.map(member => <button
+      type="button"
+      className={member.image ? 'family-member-avatar has-image' : 'family-member-avatar'}
+      key={member.userId}
+      onClick={event => openProfile(member, event.currentTarget)}
+      aria-haspopup="dialog"
+      aria-expanded={selectedMember?.userId === member.userId}
+      aria-label={`Open profile for ${member.name}`}
+    >
+      {member.image && <img src={member.image} alt="" referrerPolicy="no-referrer" onError={event => event.currentTarget.parentElement?.classList.remove('has-image')} />}
+      <span className="family-member-fallback">{initialsFor(member.name)}</span>
+    </button>)}
+    {hiddenCount > 0 && <span className="family-member-overflow" aria-label={`${hiddenCount} more family ${hiddenCount === 1 ? 'member' : 'members'}`}>+{hiddenCount}</span>}
+    <span className="saathi-participant" role="img" aria-label="Saathi, your family assistant"><Sparkles /></span>
+    {selectedMember && <section className="family-member-profile" role="dialog" aria-labelledby="family-member-profile-name">
+      <button type="button" className="family-member-profile-close" onClick={closeProfile} aria-label={`Close ${selectedMember.name}'s profile`} ref={closeButtonRef}><X /></button>
+      <span className="family-member-profile-avatar" aria-hidden="true">{selectedMember.image && <img src={selectedMember.image} alt="" referrerPolicy="no-referrer" onError={event => event.currentTarget.remove()} />}{initialsFor(selectedMember.name)}</span>
+      <div><p>{selectedMember.isCurrentUser ? 'You' : 'Family member'}</p><h3 id="family-member-profile-name">{selectedMember.name}</h3><span>{selectedMember.role === 'owner' ? 'Family owner' : 'Family member'}{selectedMember.isCurrentUser ? ' · This is you' : ''}</span></div>
+    </section>}
+  </div>
+}
+
 function InviteMember({ spaceId }: { spaceId: Id<'spaces'> }) {
   const invitations = useQuery(api.invitations.list, { spaceId })
   const createInvitation = useAction(api.invitations.createAndSend)
@@ -1734,20 +1893,23 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
     <div className="conversation-feed live-feed inbox-feed">
       {items === undefined && <div className="dark-loading"><i /><i /><i /></div>}
       {items?.length === 0 && <div className="dark-empty-state compact"><Bell /><h2>No shared family mail yet</h2><p>Money mail stays in My Saathi until someone shares it here.</p></div>}
-      {items?.map(item => <article className="person-message inbox-card" key={item._id}>
+      {items?.map(item => {
+        const recovery = inboxExtractionRecovery(item)
+        return <article className="person-message inbox-card" key={item._id}>
         <span className="message-avatar email"><Mail /></span>
         <div>
-          <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>{categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
+          <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>{categoryLabel(item.category)}{item.subcategory ? ` · ${subcategoryLabel(item.subcategory)}` : ''} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
           <div className="simple-message inbox-message-card">
             <p className="inbox-sender">{displaySender(item.sender)}</p>
+            {item.subcategory && <p>Type: {subcategoryLabel(item.subcategory)}</p>}
             {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
             {item.extractedAmountInr && <p>INR: {item.extractedAmountInr}</p>}
             {item.extractedAmountUsd && <p>USD: {item.extractedAmountUsd}</p>}
             {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
             {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
             {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
-            {item.status === 'processing' && <p className="inbox-status">Finding amount and type…</p>}
-            {item.status === 'failed' && <p className="inbox-status">Could not find the amount and type.</p>}
+            {item.status === 'processing' && recovery && <p className="inbox-status">{recovery.pending}</p>}
+            {item.status === 'failed' && recovery && <p className="inbox-status">{recovery.failed}</p>}
             {item.documentParseStatus === 'parsed' && <p>Attached PDF read successfully.</p>}
             {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
@@ -1756,7 +1918,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
               <button type="button" className="secondary icon-action" onClick={() => setOpenItem(item)} aria-label={`Open email: ${item.subject}`} title="Open email"><MailOpen /></button>
               {canReadGmailPdf(item) && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attached PDF</button>}
               {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <button type="button" className="secondary icon-action" onClick={() => void reprocess({ inboxItemId: item._id })} aria-label="Try reading attached PDF again" title="Try reading PDF again"><RefreshCcw /></button>}
-              {item.status === 'failed' && item.documentParseStatus !== 'failed' && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}><Sparkles /> Extract amount &amp; type</button>}
+              {item.status === 'failed' && item.documentParseStatus !== 'failed' && recovery && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}><Sparkles /> {recovery.action}</button>}
             </div>
             {item.actionStatus === 'suggested' && <div className="inbox-actions">
               <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Approve suggested next step</button>
@@ -1766,7 +1928,8 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {item.actionStatus === 'confirmed' && <small>Suggested next step approved. Nothing was sent or changed.</small>}
           </div>
         </div>
-      </article>)}
+        </article>
+      })}
     </div>
     {openItem && <EmailDetailDialog item={openItem} onClose={() => setOpenItem(null)} />}
   </section>
@@ -1797,7 +1960,7 @@ function EmailDetailDialog({ item, onClose }: { item: Doc<'inboxItems'>; onClose
   return <div className="email-detail-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="email-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="email-detail-title" onMouseDown={event => event.stopPropagation()}>
       <header>
-        <div><span>{displaySender(item.sender)}</span><h2 id="email-detail-title">{item.subject}</h2><small>{categoryLabel(item.category)} · {formatRelativeTime(item.receivedAt)}</small></div>
+        <div><span>{displaySender(item.sender)}</span><h2 id="email-detail-title">{item.subject}</h2><small>{categoryLabel(item.category)}{item.subcategory ? ` · ${subcategoryLabel(item.subcategory)}` : ''} · {formatRelativeTime(item.receivedAt)}</small></div>
         <button type="button" onClick={onClose} aria-label="Close email" autoFocus><X /></button>
       </header>
       <div className="email-detail-controls">
@@ -1900,7 +2063,14 @@ function categoryLabel(category: Doc<'inboxItems'>['category']) {
   if (category === 'needs_review') return 'Needs review'
   if (category === 'bank') return 'Bank'
   if (category === 'receipts') return 'Purchase'
+  if (category === 'appointments') return 'Appointments'
+  if (category === 'security') return 'Security'
   return category.charAt(0).toUpperCase() + category.slice(1)
+}
+
+function subcategoryLabel(subcategory: NonNullable<Doc<'inboxItems'>['subcategory']>) {
+  if (subcategory === 'otp') return 'OTP or verification code'
+  return subcategory.split('_').map(word => word === 'demat' ? 'Demat' : word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
 function gmailSpaceFromUrl() {

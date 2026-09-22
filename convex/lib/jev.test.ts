@@ -21,7 +21,10 @@ describe("Jev decision policy", () => {
     const base = {
       category: "ignore" as const,
       confidence: 0.65,
-      probabilities: { bills: 0.05, receipts: 0.05, bank: 0.05, ignore: 0.85 },
+      probabilities: {
+        bills: 0.05, school: 0, travel: 0, appointments: 0, subscriptions: 0,
+        home: 0, receipts: 0.05, bank: 0.05, security: 0, ignore: 0.85,
+      },
       tracksHouseholdMoney: 0.45,
       containsOtpOrLoginCode: 0.1,
       ...metadata,
@@ -29,6 +32,8 @@ describe("Jev decision policy", () => {
     expect(shouldIgnoreEmail(base)).toBe(true);
     expect(shouldIgnoreEmail({ ...base, tracksHouseholdMoney: 0.46 })).toBe(false);
     expect(shouldIgnoreEmail({ ...base, confidence: 0.64, containsOtpOrLoginCode: 0.95 })).toBe(false);
+    expect(shouldIgnoreEmail({ ...base, category: "security", confidence: 0.9, containsOtpOrLoginCode: 0.95 })).toBe(true);
+    expect(shouldIgnoreEmail({ ...base, category: "school", confidence: 0.9, tracksHouseholdMoney: 0.05 })).toBe(false);
   });
 });
 

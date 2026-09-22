@@ -48,6 +48,43 @@ describe("family inbox configuration", () => {
   });
 });
 
+describe("family member summaries", () => {
+  test("returns only active members of the authorized family without private account fields", async () => {
+    const t = convexTest(schema, modules);
+    const { firstSpaceId, secondSpaceId, ownerId, memberId } = await seedFamilies(t);
+    const owner = t.withIdentity({ subject: String(ownerId) });
+    const member = t.withIdentity({ subject: String(memberId) });
+
+    await t.run(async ctx => {
+      await ctx.db.patch(ownerId, { displayName: "Asha Kapoor", image: "https://images.example.test/asha.jpg" });
+      await ctx.db.patch(memberId, { displayName: "Dev Kapoor" });
+      const revokedMemberId = await ctx.db.insert("users", { displayName: "Former member", email: "former@example.test" });
+      const otherFamilyMemberId = await ctx.db.insert("users", { displayName: "Other family member", email: "other@example.test" });
+      const additionalMemberIds = await Promise.all([
+        ctx.db.insert("users", { displayName: "Meera Kapoor", email: "meera@example.test" }),
+        ctx.db.insert("users", { displayName: "Kabir Kapoor", email: "kabir@example.test" }),
+        ctx.db.insert("users", { email: "unnamed@example.test" }),
+      ]);
+      await ctx.db.insert("memberships", { spaceId: firstSpaceId, userId: revokedMemberId, role: "member", status: "revoked", joinedAt: Date.now() });
+      await ctx.db.insert("memberships", { spaceId: secondSpaceId, userId: otherFamilyMemberId, role: "member", status: "active", joinedAt: Date.now() });
+      await Promise.all(additionalMemberIds.map(userId => ctx.db.insert("memberships", {
+        spaceId: firstSpaceId, userId, role: "member", status: "active", joinedAt: Date.now(),
+      })));
+    });
+
+    const members = await owner.query(api.spaces.members, { spaceId: firstSpaceId });
+
+    expect(members).toHaveLength(5);
+    expect(members).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "Asha Kapoor", image: "https://images.example.test/asha.jpg", role: "owner", isCurrentUser: true }),
+      expect.objectContaining({ name: "Dev Kapoor", image: null, role: "member", isCurrentUser: false }),
+      expect.objectContaining({ name: "Family member", image: null, role: "member", isCurrentUser: false }),
+    ]));
+    expect(members[0]).not.toHaveProperty("email");
+    await expect(member.query(api.spaces.members, { spaceId: secondSpaceId })).rejects.toThrow(/permission/i);
+  });
+});
+
 async function seedFamilies(t: TestConvex<typeof schema>) {
   return t.run(async (ctx) => {
     const now = Date.now();

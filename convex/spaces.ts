@@ -47,6 +47,37 @@ export const mine = query({
   },
 });
 
+const MAX_FAMILY_MEMBER_SUMMARIES = 100;
+
+export const members = query({
+  args: { spaceId: v.id("spaces") },
+  returns: v.array(v.object({
+    userId: v.id("users"),
+    name: v.string(),
+    image: v.union(v.string(), v.null()),
+    role: v.union(v.literal("owner"), v.literal("member")),
+    isCurrentUser: v.boolean(),
+  })),
+  handler: async (ctx, { spaceId }) => {
+    const { userId } = await requireSpacePermission(ctx, spaceId, "read");
+    const memberships = await ctx.db.query("memberships")
+      .withIndex("by_space_status", q => q.eq("spaceId", spaceId).eq("status", "active"))
+      .take(MAX_FAMILY_MEMBER_SUMMARIES);
+
+    return Promise.all(memberships.map(async membership => {
+      const member = await ctx.db.get(membership.userId);
+      const name = member?.displayName?.trim() || member?.name?.trim() || "Family member";
+      return {
+        userId: membership.userId,
+        name,
+        image: member?.image ?? null,
+        role: membership.role,
+        isCurrentUser: membership.userId === userId,
+      };
+    }));
+  },
+});
+
 export const prepareInboxCreation = internalQuery({
   args: { spaceId: v.id("spaces") },
   returns: v.object({ name: v.string(), existingInboxId: v.union(v.string(), v.null()) }),

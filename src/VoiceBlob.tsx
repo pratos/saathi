@@ -35,32 +35,31 @@ void main() {
 
   float body = smoothstep(0.96, 1.34, f);
   float halo = max(smoothstep(0.38, 1.08, f) - body, 0.0);
-  float rim = smoothstep(1.02, 1.22, f) * (1.0 - smoothstep(1.28, 1.62, f));
-  float highlight = exp(-length(uv - vec2(-0.10, 0.18)) * 6.8) * body;
-  float caustic = 0.5 + 0.5 * sin((uv.x * 9.0 + uv.y * 7.0) + t * 1.3);
-  caustic *= 0.5 + 0.5 * sin((uv.y * 11.0 - uv.x * 5.0) - t * 0.9);
+  float rim = smoothstep(0.98, 1.18, f) * (1.0 - smoothstep(1.34, 1.72, f));
+  float depth = smoothstep(1.08, 3.4, f);
+  float highlight = exp(-length(uv - vec2(-0.13, 0.17)) * 7.6) * body;
+  float drift = 0.5 + 0.5 * sin(uv.x * 3.2 - uv.y * 2.7 + t * 0.34);
 
-  vec3 deep = vec3(0.02, 0.02, 0.025);
-  vec3 graphite = vec3(0.16, 0.17, 0.19);
-  vec3 silver = vec3(0.70, 0.73, 0.78);
-  vec3 violet = vec3(0.48, 0.43, 0.68);
-  vec3 mist = vec3(0.97, 0.97, 0.95);
+  vec3 navy = vec3(0.018, 0.026, 0.095);
+  vec3 indigo = vec3(0.075, 0.075, 0.24);
+  vec3 cyan = vec3(0.16, 0.70, 0.78);
+  vec3 violet = vec3(0.43, 0.28, 0.78);
+  vec3 rose = vec3(0.76, 0.30, 0.52);
 
-  float angle = atan(uv.y, uv.x);
-  vec3 iridescence = mix(graphite, silver, 0.48 + 0.42 * sin(angle * 1.8 + t * 0.45));
-  iridescence = mix(iridescence, violet, 0.18 + 0.16 * sin(angle * 1.15 - t * 0.32));
-
-  vec3 color = mix(deep, iridescence, body);
-  color = mix(color, mist, rim * 0.62);
-  color += mist * highlight * 0.62;
-  color += silver * halo * (0.18 + 0.16 * energy);
-  color += violet * body * caustic * 0.07 * energy;
+  vec3 color = mix(navy, indigo, depth * 0.72 + drift * 0.08 * energy);
+  float cyanEdge = rim * smoothstep(-0.36, 0.32, uv.y - uv.x);
+  float roseEdge = rim * smoothstep(-0.08, 0.42, -uv.y - uv.x * 0.35);
+  color = mix(color, violet, rim * 0.48);
+  color += cyan * cyanEdge * (0.32 + 0.14 * energy);
+  color += rose * roseEdge * (0.18 + 0.10 * energy);
+  color += vec3(0.48, 0.66, 0.92) * highlight * 0.20;
+  color += mix(violet, cyan, 0.45) * halo * (0.12 + 0.12 * energy);
 
   if (u_muted > 0.5) {
-    color = mix(color, vec3(0.80, 0.62, 0.54), 0.26);
+    color = mix(color, vec3(0.18, 0.16, 0.29), 0.34);
   }
 
-  float alpha = clamp(body * 0.98 + halo * 0.48 + rim * 0.22, 0.0, 1.0);
+  float alpha = clamp(body * 0.98 + halo * 0.34 + rim * 0.14, 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
 }`
 

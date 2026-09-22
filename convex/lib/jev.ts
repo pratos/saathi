@@ -25,7 +25,13 @@ const EMAIL_CATEGORIES = {
   bills: "A household bill, invoice, tax invoice, subscription charge, or payment due.",
   receipts: "A completed household purchase, order receipt, food delivery, or paid subscription receipt.",
   bank: "A bank, credit-card, demat, investment, or account notice that is not an OTP or login code.",
-  ignore: "Marketing, newsletter, social notification, school, travel, appointment, promotion, spam, OTP, or login code.",
+  security: "An OTP, verification or login code, password reset, sign-in alert, or account-security notice.",
+  school: "A school fee, field trip, timetable, report card, event, permission form, or transport notice.",
+  travel: "A flight, train, bus, hotel, visa, itinerary, booking, or travel-change notice.",
+  appointments: "A medical, service, government, interview, reservation, or other scheduled appointment notice.",
+  subscriptions: "A subscription renewal, price change, trial ending, cancellation, or service notice that is not a receipt.",
+  home: "A delivery, maintenance, community, utility-service, or other household operations notice.",
+  ignore: "Marketing, newsletter, social notification, promotion, spam, or other email with no useful family operation.",
 } as const;
 
 const TURN_ROUTE_IDS = Object.keys(TURN_ROUTES) as Array<keyof typeof TURN_ROUTES>;

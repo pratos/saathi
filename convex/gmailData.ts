@@ -2,11 +2,13 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireInboxItemPermission, requireRoomPermission, requireSpacePermission } from "./lib/authz";
+import type { GmailUsefulCategory } from "./lib/emailTaxonomy";
 import { parseGmailSourceKey } from "./lib/gmailAttachments";
 import { ensurePersonalRoomForUser } from "./rooms";
 
 const category = v.union(
-  v.literal("bills"), v.literal("receipts"), v.literal("bank"),
+  v.literal("bills"), v.literal("school"), v.literal("travel"), v.literal("appointments"),
+  v.literal("subscriptions"), v.literal("home"), v.literal("receipts"), v.literal("bank"),
 );
 
 export const mine = query({
@@ -349,6 +351,7 @@ export const shareWithSpace = mutation({
       detectedLanguage: item.detectedLanguage,
       visibility: "space",
       category: item.category,
+      subcategory: item.subcategory,
       status: item.status === "failed" ? "received" : item.status,
       extractedAmount: item.extractedAmount,
       extractedDueAt: item.extractedDueAt,
@@ -397,9 +400,18 @@ function uniqueSpaceIds(ids: Array<import("./_generated/dataModel").Id<"spaces">
   return [...new Set(ids)];
 }
 
-function moneyReviewText(args: { sender: string; subject: string; summary: string; category: "bills" | "receipts" | "bank"; amount?: string; merchant?: string }) {
-  const kind = args.category === "bills" ? "Bill" : args.category === "bank" ? "Bank notice" : "Purchase";
+function moneyReviewText(args: { sender: string; subject: string; summary: string; category: GmailUsefulCategory; amount?: string; merchant?: string }) {
+  const kind: Record<GmailUsefulCategory, string> = {
+    bills: "Bill",
+    school: "School notice",
+    travel: "Travel update",
+    appointments: "Appointment",
+    subscriptions: "Subscription",
+    home: "Household notice",
+    receipts: "Purchase",
+    bank: "Bank notice",
+  };
   const amount = args.amount ? `\nAmount: ${args.amount}` : "";
   const merchant = args.merchant ? `\nMerchant: ${args.merchant}` : "";
-  return `${kind} from ${args.sender}\n\n${args.subject}${amount}${merchant}\n\n${args.summary}\n\nShare this with the family inbox if the household should track it.`;
+  return `${kind[args.category]} from ${args.sender}\n\n${args.subject}${amount}${merchant}\n\n${args.summary}\n\nShare this with the family inbox if the household should track it.`;
 }

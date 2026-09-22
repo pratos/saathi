@@ -33,10 +33,18 @@ describe("shared inbox sidecar classification", () => {
     const importantDespiteLabel = emailDecision({
       category: "ignore", confidence: 0.8, tracksHouseholdMoney: 0.46, containsOtpOrLoginCode: 0.1,
     });
+    const securityCode = emailDecision({
+      category: "security", confidence: 0.9, tracksHouseholdMoney: 0.1, containsOtpOrLoginCode: 0.92,
+    });
+    const schoolNotice = emailDecision({
+      category: "school", confidence: 0.9, tracksHouseholdMoney: 0.05, containsOtpOrLoginCode: 0.01,
+    });
 
     expect(inboxDisposition(confidentIgnore)).toBe("retained_advisory_ignore");
     expect(inboxDisposition(uncertainIgnore)).toBe("retained_uncertain");
     expect(inboxDisposition(importantDespiteLabel)).toBe("retained_household_candidate");
+    expect(inboxDisposition(securityCode)).toBe("retained_advisory_ignore");
+    expect(inboxDisposition(schoolNotice)).toBe("retained_household_candidate");
     await expect(classifyInboxEmail(credential, { sender: "x", subject: "y", text: "z" }, async () => {
       throw new Error("provider response containing sensitive input");
     })).resolves.toMatchObject({
@@ -57,7 +65,10 @@ function emailDecision(overrides: Partial<JevEmailDecision>): JevEmailDecision {
   return {
     category: "receipts",
     confidence: 0.8,
-    probabilities: { bills: 0.05, receipts: 0.8, bank: 0.05, ignore: 0.1 },
+    probabilities: {
+      bills: 0.05, school: 0, travel: 0, appointments: 0, subscriptions: 0,
+      home: 0, receipts: 0.8, bank: 0.05, security: 0, ignore: 0.1,
+    },
     tracksHouseholdMoney: 0.8,
     containsOtpOrLoginCode: 0.05,
     ...metadata,

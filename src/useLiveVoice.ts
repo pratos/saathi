@@ -282,7 +282,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
       setError(name === 'NotAllowedError'
         ? 'Microphone access was blocked. Allow it in your browser and try again.'
         : code === 'LIVE_VOICE_NOT_CONFIGURED'
-          ? 'Voice mode needs an OpenAI API key on this Convex deployment.'
+          ? 'Voice calls are not set up yet. Contact the Saathi administrator.'
           : code === 'RATE_LIMITED'
             ? 'You have started several voice conversations. Please wait before trying again.'
             : 'Voice mode could not start. Please try again.')

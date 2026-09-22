@@ -36,7 +36,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
       setConfirmingBlockId(null)
       setMessage(`Access marked ${status}.`)
     } catch {
-      setMessage('Access could not be updated.')
+      setMessage('Could not update access. Try again.')
     } finally {
       setBusyUserId(null)
     }
@@ -54,7 +54,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     </header>
     <section className="usage-admin" aria-labelledby="usage-heading">
       <div className="usage-admin-heading">
-        <div><span><Activity /> Usage & cost</span><h2 id="usage-heading">Tracked AI cost</h2><p>Estimated provider cost from metered Saathi activity. GPT-Live session time and delegated Luna work are itemized separately.</p></div>
+        <div><span><Activity /> Usage & cost</span><h2 id="usage-heading">Tracked AI cost</h2><p>Estimated provider costs for recorded Saathi activity. GPT-Live session time and delegated Luna work are listed separately.</p></div>
         <Button variant="outline" type="button" onClick={() => setReportNow(Date.now())}><RefreshCw /> Refresh</Button>
       </div>
       {usage === undefined
@@ -112,7 +112,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
           {!user.isSuperadmin && user.status !== 'blocked' && (confirmingBlockId === user._id
             ? <><Button variant="destructive" className="danger" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'blocked')}><Ban /> Confirm block</Button><Button variant="outline" disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(null)}>Cancel</Button></>
             : <Button variant="destructive" className="danger" disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(user._id)}><Ban /> Block</Button>)}
-          {!user.isSuperadmin && user.status !== 'pending' && <Button variant="outline" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'pending')}><Check /> Reset</Button>}
+          {!user.isSuperadmin && user.status !== 'pending' && <Button variant="outline" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'pending')}><Check /> Mark as pending</Button>}
         </div>
       </article>)}
     </section>

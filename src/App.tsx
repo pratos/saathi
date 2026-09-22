@@ -106,7 +106,7 @@ function ModeChooser({
               <ExperienceCard
                 icon={<LockKeyhole size={22} />}
                 title="Open my family workspace"
-                description="Sign in with a secure code sent to your email. Your authorized family information appears here."
+                description="Sign in with a code sent to your email. Open the family spaces you have access to."
                 detail={!backendAvailable ? 'The live workspace is still being set up on this site.' : 'Private data · secure sign-in'}
                 tone="live"
                 disabled={!backendAvailable}
@@ -116,7 +116,7 @@ function ModeChooser({
               <ExperienceCard
                 icon={<Eye size={22} />}
                 title="Explore a guided preview"
-                description="Complete a seeded family workflow. No sign-in, email, or personal information required."
+                description="Try sample family tasks. No sign-in or personal information needed."
                 detail="Sample data · nothing is sent"
                 tone="preview"
                 onClick={() => onChoose('preview')}
@@ -175,7 +175,7 @@ function useDesktopShader() {
 function LiveExperience({ onExit, pwaInstall }: { onExit: () => void; pwaInstall: PwaInstallController }) {
   const { isLoading, isAuthenticated } = useConvexAuth()
 
-  if (isLoading) return <FullPageStatus message="Opening Saathi securely…" />
+  if (isLoading) return <FullPageStatus message="Opening Saathi…" />
   if (!isAuthenticated) return <EmailOtpSignIn onBack={onExit} />
   return <>
     <Suspense fallback={<FullPageStatus message="Opening your family space…" />}><LiveWorkspace onExit={onExit} /></Suspense>
@@ -286,7 +286,7 @@ function BackendUnavailable({ onBack }: { onBack: () => void }) {
   return (
     <main className="centered-status">
       <LockKeyhole size={34} />
-      <h1>Saathi needs a quick setup</h1>
+      <h1>This family space isn’t ready yet</h1>
       <p>This family workspace is not connected yet. Ask the person who set up Saathi to finish the connection, then reload this page.</p>
       <details className="status-details">
         <summary>Setup details</summary>
@@ -310,10 +310,10 @@ function otpRequestErrorMessage(error: unknown) {
   }
   const kind = (data as { kind?: unknown }).kind
   if (kind === 'OtpRateLimited') return 'Too many code requests. Please wait before trying again.'
-  if (kind === 'OtpConfigurationMissing') return 'Email sign-in is not configured yet.'
+  if (kind === 'OtpConfigurationMissing') return 'Email sign-in is not ready. Contact the Saathi administrator.'
   if (kind === 'OtpDeliveryRejected') {
     const status = (data as { status?: unknown }).status
-    return `AgentMail rejected the sign-in email${typeof status === 'number' ? ` (status ${status})` : ''}.`
+    return `Could not send your code${typeof status === 'number' ? ` (status ${status})` : ''}. Try again. If this continues, contact the Saathi administrator.`
   }
   return 'We could not send a code. Please try again in a moment.'
 }

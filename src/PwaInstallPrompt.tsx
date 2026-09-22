@@ -6,7 +6,7 @@ import './PwaInstallPrompt.css'
 export function PwaInstallCard({ controller }: { controller: PwaInstallController }) {
   if (!controller.mode) return null
   const copy = controller.mode === 'native'
-    ? 'Open it like an app, with a home-screen icon and a focused window.'
+    ? 'Add Saathi to your home screen and open it in its own window.'
     : 'On iPhone or iPad, tap Share, then choose Add to Home Screen.'
   const content = <>
     <span className="pwa-install-icon"><Download size={28} /></span>
@@ -25,11 +25,11 @@ export function PwaInstallReminder({ controller }: { controller: PwaInstallContr
     <div>
       <strong>Keep Saathi one tap away</strong>
       <small>{controller.mode === 'native'
-        ? 'Install the app for a focused window and home-screen icon.'
+        ? 'Add Saathi to your home screen and open it in its own window.'
         : 'Tap Share, then Add to Home Screen.'}</small>
       <span className="pwa-install-reminder-actions">
         {controller.mode === 'native' && <Button onClick={() => void controller.install()}>Install Saathi</Button>}
-        <Button variant="ghost" onClick={controller.dismiss}>Remind me later</Button>
+        <Button variant="ghost" onClick={controller.dismiss}>Not now</Button>
       </span>
     </div>
     <Button variant="ghost" size="icon" className="pwa-install-reminder-close" onClick={controller.dismiss} aria-label="Dismiss install reminder"><X size={18} /></Button>

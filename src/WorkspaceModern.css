@@ -2039,3 +2039,86 @@
   border-radius: 14px;
 }
 .live-conversation-workspace .icon-action svg { width: 19px; height: 19px; }
+
+.mobile-family-overview { display: none; }
+.family-switch-progress {
+  position: fixed;
+  z-index: 400;
+  top: max(18px, env(safe-area-inset-top));
+  left: 50%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border: 1px solid rgba(255,255,255,.86);
+  border-radius: 999px;
+  color: #332d3d;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 16px 44px rgba(59,47,88,.18);
+  backdrop-filter: blur(20px) saturate(135%);
+  transform: translateX(-50%);
+}
+.family-switch-progress strong { max-width: min(70vw, 420px); font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.family-switch-progress .upload-spinner { border-color: rgba(105,86,165,.2); border-top-color: #6956a5; }
+.family-switch-progress.error { color: #672c3f; background: rgba(255,244,247,.96); }
+.family-switch-progress.error button { width: 36px; min-width: 36px; min-height: 36px; display: grid; place-items: center; padding: 0; border-radius: 50%; color: inherit; background: #f6dfe7; }
+.family-switch-progress.error button svg { width: 17px; height: 17px; }
+
+@media (max-width: 820px) {
+  .live-conversation-workspace .mobile-home-header { align-items: flex-start; }
+  .live-conversation-workspace .mobile-home-header > div { min-width: 0; }
+  .live-conversation-workspace .mobile-home-header h1 { max-width: calc(100vw - 104px); overflow-wrap: anywhere; }
+  .live-conversation-workspace .mobile-home-header p { margin: 5px 0 0; color: #686372; font-size: 12px; line-height: 1.4; }
+  .live-conversation-workspace .family-switcher { flex-wrap: wrap; overflow-x: visible; }
+  .live-conversation-workspace .family-switcher button { max-width: calc(100vw - 32px); height: auto; padding-block: 10px; }
+  .live-conversation-workspace .family-switcher button > span { position: relative; z-index: 1; min-width: 0; white-space: normal; line-height: 1.3; overflow-wrap: anywhere; }
+  .live-conversation-workspace .mobile-family-overview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 24px;
+  }
+  .live-conversation-workspace .mobile-family-overview button {
+    position: relative;
+    min-width: 0;
+    min-height: 108px !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: space-between;
+    gap: 10px;
+    padding: 15px;
+    border: 1px solid rgba(255,255,255,.88);
+    border-radius: 20px;
+    color: #302a39;
+    background: rgba(255,255,255,.72);
+    box-shadow: 0 10px 28px rgba(71,62,96,.08);
+    text-align: left;
+    backdrop-filter: blur(18px) saturate(125%);
+  }
+  .live-conversation-workspace .mobile-family-overview button:first-child {
+    grid-column: 1 / -1;
+    min-height: 92px !important;
+    background: linear-gradient(135deg, rgba(255,255,255,.9), rgba(225,218,255,.78) 58%, rgba(217,237,255,.74));
+  }
+  .live-conversation-workspace .mobile-family-overview button:active { transform: scale(.98); }
+  .live-conversation-workspace .mobile-family-overview button:disabled { opacity: .58; }
+  .live-conversation-workspace .mobile-family-overview button > span { min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .live-conversation-workspace .mobile-family-overview button > span svg { width: 20px; color: #6754a5; }
+  .live-conversation-workspace .mobile-family-overview button strong { font-size: 15px; font-weight: 800; }
+  .live-conversation-workspace .mobile-family-overview button small { grid-column: 1 / -1; color: #514b5a; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+  .live-conversation-workspace .mobile-family-overview button > svg { width: 18px; color: #766594; }
+  .live-conversation-workspace .family-activity-heading,
+  .live-conversation-workspace .family-activity-link { display: none; }
+  .live-conversation-workspace .dark-sign-out { margin-top: 24px; }
+  .family-switch-progress {
+    top: auto;
+    right: 16px;
+    bottom: calc(94px + env(safe-area-inset-bottom));
+    left: 16px;
+    width: auto;
+    justify-content: center;
+    transform: none;
+  }
+  .family-switch-progress strong { max-width: calc(100vw - 90px); }
+}

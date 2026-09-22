@@ -199,3 +199,51 @@
 @media (max-width: 600px) {
   .email-detail-dialog { height: calc(100dvh - 10px); border-radius: 5px 5px 0 0; }
 }
+
+/* Luminous drawers, generated media, and source dialogs. */
+.jev-lab-backdrop { background: rgba(69,58,93,.32); backdrop-filter: blur(14px); }
+.jev-lab-drawer {
+  color: #1c1c24;
+  background:
+    radial-gradient(circle at 100% 0, rgba(205,231,255,.7), transparent 30%),
+    radial-gradient(circle at 0 20%, rgba(255,211,222,.56), transparent 32%),
+    #f8f7ff;
+  box-shadow: -20px 0 60px rgba(54,43,87,.18);
+}
+.jev-lab-drawer > header span { color: #6956a5; }
+.jev-lab-drawer > header h2 { color: #211d28; font-weight: 800; }
+.jev-lab-drawer > header p { color: #646574; }
+.jev-lab-drawer > header button {
+  min-height: 44px;
+  border-color: transparent;
+  border-radius: 14px;
+  color: #504959;
+  background: rgba(255,255,255,.76);
+}
+.jev-lab-drawer :is(.jev-lab-card, section) { border-radius: 16px; }
+.email-detail-backdrop { background: rgba(69,58,93,.36); backdrop-filter: blur(14px); }
+.email-detail-dialog {
+  border-color: transparent;
+  border-radius: 24px;
+  color: #2d2834;
+  background: #fffdfb;
+  box-shadow: 0 28px 84px rgba(54,43,87,.24);
+}
+.email-detail-dialog > header { border-color: rgba(91,78,129,.11); }
+.email-detail-dialog > header h2 { color: #24202b; font-weight: 800; }
+.email-detail-dialog > header span,
+.email-detail-dialog > header small { color: #646574; }
+.email-detail-dialog > header button,
+.email-detail-controls button {
+  min-height: 44px;
+  border-color: transparent;
+  border-radius: 14px;
+  color: #504959;
+  background: #f0ecfb;
+}
+.email-detail-controls { border-color: rgba(91,78,129,.1); color: #646574; background: #faf8ff; }
+.email-detail-frame { background: #fffdfb; }
+
+@media (max-width: 600px) {
+  .email-detail-dialog { border-radius: 24px 24px 0 0; }
+}

@@ -92,3 +92,123 @@
   .access-user-row { grid-template-columns: 1fr; }
   .access-user-actions { justify-content: flex-start; }
 }
+
+/* Luminous admin and access surfaces. */
+.access-onboarding { background: transparent; }
+.access-setup-card > p strong { color: #2e2935; }
+.onboarding-key-form label small { color: #6a6472; }
+.access-divider { color: #77717f; }
+.access-divider::before,
+.access-divider::after { background: rgba(91,78,129,.13); }
+.onboarding-models {
+  border: 0;
+  border-radius: 16px;
+  color: #2d2834;
+  background: rgba(241,237,250,.72);
+}
+.onboarding-models ul { color: #625c69; }
+
+.access-admin-page {
+  color: #1c1c24;
+  background:
+    radial-gradient(circle at 7% 4%, rgba(255,211,222,.62), transparent 28%),
+    radial-gradient(circle at 96% 12%, rgba(205,231,255,.74), transparent 31%),
+    linear-gradient(155deg, #fffdfb, #f8f7ff 55%, #f5faff);
+}
+.access-admin-header {
+  border: 0;
+  background: rgba(255,255,255,.62);
+  box-shadow: 0 10px 32px rgba(71,62,96,.07);
+  backdrop-filter: blur(20px) saturate(125%);
+}
+.access-admin-header > button,
+.usage-admin-heading > button {
+  min-height: 44px;
+  border-color: transparent;
+  border-radius: 14px;
+  color: #504959;
+  background: rgba(255,255,255,.7);
+}
+.access-admin-header > div > span,
+.usage-admin-heading > div > span { color: #6956a5; }
+.access-admin-header h1,
+.usage-admin-heading h2,
+.access-section-heading h2 { color: #211d28; font-weight: 800; }
+.access-admin-header p,
+.usage-admin-heading p,
+.access-section-heading p,
+.usage-panel-title p { color: #646574; }
+.usage-loading,
+.usage-summary-cards [data-slot="card"],
+.usage-panel,
+.access-stats button,
+.access-search,
+.access-user-row {
+  border-color: transparent;
+  border-radius: 18px;
+  background: rgba(255,255,255,.76);
+  box-shadow: 0 10px 30px rgba(71,62,96,.07);
+}
+.usage-summary-cards [data-slot="card"] > svg { color: #6f59bd; }
+.usage-summary-cards [data-slot="card"] > span,
+.usage-summary-cards [data-slot="card"] > small { color: #6d6775; }
+.usage-summary-cards [data-slot="card"] > strong,
+.access-stats strong,
+.usage-panel td strong { color: #2b2632; }
+.usage-panel th,
+.usage-panel td { border-color: rgba(91,78,129,.1); }
+.usage-panel th,
+.usage-panel td,
+.usage-panel td small { color: #625c69; }
+.convex-usage-note {
+  color: #342d45;
+  background: linear-gradient(135deg, rgba(232,225,255,.9), rgba(222,239,255,.86));
+}
+.convex-usage-note h3 { color: #33294e; }
+.convex-usage-note p { color: #5d5568; }
+.convex-usage-note a { color: #4f4081; border-color: rgba(91,78,129,.14); }
+.usage-caveat { color: #775333; }
+.access-stats button { min-height: 88px; color: #5c5663; }
+.access-stats button.selected {
+  border-color: transparent;
+  color: #40345f;
+  background: linear-gradient(135deg, #eee9ff, #e5f2ff);
+  box-shadow: 0 10px 28px rgba(72,59,106,.1);
+}
+.access-search { min-height: 50px; }
+.access-search svg { color: #6956a5; }
+.access-admin-toolbar > p { color: #554487; }
+.access-user-identity > span {
+  color: #493b72;
+  background: linear-gradient(135deg, #ffe1e6, #ddd5ff, #d9edff);
+}
+.access-user-identity a { color: #5d4a98; }
+.access-user-identity small { color: #6a6472; }
+.access-status { color: #775333; background: #faeee5; }
+.status-approved .access-status { color: #426957; background: #e7f3ed; }
+.status-blocked .access-status { color: #8a4253; background: #fbe6ea; }
+.access-user-actions button,
+.access-user-actions a {
+  min-height: 44px;
+  height: auto;
+  border-color: rgba(91,78,129,.13);
+  border-radius: 14px;
+  color: #4e465b;
+  background: rgba(250,248,255,.88);
+  line-height: 1.3;
+  white-space: normal;
+}
+.access-user-actions button:not(.danger) { border-color: transparent; color: #fff; background: #6f59bd; }
+.access-user-actions button.danger { color: #8a4253; background: #fff1f3; }
+
+@media (max-width: 760px) {
+  .access-admin-header { padding-top: max(20px, env(safe-area-inset-top)); border-radius: 0 0 22px 22px; }
+  .usage-summary-cards { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .usage-summary-cards [data-slot="card"] { min-height: 132px; }
+  .access-user-actions button,
+  .access-user-actions a { flex: 1 1 130px; justify-content: center; }
+}
+
+@media (max-width: 430px) {
+  .usage-summary-cards { grid-template-columns: 1fr; }
+}

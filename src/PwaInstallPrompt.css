@@ -48,3 +48,39 @@
   .pwa-install-icon { width: 48px; height: 48px; }
   .pwa-install-card > svg { display: none; }
 }
+
+/* Shared luminous install surfaces. */
+.pwa-install-card {
+  border: 0;
+  border-radius: 22px;
+  color: #292531;
+  background: rgba(255,255,255,.7);
+  box-shadow: 0 14px 38px rgba(72,59,106,.1);
+  backdrop-filter: blur(18px) saturate(125%);
+  transition: transform 160ms cubic-bezier(.23,1,.32,1), box-shadow 180ms ease;
+}
+.pwa-install-card-manual:hover { box-shadow: 0 14px 38px rgba(72,59,106,.1); }
+.pwa-install-icon {
+  border-radius: 16px;
+  color: #493b72;
+  background: linear-gradient(135deg, #ffe1e6, #ddd5ff, #d9edff);
+}
+.pwa-install-card strong { color: #292531; }
+.pwa-install-card small { color: #646574; }
+.pwa-install-card > svg { color: #6f59bd; }
+.pwa-install-reminder {
+  border: 0;
+  border-radius: 22px;
+  color: #292531;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 20px 56px rgba(64,51,98,.18);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+.pwa-install-reminder-icon { border-radius: 14px; color: #493b72; background: linear-gradient(135deg, #ffe1e6, #ddd5ff, #d9edff); }
+.pwa-install-reminder small { color: #646574; }
+.pwa-install-reminder-actions button { color: #51485e; border-radius: 14px; }
+.pwa-install-reminder-actions button:first-child { color: #fff; background: #6f59bd; }
+.pwa-install-reminder-actions button:first-child:hover { background: #624caf; }
+.pwa-install-reminder-actions button:last-child:hover,
+.pwa-install-reminder-close:hover { color: #332d40; background: #f0ecfb; }
+.pwa-install-reminder-close { color: #716b79; border-radius: 14px; }

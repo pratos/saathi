@@ -71,18 +71,17 @@ function ModeChooser({
 
   return (
     <LazyMotion features={domAnimation} strict>
-      <main className="relative min-h-dvh overflow-hidden bg-[#e8edef] text-[#11222d] lg:grid lg:grid-cols-[minmax(360px,34%)_minmax(0,1fr)]">
-        <section className="relative flex min-h-[320px] flex-col overflow-hidden bg-[#07151e] p-5 text-white lg:min-h-dvh lg:p-[clamp(28px,3.4vw,52px)]">
+      <main className="saathi-entry relative min-h-dvh overflow-hidden bg-[#e8edef] text-[#11222d] lg:grid lg:grid-cols-[minmax(360px,34%)_minmax(0,1fr)]">
+        <section className="entry-story relative flex min-h-[320px] flex-col overflow-hidden bg-[#07151e] p-5 text-white lg:min-h-dvh lg:p-[clamp(28px,3.4vw,52px)]">
           {showShader && <div className="pointer-events-none absolute inset-0 opacity-80"><Suspense fallback={null}><AgentSignalField /></Suspense></div>}
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:linear-gradient(to_bottom_right,#000,transparent_76%)]" />
+          <div className="entry-grid pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:linear-gradient(to_bottom_right,#000,transparent_76%)]" />
 
-          <m.div className="relative flex items-center gap-2.5 text-[17px] font-bold tracking-[-.02em]" initial={initial} animate={enter} transition={{ duration: .42 }}>
+          <m.div className="entry-brand relative flex items-center gap-2.5 text-[17px] font-bold tracking-[-.02em]" initial={initial} animate={enter} transition={{ duration: .42 }}>
             <span className="grid size-9 place-items-center rounded-[3px] bg-[#61d6bd] text-lg font-extrabold text-[#092c27]">स</span>
             Saathi
           </m.div>
 
-          <m.div className="relative mt-10 lg:my-auto lg:mt-0" initial={initial} animate={enter} transition={{ duration: .5, delay: .08 }}>
-            <Badge className="mb-3 rounded-[3px] border-[#36505e] bg-[#102631]/70 px-2 py-1 font-mono text-[9px] font-bold tracking-[.1em] text-[#78dec8]">SAATHI / FAMILY AGENT</Badge>
+          <m.div className="entry-copy relative mt-10 lg:my-auto lg:mt-0" initial={initial} animate={enter} transition={{ duration: .5, delay: .08 }}>
             <h1 className="max-w-[500px] text-[clamp(36px,3.6vw,52px)] leading-[1.01] font-[720] tracking-[-.055em] text-[#f7fafb]">Keep the whole family in the loop.</h1>
             <p className="mt-4 max-w-[470px] text-[15px] leading-[1.5] text-[#b5c1c8]">Bills, school notes, travel plans, and family conversations—understood in the language each person prefers.</p>
             <div className="mt-6 hidden grid-cols-3 gap-px overflow-hidden rounded-[3px] border border-[#2c3e49] bg-[#2c3e49] lg:grid">
@@ -96,9 +95,8 @@ function ModeChooser({
           <m.div className="relative mt-auto hidden gap-2 font-mono text-[10px] tracking-[.06em] text-[#718692] lg:flex" initial={initial} animate={enter} transition={{ duration: .45, delay: .18 }}><span>नमस्ते</span><span>·</span><span>Hello</span><span>·</span><span>नमस्कार</span></m.div>
         </section>
 
-        <section className="flex items-center p-3.5 py-7 sm:p-8 lg:p-[clamp(28px,4.5vw,72px)]" aria-labelledby="mode-title">
-          <m.div className="mx-auto grid w-full max-w-[820px] gap-2" initial={initial} animate={enter} transition={{ duration: .48, delay: .12 }}>
-            <span className="font-mono text-[10px] font-bold tracking-[.12em] text-[#397064]">WORKSPACE ACCESS</span>
+        <section className="entry-access flex items-center p-3.5 py-7 sm:p-8 lg:p-[clamp(28px,4.5vw,72px)]" aria-labelledby="mode-title">
+          <m.div className="entry-access-content mx-auto grid w-full max-w-[820px] gap-2" initial={initial} animate={enter} transition={{ duration: .48, delay: .12 }}>
             <h2 id="mode-title" className="text-[clamp(32px,3.2vw,44px)] leading-[1.05] font-[730] tracking-[-.045em]">Welcome to Saathi</h2>
             <p className="mb-3 max-w-[560px] text-sm leading-relaxed text-[#61707a]">Explore safely with sample information, or open your private family workspace.</p>
 
@@ -146,7 +144,7 @@ function ExperienceCard({ icon, title, description, detail, tone, disabled, onCl
 }) {
   const live = tone === 'live'
   return <m.div whileHover={reduceMotion || disabled ? undefined : { y: -3 }} whileTap={reduceMotion || disabled ? undefined : { scale: .99 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
-    <Card className={`h-full overflow-hidden rounded-[4px] border shadow-none ${live ? 'border-[#152630] bg-[#152630] text-white' : 'border-[#cbd4d9] bg-white text-[#14212b]'}`}>
+    <Card className={`experience-card ${live ? 'experience-card-live' : 'experience-card-preview'} h-full overflow-hidden rounded-[4px] border shadow-none ${live ? 'border-[#152630] bg-[#152630] text-white' : 'border-[#cbd4d9] bg-white text-[#14212b]'}`}>
       <Button type="button" variant="ghost" disabled={disabled} onClick={onClick} className="experience-card-button group grid h-full min-h-[142px] w-full grid-cols-[42px_minmax(0,1fr)_18px] content-start items-start gap-3 rounded-none p-4 text-left whitespace-normal hover:bg-transparent">
         <span className={`grid size-[42px] place-items-center rounded-[3px] ${live ? 'bg-[#61d6bd] text-[#092c27]' : 'bg-[#dcecff] text-[#224c79]'}`}>{icon}</span>
         <span className="grid gap-1.5 pt-0.5">

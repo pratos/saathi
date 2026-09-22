@@ -1526,3 +1526,159 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   .voice-call-status { font-size: 13px; }
   .voice-call-status-group > small { font-size: 12px; }
 }
+
+/* Luminous Family Room — shared entry, auth, setup, and status surfaces. */
+.saathi-entry {
+  color: #1c1c24 !important;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(255, 211, 222, .76), transparent 31%),
+    radial-gradient(circle at 92% 13%, rgba(205, 231, 255, .84), transparent 34%),
+    radial-gradient(circle at 58% 92%, rgba(220, 209, 255, .72), transparent 38%),
+    linear-gradient(155deg, #fffdfb, #f8f7ff 55%, #f5faff) !important;
+}
+.saathi-entry .entry-story {
+  color: #24202b !important;
+  background: rgba(255,255,255,.24) !important;
+  border-right: 1px solid rgba(255,255,255,.72);
+}
+.saathi-entry .entry-story > div:first-child { opacity: .42 !important; filter: saturate(.58) brightness(1.25); }
+.saathi-entry .entry-grid { opacity: 0 !important; }
+.saathi-entry .entry-brand { color: #2c2736; }
+.saathi-entry .entry-brand > span {
+  border-radius: 12px !important;
+  color: #493b72 !important;
+  background: linear-gradient(135deg, #ffe1e6, #ddd5ff 56%, #d9edff) !important;
+  box-shadow: 0 8px 22px rgba(88,70,135,.12);
+}
+.saathi-entry .entry-copy h1 {
+  max-width: 560px;
+  color: #1d1a23 !important;
+  font-weight: 800;
+  letter-spacing: -.04em;
+}
+.saathi-entry .entry-copy > p { color: #5d5968 !important; font-size: 16px; }
+.saathi-entry .entry-copy > div {
+  gap: 8px !important;
+  grid-template-columns: 1fr !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.saathi-entry .entry-copy > div > span {
+  min-height: 58px;
+  flex-direction: row !important;
+  align-items: center !important;
+  padding: 12px 14px !important;
+  border-radius: 16px;
+  color: #393443 !important;
+  font-size: 12px !important;
+  background: rgba(255,255,255,.62) !important;
+  box-shadow: 0 10px 30px rgba(71,62,96,.07);
+  backdrop-filter: blur(16px);
+}
+.saathi-entry .entry-copy > div > span svg { color: #6f59bd !important; }
+.saathi-entry .entry-story > div:last-child { color: #575260 !important; font-size: 11px !important; }
+.saathi-entry .entry-access { background: rgba(255,255,255,.18); }
+.saathi-entry .entry-access-content h2 { color: #1c1c24; font-weight: 800; letter-spacing: -.04em; }
+.saathi-entry .entry-access-content > p { color: #646574 !important; font-size: 15px; }
+.saathi-entry .experience-card {
+  overflow: hidden;
+  border-color: transparent !important;
+  border-radius: 22px !important;
+  color: #292531 !important;
+  background: rgba(255,255,255,.72) !important;
+  box-shadow: 0 16px 42px rgba(72,59,106,.1) !important;
+  backdrop-filter: blur(18px) saturate(125%);
+}
+.saathi-entry .experience-card-button { min-height: 168px; border-radius: 22px !important; }
+.saathi-entry .experience-card-button > span:first-child {
+  border-radius: 14px !important;
+  color: #4a3d73 !important;
+  background: linear-gradient(135deg, #ffe1e6, #ddd5ff 58%, #d9edff) !important;
+}
+.saathi-entry .experience-card-button strong { color: #292531 !important; font-size: 16px; }
+.saathi-entry .experience-card-button small { color: #56515f !important; font-size: 13px; }
+.saathi-entry .experience-card-button em { color: #59478f !important; font-family: var(--font-sans) !important; font-size: 11px; }
+.saathi-entry .experience-card-button > svg { color: #6f59bd !important; }
+.saathi-entry .entry-access-content > p:last-child { color: #646574 !important; }
+
+.live-auth-page,
+.onboarding-page,
+.centered-status {
+  color: #1c1c24;
+  background:
+    radial-gradient(circle at 9% 10%, rgba(255,211,222,.72), transparent 31%),
+    radial-gradient(circle at 92% 14%, rgba(205,231,255,.8), transparent 34%),
+    radial-gradient(circle at 52% 92%, rgba(220,209,255,.68), transparent 38%),
+    linear-gradient(155deg, #fffdfb, #f8f7ff 55%, #f5faff) !important;
+}
+.live-auth-card,
+.onboarding-card {
+  border-color: transparent;
+  border-radius: 26px;
+  color: #1c1c24;
+  background: rgba(255,255,255,.78);
+  box-shadow: 0 24px 64px rgba(72,59,106,.14);
+  backdrop-filter: blur(22px) saturate(130%);
+}
+.auth-brand.dark { color: #2b2633; }
+.auth-brand.dark .brand-mark {
+  border-radius: 12px;
+  color: #493b72;
+  background: linear-gradient(135deg, #ffe1e6, #ddd5ff, #d9edff);
+}
+.mode-badge.live { border-radius: 999px; color: #554487; background: #eee9ff; }
+.live-auth-card h1,
+.onboarding-card h1,
+.centered-status h1 { color: #1c1c24; font-weight: 800; letter-spacing: -.04em; }
+.live-auth-card > p,
+.onboarding-card > p,
+.centered-status > p { color: #646574; }
+.field-with-icon,
+.onboarding-card input {
+  border-color: rgba(91,78,129,.13);
+  border-radius: 16px;
+  color: #514a5d;
+  background: rgba(250,248,255,.86);
+}
+.field-with-icon:focus-within,
+.onboarding-card input:focus { border-color: #8c78d0; box-shadow: 0 0 0 3px rgba(111,89,189,.14); }
+.primary,
+.primary.large {
+  border-radius: 16px;
+  color: #fff;
+  background: linear-gradient(135deg, #6f59bd, #7c70c9);
+  box-shadow: 0 9px 22px rgba(88,70,164,.2);
+}
+.primary:hover { background: linear-gradient(135deg, #634caf, #7365c0); }
+.security-note {
+  border: 0;
+  border-radius: 16px;
+  color: #554e60;
+  background: rgba(232,225,255,.64);
+}
+.security-note strong { color: #4f4081; }
+.back-link { border-radius: 999px; color: #4e465b; background: rgba(255,255,255,.58); backdrop-filter: blur(14px); }
+.centered-status > svg { color: #6f59bd; }
+.centered-status .secondary.large,
+.status-details {
+  border-color: rgba(91,78,129,.14);
+  border-radius: 16px;
+  background: rgba(255,255,255,.72);
+}
+.status-details { max-width: 620px; padding: 12px 16px; color: #5f5869; }
+.status-details summary { color: #3d354d; font-weight: 750; cursor: pointer; }
+
+@media (hover: hover) and (pointer: fine) {
+  .saathi-entry .experience-card:hover { box-shadow: 0 20px 54px rgba(72,59,106,.15) !important; }
+}
+
+@media (max-width: 700px) {
+  .saathi-entry .entry-story { min-height: 300px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.76); }
+  .saathi-entry .entry-copy { margin-top: 38px; }
+  .saathi-entry .entry-copy h1 { font-size: clamp(36px, 10vw, 46px); }
+  .saathi-entry .entry-access { padding: 28px 14px 38px; }
+  .saathi-entry .experience-card-button { min-height: 126px; }
+  .live-auth-card, .onboarding-card { border-radius: 22px; }
+}

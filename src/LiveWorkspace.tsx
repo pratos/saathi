@@ -23,6 +23,7 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
+  MailOpen,
   MessageSquareText,
   Mic,
   MicOff,
@@ -30,6 +31,8 @@ import {
   Paperclip,
   PhoneOff,
   Plus,
+  RefreshCcw,
+  RefreshCw,
   Search,
   Send,
   Settings2,
@@ -508,14 +511,14 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
           {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><button type="button" className="gmail-disable" onClick={() => { setGmailBusy(true); void disableGmailHere({ spaceId: family.space._id, connectedAccountId: connection.connectedAccountId }).then(() => setGmailMessage('Removed from this family. Mail stays in other families you enabled.')).catch(() => setGmailMessage('Could not update Gmail for this family.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}>Remove here</button></div>)}
           {(reusableGmail ?? []).map(account => <button type="button" className="connect-gmail" key={account.connectedAccountId} disabled={gmailBusy} onClick={() => { setGmailBusy(true); void enableGmailHere({ spaceId: family.space._id, connectedAccountId: account.connectedAccountId }).then(() => setGmailMessage(`Added ${account.email ?? account.alias} to this family.`)).catch(() => setGmailMessage('Could not add that Gmail to this family.')).finally(() => setGmailBusy(false)) }}><Plus /> Use {account.email ?? account.alias} here</button>)}
           <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
-          {(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary" onClick={() => {
+          {(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary icon-action" onClick={() => {
             setGmailBusy(true)
             setGmailMessage('Checking connected Gmail…')
             void checkGmailNow({ spaceId: family.space._id })
               .then(count => setGmailMessage(count ? 'Checking inboxes now. New bills and receipts appear in My Saathi first.' : 'No Gmail accounts are connected yet.'))
               .catch(() => setGmailMessage('Could not check Gmail right now.'))
               .finally(() => setGmailBusy(false))
-          }} disabled={gmailBusy}>Check for new mail</button>}
+          }} disabled={gmailBusy} aria-label="Check for new mail" title="Check for new mail"><RefreshCw /></button>}
           {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
         </section>
         <details className="settings-disclosure">
@@ -980,7 +983,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{room.type === 'private' ? 'Only you and Saathi can see this conversation' : `${family.space.name} · private family conversation`}</p></div>
-        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite member</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Saathi can help in this conversation">S</span></div></div>
+        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite member</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Saathi can help in this conversation"><Sparkles /></span></div></div>
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
@@ -1013,7 +1016,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
             : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
-                <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? 'S' : <Mail />}</span>
+                <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? <Sparkles /> : <Mail />}</span>
                 <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{entry.item.actorType === 'assistant' && <ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} />}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
               </article>)}
         {voice.summarizing && (
@@ -1050,7 +1053,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
         {failedJob && failedJob.trigger !== 'ambient' && !activeJob && (
           <article className="person-message assistant-message saathi-failed" role="status">
             <span className="message-avatar assistant"><Bot /></span>
-            <div><h3>Saathi <small>· couldn’t respond</small></h3><div className="assistant-card"><p>Something interrupted that response.</p><button type="button" onClick={() => void retryFailedResponse()} disabled={retrying}>{retrying ? 'Retrying…' : 'Try again'}</button></div></div>
+            <div><h3>Saathi <small>· couldn’t respond</small></h3><div className="assistant-card"><p>Something interrupted that response.</p><button type="button" className="icon-action" onClick={() => void retryFailedResponse()} disabled={retrying} aria-label={retrying ? 'Retrying response' : 'Try response again'} title={retrying ? 'Retrying…' : 'Try again'}><RefreshCcw /></button></div></div>
           </article>
         )}
         <div ref={feedEndRef} />
@@ -1683,9 +1686,9 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
             {(item.suggestedActions ?? []).map(action => <p key={`${item._id}-${action.kind}`}>{action.label}{action.detail ? ` — ${action.detail}` : ''}</p>)}
             <div className="inbox-actions">
-              <button type="button" className="secondary" onClick={() => setOpenItem(item)}>Open email</button>
+              <button type="button" className="secondary icon-action" onClick={() => setOpenItem(item)} aria-label={`Open email: ${item.subject}`} title="Open email"><MailOpen /></button>
               {canReadGmailPdf(item) && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attached PDF</button>}
-              {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Try reading PDF again</button>}
+              {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <button type="button" className="secondary icon-action" onClick={() => void reprocess({ inboxItemId: item._id })} aria-label="Try reading attached PDF again" title="Try reading PDF again"><RefreshCcw /></button>}
               {item.status === 'failed' && item.documentParseStatus !== 'failed' && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Extract values with Flash</button>}
             </div>
             {item.actionStatus === 'suggested' && <div className="inbox-actions">
@@ -1790,7 +1793,7 @@ function FamilyFiles({ family, files, onBack, onOpenRoom }: {
         {file.mediaType.startsWith('image/') && file.url
           ? <a className="shared-image" href={file.url} target="_blank" rel="noreferrer"><img src={file.url} alt={file.fileName} /><small>{file.fileName} · {formatFileSize(file.sizeBytes)}</small></a>
           : <a className="shared-document" href={file.url ?? undefined} target="_blank" rel="noreferrer" aria-disabled={!file.url}><FileText /><span><strong>{file.fileName}</strong><small>{formatFileSize(file.sizeBytes)}</small></span></a>}
-        <button type="button" className="open-file-room" onClick={() => onOpenRoom(file.roomId)}>Open conversation</button>
+        <button type="button" className="open-file-room icon-action" onClick={() => onOpenRoom(file.roomId)} aria-label={`Open ${file.roomTitle} conversation`} title="Open conversation"><MessageSquareText /></button>
       </article>)}
     </div>
   </section>

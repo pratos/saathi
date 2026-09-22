@@ -2528,7 +2528,7 @@
 
 @media (max-width: 820px) {
   .live-conversation-workspace .conversation-composer {
-    background: #f8f7ff;
+    background: linear-gradient(180deg, transparent, #f8f7ff 28%);
   }
   .live-conversation-workspace .composer-guidance-actions > button,
   .live-conversation-workspace .composer-more > summary {
@@ -2563,6 +2563,8 @@
     background: transparent;
   }
   .live-conversation-workspace .conversation-composer form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
     border-radius: 20px;
   }
   .live-conversation-workspace .mobile-workspace-nav {
@@ -2573,18 +2575,291 @@
     font-size: 12px;
   }
   .live-conversation-workspace .mobile-workspace-nav button > i {
-    top: 2px;
-    left: calc(50% - 24px);
-    width: 48px;
-    height: 38px;
+    display: none;
   }
   .live-conversation-workspace .mobile-workspace-nav .mobile-nav-icon {
-    width: 34px;
-    height: 32px;
+    width: 48px;
+    height: 38px;
+    border-radius: 14px;
+    background: transparent;
   }
   .live-conversation-workspace .mobile-workspace-nav .mobile-nav-icon svg {
     width: 28px;
     height: 28px;
     stroke-width: 2;
   }
+  .live-conversation-workspace .mobile-workspace-nav button.active .mobile-nav-icon {
+    color: #55429e;
+    background: linear-gradient(135deg, #e7e0ff, #deefff);
+  }
+}
+
+/* The mobile account menu is a compact wayfinder, not a second home screen. */
+@media (max-width: 820px) {
+  .live-conversation-workspace .icon-action {
+    width: 48px;
+    min-width: 48px;
+    min-height: 48px !important;
+  }
+  .mobile-companion-backdrop {
+    align-items: end;
+    justify-items: center;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  }
+  .mobile-companion-hub {
+    width: min(100%, 480px);
+    min-height: 0;
+    max-height: calc(100dvh - max(24px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
+    overflow: auto;
+    border-radius: 24px;
+    background: #fffdfb;
+    box-shadow: 0 22px 60px rgba(54,43,87,.2), 0 4px 16px rgba(54,43,87,.08);
+    overscroll-behavior: contain;
+  }
+  .mobile-companion-hub > * { flex-shrink: 0; }
+  .mobile-companion-hub > header {
+    grid-template-columns: 52px minmax(0, 1fr) 48px;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid rgba(91,78,129,.1);
+    background: transparent;
+  }
+  .mobile-companion-hub > header > span {
+    width: 52px;
+    height: 52px;
+    border: 0;
+    color: #302a39;
+    background: #e8e3ff;
+    font-size: 15px;
+    box-shadow: none;
+  }
+  .mobile-companion-hub header small {
+    color: #6a6372;
+    font: 800 10px/1.2 var(--font-sans);
+    letter-spacing: .02em;
+    text-transform: none;
+  }
+  .mobile-companion-hub header h2 {
+    margin: 3px 0 1px;
+    color: #302a39;
+    font-size: 19px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .mobile-companion-hub header p {
+    color: #686170;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .mobile-companion-hub header button {
+    width: 48px;
+    min-height: 48px !important;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 15px;
+    color: #4f4858;
+    background: #f3f0f7;
+  }
+  .mobile-companion-hub header button svg { width: 22px; height: 22px; }
+  .mobile-companion-hub .companion-hub-overview {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 8px 16px 0;
+    border: 0;
+    background: transparent;
+  }
+  .mobile-companion-hub .companion-hub-overview > button {
+    min-height: 64px;
+    grid-template-columns: 40px minmax(0, 1fr) 20px;
+    gap: 11px;
+    padding: 9px 0;
+    border: 0;
+    border-bottom: 1px solid rgba(91,78,129,.1);
+    color: #302a39;
+    background: transparent;
+  }
+  .mobile-companion-hub .companion-hub-overview > button > svg:first-child {
+    width: 40px;
+    height: 40px;
+    padding: 9px;
+    border-radius: 13px;
+    color: #55429e;
+    background: #eeeaff;
+  }
+  .mobile-companion-hub .companion-hub-overview > button:nth-child(2) > svg:first-child {
+    color: #236650;
+    background: #e0f5ec;
+  }
+  .mobile-companion-hub .companion-hub-overview > button > svg:last-child {
+    width: 20px;
+    color: #847c8d;
+  }
+  .mobile-companion-hub .companion-hub-overview strong,
+  .mobile-companion-hub .companion-hub-overview small {
+    overflow-wrap: anywhere;
+  }
+  .mobile-companion-hub .companion-hub-overview strong {
+    color: #302a39;
+    font-size: 15px;
+  }
+  .mobile-companion-hub .companion-hub-overview small {
+    margin-top: 2px;
+    color: #686170;
+    font-size: 12px;
+  }
+  .mobile-companion-hub .companion-hub-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  .mobile-companion-hub .companion-hub-actions button {
+    min-width: 0;
+    min-height: 72px !important;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 9px;
+    place-items: center start;
+    padding: 11px;
+    border: 1px solid rgba(91,78,129,.11);
+    border-radius: 16px;
+    color: #40364d;
+    background: #f7f4fb;
+    text-align: left;
+  }
+  .mobile-companion-hub .companion-hub-actions button > svg {
+    width: 24px;
+    height: 24px;
+    color: #6754a5;
+  }
+  .mobile-companion-hub .companion-hub-actions button > span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .mobile-companion-hub .companion-hub-actions strong,
+  .mobile-companion-hub .companion-hub-actions small {
+    overflow-wrap: anywhere;
+  }
+  .mobile-companion-hub .companion-hub-actions strong {
+    color: #302a39;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  .mobile-companion-hub .companion-hub-actions small {
+    color: #706979;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+  .mobile-companion-hub .companion-hub-status {
+    grid-template-columns: 10px minmax(0, 1fr);
+    gap: 10px;
+    margin: 0 16px 12px;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 14px;
+    background: #eef8f3;
+  }
+  .mobile-companion-hub .companion-hub-status > i {
+    width: 9px;
+    height: 9px;
+    background: #3a8b6c;
+    box-shadow: 0 0 0 4px rgba(58,139,108,.1);
+  }
+  .mobile-companion-hub .companion-hub-status strong {
+    color: #294b40;
+    font-size: 13px;
+  }
+  .mobile-companion-hub .companion-hub-status small {
+    margin-top: 2px;
+    color: #587168;
+    font-size: 10px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .mobile-companion-hub .companion-hub-footer {
+    flex: 0 0 auto;
+    min-height: 64px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    place-content: stretch;
+    justify-items: stretch;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px 14px;
+    border-top: 1px solid rgba(91,78,129,.1);
+    color: #686170;
+    background: transparent;
+    text-align: left;
+  }
+  .mobile-companion-hub .companion-hub-footer > div {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+  }
+  .mobile-companion-hub .companion-hub-footer > div > svg {
+    width: 20px;
+    color: #6754a5;
+  }
+  .mobile-companion-hub .companion-hub-footer > div > span {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    display: grid;
+    place-items: initial;
+    gap: 1px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    color: inherit;
+    background: transparent;
+  }
+  .mobile-companion-hub .companion-hub-footer strong {
+    color: #4b4453;
+    font-size: 11px;
+  }
+  .mobile-companion-hub .companion-hub-footer small {
+    color: #716a79;
+    font-size: 9px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+  .mobile-companion-hub .companion-hub-footer > button {
+    min-height: 48px;
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 14px;
+    color: #8d3b48;
+    background: #fff0f2;
+    font-size: 12px;
+    font-weight: 750;
+  }
+  .mobile-companion-hub .companion-hub-footer > button > span {
+    width: auto;
+    height: auto;
+    display: inline;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    color: inherit;
+    background: transparent;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+  }
+  .mobile-companion-hub .companion-hub-footer > button svg { width: 18px; height: 18px; }
+}
+
+@media (max-width: 360px) {
+  .mobile-companion-hub .companion-hub-actions { grid-template-columns: 1fr; }
+  .mobile-companion-hub .companion-hub-actions button { min-height: 60px !important; }
+  .mobile-companion-hub .companion-hub-footer { grid-template-columns: 1fr; }
+  .mobile-companion-hub .companion-hub-footer > button { justify-content: center; }
 }

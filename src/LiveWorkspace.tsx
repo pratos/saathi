@@ -32,7 +32,6 @@ import {
   Mic,
   MicOff,
   Monitor,
-  Paperclip,
   PhoneOff,
   Plus,
   RefreshCcw,
@@ -587,12 +586,12 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
       </nav>
       <AnimatePresence>
         {profileOpen && <m.div className="mobile-companion-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setProfileOpen(false)}>
-          <m.section className="mobile-companion-hub" role="dialog" aria-modal="true" aria-labelledby="companion-hub-title" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: .97 }} transition={{ type: 'spring', stiffness: 410, damping: 34 }} onClick={event => event.stopPropagation()}>
-            <header><m.span layoutId="mobile-companion-avatar">{initials}</m.span><div><small>CONNECTED TO</small><h2 id="companion-hub-title">{family.space.name}</h2><p>{user?.displayName ?? user?.email ?? 'Family member'}</p></div><button type="button" onClick={() => setProfileOpen(false)} aria-label="Close account hub"><X /></button></header>
-            <div className="companion-hub-status"><i /><span><strong>Saathi is ready</strong><small>Private family memory · live translation</small></span></div>
-            <div className="companion-hub-actions"><button type="button" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /><span>Settings</span></button><button type="button" onClick={() => { setProfileOpen(false); setMembersOpen(true) }}><UserPlus /><span>Invite</span></button><button type="button" onClick={() => void signOut()}><LogOut /><span>Sign out</span></button></div>
-            <section className="companion-hub-overview"><span>TODAY</span><button type="button" onClick={() => { setProfileOpen(false); openPane('updates') }}><Bell /><span><strong>Family inbox</strong><small>{inboxItems?.length ?? 0} recent items</small></span><ArrowRight /></button><button type="button" onClick={() => { setProfileOpen(false); openHome() }}><MessageSquareText /><span><strong>Conversations</strong><small>{rooms?.filter(row => row.room).length ?? 0} available chats</small></span><ArrowRight /></button><div><ShieldCheck /><span><strong>Private by design</strong><small>Each family stays separate</small></span><Check /></div></section>
-            <footer className="companion-hub-footer"><span>स</span><p>Your family’s chats and updates, in one place.</p></footer>
+          <m.section className="mobile-companion-hub" role="dialog" aria-modal="true" aria-labelledby="companion-hub-title" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: .98 }} transition={{ type: 'spring', stiffness: 410, damping: 34 }} onClick={event => event.stopPropagation()}>
+            <header><m.span layoutId="mobile-companion-avatar">{initials}</m.span><div><small>Current family</small><h2 id="companion-hub-title">{family.space.name}</h2><p>{user?.displayName ?? (user?.email ? <>{user.email.split('@')[0]}@<wbr />{user.email.split('@').slice(1).join('@')}</> : 'Family member')}</p></div><button type="button" onClick={() => setProfileOpen(false)} aria-label="Close account menu"><X /></button></header>
+            <section className="companion-hub-overview" aria-label="Family activity"><button type="button" onClick={() => { setProfileOpen(false); openPane('updates') }}><Bell /><span><strong>Family inbox</strong><small>{inboxItems?.length ?? 0} recent items</small></span><ArrowRight /></button><button type="button" onClick={() => { setProfileOpen(false); openHome() }}><MessageSquareText /><span><strong>Conversations</strong><small>{rooms?.filter(row => row.room).length ?? 0} available chats</small></span><ArrowRight /></button></section>
+            <div className="companion-hub-actions"><button type="button" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /><span><strong>Settings</strong><small>Family and account</small></span></button><button type="button" onClick={() => { setProfileOpen(false); setMembersOpen(true) }}><UserPlus /><span><strong>Invite someone</strong><small>Add a family member</small></span></button></div>
+            <div className="companion-hub-status"><i /><span><strong>Saathi is ready</strong><small>Translation and family memory are available</small></span></div>
+            <footer className="companion-hub-footer"><div><ShieldCheck /><span><strong>Private by design</strong><small>Each family stays separate</small></span></div><button type="button" onClick={() => void signOut()}><LogOut /><span>Sign out</span></button></footer>
           </m.section>
         </m.div>}
       </AnimatePresence>
@@ -1172,7 +1171,6 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
             </button>)}
           </div>}
           <Textarea ref={textareaRef} value={message} onChange={(event) => { setMessage(event.target.value); updateMentionMatch(event.target.value, event.target.selectionStart) }} onSelect={(event) => updateMentionMatch(event.currentTarget.value, event.currentTarget.selectionStart)} onKeyDown={handleComposerKeyDown} placeholder={room.type === 'private' ? 'Message Saathi…' : 'Message your family…'} aria-label={room.type === 'private' ? 'Message for Saathi' : 'Message for your family'} aria-autocomplete="list" aria-expanded={Boolean(mentionMatch)} rows={1} />
-          <Button className="composer-attachment" variant="ghost" size="icon" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></Button>
           <Button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></Button>
         </form>
         {error && <p className="dark-form-error" role="alert">{error}</p>}
@@ -1748,8 +1746,8 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
             {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
             {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
-            {item.status === 'processing' && <p className="inbox-status">Reading email details…</p>}
-            {item.status === 'failed' && <p className="inbox-status">Could not read the email details.</p>}
+            {item.status === 'processing' && <p className="inbox-status">Finding amount and type…</p>}
+            {item.status === 'failed' && <p className="inbox-status">Could not find the amount and type.</p>}
             {item.documentParseStatus === 'parsed' && <p>Attached PDF read successfully.</p>}
             {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
@@ -1758,7 +1756,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
               <button type="button" className="secondary icon-action" onClick={() => setOpenItem(item)} aria-label={`Open email: ${item.subject}`} title="Open email"><MailOpen /></button>
               {canReadGmailPdf(item) && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attached PDF</button>}
               {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <button type="button" className="secondary icon-action" onClick={() => void reprocess({ inboxItemId: item._id })} aria-label="Try reading attached PDF again" title="Try reading PDF again"><RefreshCcw /></button>}
-              {item.status === 'failed' && item.documentParseStatus !== 'failed' && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read email again</button>}
+              {item.status === 'failed' && item.documentParseStatus !== 'failed' && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}><Sparkles /> Extract amount &amp; type</button>}
             </div>
             {item.actionStatus === 'suggested' && <div className="inbox-actions">
               <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Approve suggested next step</button>

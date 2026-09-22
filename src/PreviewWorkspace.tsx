@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -62,9 +62,11 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
   const [activeIndex, setActiveIndex] = useState(0)
   const [completed, setCompleted] = useState<StepId[]>([])
   const [runState, setRunState] = useState<'waiting' | 'running' | 'complete'>('waiting')
+  const [restartGeneration, setRestartGeneration] = useState(0)
   const active = steps[activeIndex]
   const isComplete = completed.includes(active.id)
   const journeyComplete = completed.length === steps.length
+  const showCompletion = journeyComplete && activeIndex === steps.length - 1 && isComplete
 
   const completeStep = () => {
     setCompleted((current) => current.includes(active.id) ? current : [...current, active.id])
@@ -81,12 +83,13 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
     setActiveIndex(0)
     setCompleted([])
     setRunState('waiting')
+    setRestartGeneration((current) => current + 1)
   }
 
   return (
-    <main className={`onboarding-shell ${journeyComplete ? 'journey-complete' : ''}`}>
+    <main className={`onboarding-shell ${showCompletion ? 'journey-complete' : ''}`}>
       <header className="onboarding-topbar">
-        <button className="topbar-exit" type="button" onClick={onExit}><ArrowLeft /><span>Exit preview</span></button>
+        <button className="topbar-exit" type="button" onClick={onExit} aria-label="Exit preview"><ArrowLeft /><span>Exit preview</span></button>
         <div className="topbar-title"><span>Saathi onboarding</span><b>Kapoor family journey</b></div>
         <span className="simulation-badge"><Eye /> SIMULATION · SAMPLE DATA</span>
         <div className="topbar-progress" aria-label={`${completed.length} of ${steps.length} steps complete`}>
@@ -121,7 +124,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
         </aside>
 
         <section className="task-column" aria-live="polite">
-          {journeyComplete && activeIndex === steps.length - 1 && isComplete
+          {showCompletion
             ? <Completion onOpenLive={onOpenLive} onRestart={restart} />
             : <>
               <header className="task-heading">
@@ -129,9 +132,10 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
                 <RunState state={runState} />
               </header>
               <div className="mobile-step-select">
-                <span>Journey step</span><button type="button">{activeIndex + 1}. {active.label}<ChevronDown /></button>
+                <label htmlFor="mobile-journey-step">Journey step</label>
+                <div><select id="mobile-journey-step" value={activeIndex} onChange={(event) => goTo(Number(event.target.value))}>{steps.map((step, index) => <option key={step.id} value={index} disabled={index > completed.length}>{index + 1}. {step.label}{index > completed.length ? ' · locked' : ''}</option>)}</select><ChevronDown /></div>
               </div>
-              <div className="task-stage" key={active.id}>
+              <div className="task-stage" key={`${active.id}-${restartGeneration}`}>
                 {active.id === 'inbox' && <InboxTask done={isComplete} setRunning={() => setRunState('running')} onComplete={completeStep} />}
                 {active.id === 'language' && <LanguageTask done={isComplete} onComplete={completeStep} />}
                 {active.id === 'memory' && <MemoryTask done={isComplete} onComplete={completeStep} />}
@@ -160,7 +164,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
         </aside>
       </div>
 
-      {!journeyComplete && <footer className="onboarding-controls">
+      {!showCompletion && <footer className="onboarding-controls">
           <button className="restart-button" type="button" onClick={restart}><RefreshCcw /> Restart</button>
           <span>{isComplete ? 'Task complete. Continue when ready.' : 'Complete the task to unlock Next.'}</span>
           <div>
@@ -180,16 +184,21 @@ function Trace({ done, active, held, title, detail }: { done?: boolean; active?:
   return <li className={done ? 'done' : active ? 'active' : held ? 'held' : ''}><span>{done ? <Check /> : held ? <CircleStop /> : <i />}</span><div><strong>{title}</strong><small>{detail}</small></div></li>
 }
 
-function ActionButton({ done, onClick, children }: { done: boolean; onClick: () => void; children: ReactNode }) {
-  return <button type="button" className={`task-action ${done ? 'done' : ''}`} onClick={onClick} disabled={done}>{done ? <><Check /> Task complete</> : children}</button>
+function ActionButton({ done, busy = false, onClick, children }: { done: boolean; busy?: boolean; onClick: () => void; children: ReactNode }) {
+  return <button type="button" className={`task-action ${done ? 'done' : ''}`} onClick={onClick} disabled={done || busy}>{done ? <><Check /> Task complete</> : children}</button>
 }
 
 function InboxTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
   const [processing, setProcessing] = useState(false)
+  const timer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+  }, [])
   const process = () => {
+    if (processing) return
     setProcessing(true)
     setRunning()
-    window.setTimeout(() => { setProcessing(false); onComplete() }, 650)
+    timer.current = window.setTimeout(() => { setProcessing(false); onComplete() }, 650)
   }
   return <div className="task-two-up">
     <article className="task-card source-card">
@@ -202,7 +211,7 @@ function InboxTask({ done, setRunning, onComplete }: { done: boolean; setRunning
       <CardLabel icon={<Sparkles />} label="STRUCTURED EXTRACTION" />
       <h2>{processing ? 'Reading the email…' : done ? 'Details ready to review' : 'Waiting for your command'}</h2>
       {done ? <dl className="data-grid"><div><dt>Category</dt><dd>School & family</dd></div><div><dt>Amount</dt><dd>₹18,500</dd></div><div><dt>Due date</dt><dd>24 September</dd></div><div><dt>Next step</dt><dd>Review payment</dd></div></dl> : <div className={`empty-result ${processing ? 'processing' : ''}`}><Inbox /><span>{processing ? 'Validating extracted fields' : 'No extraction has run yet'}</span></div>}
-      <ActionButton done={done} onClick={process}><Sparkles /> Extract key details</ActionButton>
+      <ActionButton done={done} busy={processing} onClick={process}><Sparkles />{processing ? ' Extracting details…' : ' Extract key details'}</ActionButton>
     </article>
   </div>
 }
@@ -230,14 +239,31 @@ function MemoryTask({ done, onComplete }: { done: boolean; onComplete: () => voi
   </div>
 }
 
+const citations = [
+  { id: 'traffic', title: 'Karnataka traffic advisory', kind: 'Official source', provenance: 'Karnataka State Police · retrieved today', excerpt: 'Weekend traffic is expected to remain lighter before 8 AM, with intermittent restrictions near Mandya.' },
+  { id: 'weather', title: 'IMD weather outlook', kind: 'Official source', provenance: 'India Meteorological Department · retrieved today', excerpt: 'Mysuru district is forecast to have a dry morning with isolated light showers possible after midday.' },
+  { id: 'route', title: 'Route conditions', kind: 'Current map data', provenance: 'Public route data · retrieved today', excerpt: 'The primary Bengaluru–Mysuru route is open; construction activity is marked near the Mandya bypass.' },
+] as const
+
 function ResearchTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
   const [searched, setSearched] = useState(done)
-  const [inspected, setInspected] = useState(done)
-  const run = () => { setRunning(); window.setTimeout(() => setSearched(true), 600) }
-  const inspect = () => { setInspected(true); onComplete() }
+  const [searching, setSearching] = useState(false)
+  const [selectedCitation, setSelectedCitation] = useState<string | null>(done ? citations[0].id : null)
+  const timer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+  }, [])
+  const run = () => {
+    if (searching) return
+    setSearching(true)
+    setRunning()
+    timer.current = window.setTimeout(() => { setSearching(false); setSearched(true) }, 600)
+  }
+  const inspect = (id: string) => { setSelectedCitation(id); onComplete() }
+  const selected = citations.find((citation) => citation.id === selectedCitation)
   return <div className="research-task">
     <div className="query-strip"><Search /><div><small>SANITIZED PUBLIC QUERY</small><strong>Current Mysuru road conditions for Saturday morning</strong></div><span>Private names removed</span></div>
-    {!searched ? <section className="research-empty"><Globe2 /><h2>Ready to check the public web</h2><p>No private family message or memory will be included.</p><button type="button" onClick={run}><Search /> Run cited research</button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span></article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{['Karnataka traffic advisory', 'IMD weather outlook', 'Route conditions'].map((source, index) => <button type="button" key={source} className={inspected && index === 0 ? 'selected' : ''} onClick={inspect}><ExternalLink /><span><strong>{source}</strong><small>{index < 2 ? 'Official source' : 'Current map data'} · retrieved today</small></span>{inspected && index === 0 ? <Check /> : <ArrowRight />}</button>)}</section></div>}
+    {!searched ? <section className="research-empty"><Globe2 /><h2>{searching ? 'Checking public sources…' : 'Ready to check the public web'}</h2><p>No private family message or memory will be included.</p><button type="button" onClick={run} disabled={searching}><Search />{searching ? ' Researching…' : ' Run cited research'}</button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span>{selected && <div className="citation-detail" role="status"><span>INSPECTED SOURCE</span><strong>{selected.title}</strong><p>{selected.excerpt}</p><small>{selected.provenance}</small></div>}</article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{citations.map((citation) => <button type="button" key={citation.id} className={selectedCitation === citation.id ? 'selected' : ''} onClick={() => inspect(citation.id)}><ExternalLink /><span><strong>{citation.title}</strong><small>{citation.kind} · retrieved today</small></span>{selectedCitation === citation.id ? <Check /> : <ArrowRight />}</button>)}</section></div>}
   </div>
 }
 

@@ -167,6 +167,11 @@
 .citation-list strong { font-size: 9px; }
 .citation-list small { color: var(--muted); font-size: 7px; }
 .citation-list button.selected { border-color: #88bdb0; background: #dceee9; }
+.citation-detail { display: grid; gap: 5px; margin-top: 16px; padding: 11px; border: 1px solid #9fc8be; background: #e3f0ed; }
+.citation-detail > span { color: var(--teal); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; }
+.citation-detail strong { font-size: 10px; }
+.citation-detail p { margin: 0 !important; font-size: 9px !important; line-height: 1.45 !important; }
+.citation-detail small { color: var(--muted); font-size: 8px; }
 
 .handoff-task { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 9px; }
 .handoff-brief { grid-column: 1 / -1; padding: 14px; }
@@ -312,8 +317,10 @@
   .task-heading p { font-size: 10px; }
   .run-state { padding: 0 7px; }
   .mobile-step-select { display: grid; gap: 4px; padding: 0 13px 9px; }
-  .mobile-step-select > span { color: var(--muted); font: 750 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
-  .mobile-step-select button { min-height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-color: var(--line); background: #e5ecee; font-size: 10px; font-weight: 800; pointer-events: none; }
+  .mobile-step-select > label { color: var(--muted); font: 750 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
+  .mobile-step-select > div { position: relative; }
+  .mobile-step-select select { width: 100%; min-height: 44px; padding: 0 34px 0 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: #e5ecee; appearance: none; font: 800 10px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .mobile-step-select > div > svg { position: absolute; top: 50%; right: 10px; width: 15px; pointer-events: none; transform: translateY(-50%); }
   .task-stage { padding: 0 10px 88px; }
   .task-two-up, .language-task, .research-results, .handoff-task, .privacy-task { grid-template-columns: 1fr; }
   .task-card { min-height: 0; padding: 14px; }

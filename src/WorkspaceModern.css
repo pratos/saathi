@@ -576,6 +576,7 @@
 .family-dialog .invite-member-card input { border-radius: 3px; }
 
 @media (max-width: 820px) {
+  .live-conversation-workspace { grid-template-columns: 1fr; }
   .live-conversation-workspace .conversation-list { background: #eef2f4; }
   .live-conversation-workspace .mobile-workspace-nav button { border-radius: 3px; }
 }

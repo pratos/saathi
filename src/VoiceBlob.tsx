@@ -60,8 +60,9 @@ void main() {
     color = mix(color, vec3(0.73, 0.71, 0.82), 0.30);
   }
 
-  float alpha = clamp(body * 0.92 + halo * 0.24, 0.0, 1.0);
-  gl_FragColor = vec4(color, alpha);
+  float canvasFade = 1.0 - smoothstep(0.40, 0.49, length(uv));
+  float alpha = clamp(body * 0.92 + halo * 0.24, 0.0, 1.0) * canvasFade;
+  gl_FragColor = vec4(color * alpha, alpha);
 }`
 
 export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
@@ -78,7 +79,7 @@ export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const gl = canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: false })
+    const gl = canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: true })
     if (!gl) return
 
     const program = compile(gl)
@@ -116,8 +117,7 @@ export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
       resize()
       displayedLevel += (levelRef.current - displayedLevel) * 0.12
       gl.disable(gl.DEPTH_TEST)
-      gl.enable(gl.BLEND)
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+      gl.disable(gl.BLEND)
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
       gl.uniform2f(uRes, canvas.width, canvas.height)

@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-21T14:00:43Z
+- **Last updated:** 2026-09-22T14:06:38Z
 
 ## Log
 
@@ -271,3 +271,38 @@ timeout, deterministic failures do not auto-retry, transient failures remain
 manually retryable, and duplicate reprocessing is rejected while work is active
 (`convex/lib/firecrawlParse.ts`, `convex/inboxWorkflow.ts`, `convex/inbox.ts`,
 `src/LiveWorkspace.tsx`).
+
+### 2026-09-21 - 32780c2
+Added provider-aware AI controls and trusted conversation actions, then removed
+the food-budget feature to keep the product focused on family coordination.
+Introduced per-family inbox notifications with safer email rendering and rebuilt
+the guided preview and workspace as a compact agent control surface
+(`convex/lib/conversationUi.ts`, `convex/email.ts`, `src/PreviewWorkspace.tsx`,
+`src/WorkspaceModern.css`).
+
+### 2026-09-22 - f2cd116
+Turned the preview into a seven-step interactive onboarding journey and
+propagated a Manrope-based luminous design system across access, workspace,
+voice, inbox, settings, PWA, and admin surfaces. Responsive spacing, mobile
+navigation, family switching, account controls, icon actions, and the desktop
+composer were refined for 44–48px targets and clearer hierarchy
+(`DESIGN.md`, `src/PreviewWorkspace.tsx`, `src/LiveWorkspace.tsx`,
+`src/WorkspaceModern.css`).
+
+### 2026-09-22 - 41e4d5b
+Expanded email intelligence with typed categories and subcategories for bills,
+school, travel, appointments, banking, subscriptions, household mail, receipts,
+and security messages. Added field-aware extraction recovery, a branded OTP
+email, dynamic privacy-safe family member profiles, pre-paint chat positioning,
+accessible profile controls, structured Markdown voice results, and a darker
+responsive voice surface (`convex/lib/emailTaxonomy.ts`,
+`convex/lib/otpEmail.ts`, `convex/spaces.ts`, `src/LiveWorkspace.tsx`,
+`src/VoiceBlob.tsx`).
+
+### 2026-09-22 - e572666
+Added an owner-only, per-family background recategorization workflow. It scans
+inbox items in durable five-item batches, reuses the canonical extraction path,
+persists progress for status and failed-job resume, and skips confirmed,
+dismissed, or newly reviewed records without duplicating chat heartbeats or
+suggested actions (`convex/recategorization.ts`, `convex/schema.ts`,
+`convex/recategorization.test.ts`).

@@ -4,6 +4,7 @@ import { ThinkingState } from '@aicss/react/thinking-state'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import DOMPurify from 'dompurify'
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'motion/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -303,6 +304,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   isSuperadmin: boolean
   accessSource: 'byok' | 'platform' | 'none'
 }) {
+  const reduceMotion = useReducedMotion()
   const { signOut } = useAuthActions()
   const user = useQuery(api.users.current)
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
@@ -398,9 +400,14 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
     : pane === 'updates' || pane === 'files' || mobileNav === 'detail'
       ? 'detail'
       : 'home'
+  const workspaceViewKey = pane === 'chats' ? `chat-${selectedRoom?._id ?? 'empty'}` : pane
+  const viewMotion = reduceMotion
+    ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 } }
+    : { initial: { opacity: 0, x: 18, scale: .995 }, animate: { opacity: 1, x: 0, scale: 1 }, exit: { opacity: 0, x: -12, scale: .995 } }
 
   return (
-    <main data-theme="light" className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
+    <LazyMotion features={domAnimation}>
+    <main data-theme="dark" className={`saathi-workspace live-conversation-workspace is-mobile-${mobileScreen}${pane === 'family' ? ' is-family-open' : ''}`}>
       <aside className="workspace-rail" aria-label="Main navigation">
         <div className="workspace-logo">स</div>
         <button className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={openHome}><MessageSquareText /><span>Home</span></button>
@@ -421,8 +428,8 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
 
       <aside className="conversation-list live-conversation-list">
         <div className="mobile-home-header">
-          <h1>Home</h1>
-          <button type="button" onClick={() => openPane('family')} aria-label="Settings"><Settings2 /></button>
+          <div><span>SAATHI / FAMILY</span><h1>Home</h1></div>
+          <m.button type="button" layoutId="mobile-companion-avatar" onClick={() => setProfileOpen(true)} aria-label="Open family and account hub">{initials}</m.button>
         </div>
         <span className="family-select-label" id="family-switcher-label">Current family</span>
         <div className="family-switcher" role="group" aria-labelledby="family-switcher-label">
@@ -446,15 +453,19 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
-      {pane === 'updates' ? (
-        <FamilyUpdates family={family} items={inboxItems} onBack={openHome} />
-      ) : pane === 'files' ? (
-        <FamilyFiles family={family} files={spaceFiles} onBack={openHome} onOpenRoom={openRoom} />
-      ) : selectedRoom ? (
-        <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} onBack={openHome} onNavigate={openPane} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
-      ) : (
-        <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
-      )}
+      <AnimatePresence mode="wait" initial={false}>
+        <m.div className="workspace-view-transition" key={workspaceViewKey} {...viewMotion} transition={{ duration: reduceMotion ? 0 : .22, ease: [.22, 1, .36, 1] }}>
+          {pane === 'updates' ? (
+            <FamilyUpdates family={family} items={inboxItems} onBack={openHome} />
+          ) : pane === 'files' ? (
+            <FamilyFiles family={family} files={spaceFiles} onBack={openHome} onOpenRoom={openRoom} />
+          ) : selectedRoom ? (
+            <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} onBack={openHome} onNavigate={openPane} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
+          ) : (
+            <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
+          )}
+        </m.div>
+      </AnimatePresence>
 
       <aside className="conversation-context live-context">
         <header className="conversation-header live-room-header mobile-family-header">
@@ -523,15 +534,27 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         </div>
       </aside>
       <nav className="mobile-workspace-nav" aria-label="Workspace">
-        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}><MessageSquareText /><span>Home</span></button>
-        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}><Bell /><span>Inbox</span></button>
-        <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')}><Folder /><span>Files</span></button>
-        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-label="Settings"><Settings2 /><span>Settings</span></button>
+        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}>{pane === 'chats' && <m.i layoutId="mobile-nav-active" />}<MessageSquareText /><span>Chat</span></button>
+        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}>{pane === 'updates' && <m.i layoutId="mobile-nav-active" />}<Bell /><span>Updates</span></button>
+        <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')}>{pane === 'files' && <m.i layoutId="mobile-nav-active" />}<Folder /><span>Files</span></button>
+        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-label="Settings">{pane === 'family' && <m.i layoutId="mobile-nav-active" />}<Settings2 /><span>Settings</span></button>
       </nav>
+      <AnimatePresence>
+        {profileOpen && <m.div className="mobile-companion-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setProfileOpen(false)}>
+          <m.section className="mobile-companion-hub" role="dialog" aria-modal="true" aria-labelledby="companion-hub-title" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: .97 }} transition={{ type: 'spring', stiffness: 410, damping: 34 }} onClick={event => event.stopPropagation()}>
+            <header><m.span layoutId="mobile-companion-avatar">{initials}</m.span><div><small>CONNECTED TO</small><h2 id="companion-hub-title">{family.space.name}</h2><p>{user?.displayName ?? user?.email ?? 'Family member'}</p></div><button type="button" onClick={() => setProfileOpen(false)} aria-label="Close account hub"><X /></button></header>
+            <div className="companion-hub-status"><i /><span><strong>Saathi is ready</strong><small>Private family memory · live translation</small></span></div>
+            <div className="companion-hub-actions"><button type="button" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /><span>Settings</span></button><button type="button" onClick={() => { setProfileOpen(false); setMembersOpen(true) }}><UserPlus /><span>Family</span></button><button type="button" onClick={() => void signOut()}><LogOut /><span>Sign out</span></button></div>
+            <section className="companion-hub-overview"><span>TODAY</span><button type="button" onClick={() => { setProfileOpen(false); openPane('updates') }}><Bell /><span><strong>Family updates</strong><small>{inboxItems?.length ?? 0} recent items</small></span><ArrowRight /></button><button type="button" onClick={() => { setProfileOpen(false); openHome() }}><MessageSquareText /><span><strong>Conversations</strong><small>{rooms?.filter(row => row.room).length ?? 0} available chats</small></span><ArrowRight /></button><div><ShieldCheck /><span><strong>Private by design</strong><small>Each family stays separate</small></span><Check /></div></section>
+            <footer className="companion-hub-footer"><span>स</span><p>One trusted place for your family’s conversations, updates, and agent work.</p></footer>
+          </m.section>
+        </m.div>}
+      </AnimatePresence>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); onSelectFamily(spaceId) }} createSpace={createSpace} />}
       {jevOpen && isSuperadmin && <JevLabDrawer spaceId={family.space._id} onClose={() => setJevOpen(false)} />}
     </main>
+    </LazyMotion>
   )
 }
 
@@ -1019,9 +1042,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
                     <iframe title="Saathi live browser" src={computerViewUrl(activeJob)} allow="clipboard-write" referrerPolicy="no-referrer" />
                   </div>
                 )}
-                {activeJob.responseText
-                  ? <div className="streaming-markdown"><AssistantText text={activeJob.responseText} /></div>
-                  : <div className="agent-activity" role="status" aria-label={activeJob.status === 'queued' ? 'Saathi is getting ready' : activeJob.activity === 'using_computer' ? 'Saathi is using the live browser' : activeJob.activity === 'searching_web' ? 'Saathi is searching the web' : activeJob.activity === 'generating_image' ? 'Saathi is creating your image' : 'Saathi is thinking'}><ThinkingState /><span aria-hidden="true">· {activeJob.status === 'queued' ? 'getting ready' : activeJob.activity === 'using_computer' ? 'using the live browser' : activeJob.activity === 'searching_web' ? 'searching the web' : activeJob.activity === 'generating_image' ? 'creating your image' : 'working on it'}</span></div>}
+                <AgentStreamingResponse status={activeJob.status} activity={activeJob.activity} responseText={activeJob.responseText} />
               </div>
             </div>
           </article>
@@ -1137,6 +1158,40 @@ function GeneratedImageLightbox({ image, onClose }: {
   </div>
 }
 
+function AgentStreamingResponse({ status, activity, responseText }: {
+  status: 'queued' | 'running' | 'complete' | 'failed'
+  activity?: 'searching_web' | 'generating_image' | 'using_computer'
+  responseText?: string
+}) {
+  const activityLabel = status === 'queued'
+    ? 'Preparing context'
+    : activity === 'searching_web'
+      ? 'Checking public sources'
+      : activity === 'generating_image'
+        ? 'Creating your image'
+        : activity === 'using_computer'
+          ? 'Working in the live browser'
+          : responseText ? 'Writing the answer' : 'Reasoning privately'
+  const hasText = Boolean(responseText)
+
+  return <div className={`agent-stream-response ${hasText ? 'has-text' : ''}`}>
+    <details className="agent-reasoning-trace" open={!hasText}>
+      <summary aria-label={`${activityLabel}. ${hasText ? 'Response is streaming' : 'In progress'}`}>
+        <span className="agent-stream-pulse"><ThinkingState /></span>
+        <strong>{activityLabel}</strong>
+        <span>{hasText ? 'STREAMING' : 'IN PROGRESS'}</span>
+      </summary>
+      <div className="agent-stream-steps" aria-label="Saathi activity">
+        <span className="done"><Check /> Request understood</span>
+        <span className={hasText ? 'done' : 'active'}>{hasText ? <Check /> : <i />} {activityLabel}</span>
+        <span className={hasText ? 'active' : ''}><i /> Writing response</span>
+      </div>
+      <p>Private reasoning is not shown. Tool use, sources, and consequential actions remain visible.</p>
+    </details>
+    {responseText && <div className="streaming-markdown"><AssistantText text={responseText} /><i className="response-stream-cursor" aria-hidden="true" /></div>}
+  </div>
+}
+
 function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, voiceSeconds, onMute, onEnd }: {
   status: VoiceStatus
   turns: VoiceTurn[]
@@ -1178,9 +1233,9 @@ function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel,
           ? 'Microphone muted'
           : turns.at(-1)?.role === 'assistant' ? 'Saathi is speaking' : 'Listening'
   return <div className="voice-call-backdrop" role="dialog" aria-modal="true" aria-labelledby="voice-call-title">
-    <section className="voice-call-sheet">
+    <section className={`voice-call-sheet voice-state-${status}`}>
       <header className="voice-call-header">
-        <div><span>LIVE VOICE</span><h2 id="voice-call-title">Talking with Saathi</h2></div>
+        <div><span>VOICE SESSION / GPT LIVE</span><h2 id="voice-call-title">Talking with Saathi</h2></div>
         <div className="voice-call-status-group"><span className={`voice-call-status ${status === 'muted' ? 'is-muted' : ''}`}><i />{statusText}</span><small>{formatVoiceDuration(voiceSeconds)} · est. {formatVoiceCost(voiceSeconds / 60 * 0.05)}</small></div>
       </header>
       <div className={`voice-call-body ${activities.length ? 'has-activity' : ''}`}>

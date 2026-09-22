@@ -40,21 +40,21 @@ void main() {
   float caustic = 0.5 + 0.5 * sin((uv.x * 9.0 + uv.y * 7.0) + t * 1.3);
   caustic *= 0.5 + 0.5 * sin((uv.y * 11.0 - uv.x * 5.0) - t * 0.9);
 
-  vec3 deep = vec3(0.06, 0.14, 0.14);
-  vec3 aqua = vec3(0.52, 0.90, 0.84);
-  vec3 gold = vec3(0.95, 0.76, 0.38);
-  vec3 lilac = vec3(0.64, 0.50, 0.92);
-  vec3 mist = vec3(0.90, 0.98, 0.96);
+  vec3 deep = vec3(0.02, 0.02, 0.025);
+  vec3 graphite = vec3(0.16, 0.17, 0.19);
+  vec3 silver = vec3(0.70, 0.73, 0.78);
+  vec3 violet = vec3(0.48, 0.43, 0.68);
+  vec3 mist = vec3(0.97, 0.97, 0.95);
 
   float angle = atan(uv.y, uv.x);
-  vec3 iridescence = mix(aqua, lilac, 0.5 + 0.5 * sin(angle * 1.8 + t * 0.45));
-  iridescence = mix(iridescence, gold, 0.28 + 0.28 * sin(angle * 1.15 - t * 0.32));
+  vec3 iridescence = mix(graphite, silver, 0.48 + 0.42 * sin(angle * 1.8 + t * 0.45));
+  iridescence = mix(iridescence, violet, 0.18 + 0.16 * sin(angle * 1.15 - t * 0.32));
 
   vec3 color = mix(deep, iridescence, body);
-  color = mix(color, gold, rim * 0.65);
+  color = mix(color, mist, rim * 0.62);
   color += mist * highlight * 0.62;
-  color += aqua * halo * (0.22 + 0.18 * energy);
-  color += gold * body * caustic * 0.08 * energy;
+  color += silver * halo * (0.18 + 0.16 * energy);
+  color += violet * body * caustic * 0.07 * energy;
 
   if (u_muted > 0.5) {
     color = mix(color, vec3(0.80, 0.62, 0.54), 0.26);

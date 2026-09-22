@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { ThinkingState } from '@aicss/react/thinking-state'
 import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
@@ -15,11 +15,15 @@ import {
   Bot,
   Camera,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   FileText,
   Folder,
+  House,
   Image as ImageIcon,
   KeyRound,
+  Link2,
   LockKeyhole,
   LogOut,
   Mail,
@@ -37,9 +41,13 @@ import {
   Send,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Upload,
+  UserRound,
   UserPlus,
+  UsersRound,
+  Wrench,
   X,
 } from 'lucide-react'
 import { api } from '../convex/_generated/api'
@@ -62,6 +70,7 @@ import './Access.css'
 import './WorkspaceModern.css'
 
 type FamilyRow = { membership: Doc<'memberships'>; space: Doc<'spaces'> }
+type SettingsSection = 'hub' | 'you' | 'family' | 'apps' | 'notifications' | 'images' | 'advanced' | 'admin'
 type PendingUpload = { id: string; name: string; status: 'uploading' | 'error'; message?: string }
 type ConversationUiAction = NonNullable<Doc<'messages'>['uiActions']>[number]
 type MentionCandidate =
@@ -350,6 +359,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const [gmailMessage, setGmailMessage] = useState('')
   const [pane, setPane] = useState<'chats' | 'updates' | 'files' | 'family'>('chats')
   const [mobileNav, setMobileNav] = useState<'home' | 'detail'>('home')
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('hub')
   const [copiedInbox, setCopiedInbox] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [createFamilyOpen, setCreateFamilyOpen] = useState(false)
@@ -419,6 +429,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
     setMobileNav('detail')
   }
   const openPane = (next: 'updates' | 'files' | 'family') => {
+    if (next === 'family') setSettingsSection('hub')
     setPane(next)
     setMobileNav('detail')
   }
@@ -427,6 +438,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
     setSelectedRoomId(null)
     setPane('chats')
     setMobileNav('home')
+    setSettingsSection('hub')
     setMembersOpen(false)
     setProfileOpen(false)
     setCreateFamilyOpen(false)
@@ -511,82 +523,74 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
 
       <aside className="conversation-context live-context">
         <header className="conversation-header live-room-header mobile-family-header">
-          <button className="mobile-chat-back" onClick={openHome} aria-label="Back to chats"><ArrowLeft /></button>
-          <div><div className="title-line"><h2>Settings</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name}</p></div>
+          <button className="mobile-chat-back" onClick={() => settingsSection === 'hub' ? openHome() : setSettingsSection('hub')} aria-label={settingsSection === 'hub' ? 'Back to chats' : 'Back to settings'}><ArrowLeft /></button>
+          <div><div className="title-line"><h2>{settingsSection === 'hub' ? 'Settings' : settingsSectionTitle(settingsSection)}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{family.space.name}</p></div>
         </header>
-        <div className="context-title"><div><h2>Settings</h2><p>Change a control here, or ask Saathi in the conversation.</p></div><button onClick={onExit}>Switch mode</button></div>
-        <div className="settings-scroll">
-        <Card className="settings-intro">
-          <MessageSquareText />
-          <div><strong>You can just ask</strong><p>Try “Use Hindi for me” or “Use a watercolor style for images.” Voice works the same way.</p></div>
-        </Card>
-        <section className="personal-settings"><span>Your preferences</span><p>These choices affect only you.</p>
-          <label>Reading language</label>
-          <div className="language-setting" role="radiogroup" aria-label="My reading language">
-            {(['en', 'hi', 'mr'] as const).map(code => (
-              <button type="button" key={code} role="radio" aria-checked={(user?.preferredLanguage ?? 'en') === code} className={(user?.preferredLanguage ?? 'en') === code ? 'selected' : ''} onClick={() => void saveProfile({ preferredLanguage: code })}>
-                {languageLabel(code)}
-              </button>
-            ))}
-          </div>
-          <label htmlFor="preferred-image-style">Default image style</label>
-          <Select value={user?.preferredImageStyle ?? 'warm_family'} onValueChange={value => void saveProfile({ preferredImageStyle: value as (typeof IMAGE_PRESETS)[number]['id'] })}>
-            <SelectTrigger id="preferred-image-style" aria-label="Default image style"><SelectValue /></SelectTrigger>
-            <SelectContent>{IMAGE_PRESET_GROUPS.map(group => <SelectGroup key={group}>
-              <SelectLabel>{imagePresetGroupLabel(group)}</SelectLabel>
-              {IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => <SelectItem value={preset.id} key={preset.id}>{preset.label}</SelectItem>)}
-            </SelectGroup>)}</SelectContent>
-          </Select>
-        </section>
-        <section>
-          <span>Families</span>
-          <p>{family.membership.role === 'owner' ? 'You can own up to 3 family spaces.' : 'Connect your Gmail here. Only owners can change family-wide settings.'}</p>
-          {family.membership.role === 'owner' && (ownedFamilyCount < 3
-            ? <button type="button" className="connect-gmail" onClick={() => setCreateFamilyOpen(true)}><Plus /> Create another family</button>
-            : <small className="gmail-status">You already own 3 families.</small>)}
-        </section>
-        <section><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
-        <section className="gmail-connections"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi in the families you allow. Other family members cannot see your connected accounts.</p>
-          {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><button type="button" className="gmail-disable" onClick={() => { setGmailBusy(true); void disableGmailHere({ spaceId: family.space._id, connectedAccountId: connection.connectedAccountId }).then(() => setGmailMessage('Removed from this family. Mail stays in other families you enabled.')).catch(() => setGmailMessage('Could not update Gmail for this family.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}>Remove here</button></div>)}
-          {(reusableGmail ?? []).map(account => <button type="button" className="connect-gmail" key={account.connectedAccountId} disabled={gmailBusy} onClick={() => { setGmailBusy(true); void enableGmailHere({ spaceId: family.space._id, connectedAccountId: account.connectedAccountId }).then(() => setGmailMessage(`Added ${account.email ?? account.alias} to this family.`)).catch(() => setGmailMessage('Could not add that Gmail to this family.')).finally(() => setGmailBusy(false)) }}><Plus /> Use {account.email ?? account.alias} here</button>)}
-          <button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>
-          {(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary icon-action" onClick={() => {
-            setGmailBusy(true)
-            setGmailMessage('Checking connected Gmail…')
-            void checkGmailNow({ spaceId: family.space._id })
-              .then(count => setGmailMessage(count ? 'Checking inboxes now. New bills and receipts appear in My Saathi first.' : 'No Gmail accounts are connected yet.'))
-              .catch(() => setGmailMessage('Could not check Gmail right now.'))
-              .finally(() => setGmailBusy(false))
-          }} disabled={gmailBusy} aria-label="Check for new mail" title="Check for new mail"><RefreshCw /></button>}
-          {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
-        </section>
-        <details className="settings-disclosure">
-          <summary><span>Advanced settings</span><small>{accessSource === 'byok' ? 'Family inbox address, AI model, usage, and provider keys' : 'Family inbox address and access controls'}</small></summary>
-          <section><span>Family inbox</span>{family.space.agentmailInboxId
-          ? <div className="agentmail-id"><p className="confirmed"><Check /> Family inbox connected</p><code>{family.space.agentmailEmail ?? family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailEmail ?? family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy'}</button></div>
-          : family.membership.role === 'owner'
-            ? <ConnectInbox spaceId={family.space._id} />
-            : <p>Ask a family owner to create the family inbox.</p>}</section>
-          {family.membership.role === 'owner' && accessSource === 'byok' && <section><span>Models and usage</span><ModelTierControls spaceId={family.space._id} /></section>}
-          {family.membership.role === 'owner' && accessSource === 'byok' && <section><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
-        </details>
-        {family.membership.role === 'owner' && <details className="settings-disclosure"><summary><span>Family access</span><small>Invite or manage family members</small></summary><section><InviteMember spaceId={family.space._id} /></section></details>}
-        {isSuperadmin && <section className="jev-settings-card"><span>Jev debug</span><p>Preview routing and inspect recent chat, Voice, and Gmail decision logs without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev Debug</button></section>}
-        {isSuperadmin && <section className="jev-settings-card"><span>Deployment access</span><p>Approve or block accounts that request deployment-funded AI access.</p><button type="button" className="connect-gmail" onClick={openAdminDashboard}><ShieldCheck /> Open access dashboard</button></section>}
+        <div className="context-title"><div><h2>{settingsSection === 'hub' ? 'Settings' : settingsSectionTitle(settingsSection)}</h2><p>{settingsSection === 'hub' ? 'Manage your account, family, and Saathi.' : settingsSectionDescription(settingsSection)}</p></div>{settingsSection === 'hub' ? <button onClick={onExit}>Switch mode</button> : <button onClick={() => setSettingsSection('hub')}><ArrowLeft /> All settings</button>}</div>
+        <div className={`settings-scroll settings-page settings-page-${settingsSection}`}>
+          {settingsSection === 'hub' && <div className="settings-hub">
+            <div className="settings-hub-group">
+              <SettingsHubRow icon={<UserRound />} title="You" description="Reading language" status={`${user?.displayName ?? user?.email ?? 'Your account'} · ${languageLabel(user?.preferredLanguage ?? 'en')}`} onClick={() => setSettingsSection('you')} />
+              <SettingsHubRow icon={<UsersRound />} title="Family" description="Switch families and manage invitations" status={`${family.space.name} · ${family.membership.role}`} onClick={() => setSettingsSection('family')} />
+              <SettingsHubRow icon={<Link2 />} title="Connected apps" description="Gmail and private mail imports" status={`${gmailConnections?.length ?? 0} Gmail ${gmailConnections?.length === 1 ? 'account' : 'accounts'}`} onClick={() => setSettingsSection('apps')} />
+              <SettingsHubRow icon={<Bell />} title="Notifications" description="Unread updates for this family" status="In-app updates on" onClick={() => setSettingsSection('notifications')} />
+              <SettingsHubRow icon={<ImageIcon />} title="Image preferences" description="Default style for generated images" status={IMAGE_PRESETS.find(preset => preset.id === (user?.preferredImageStyle ?? 'warm_family'))?.label ?? 'Warm household'} onClick={() => setSettingsSection('images')} />
+            </div>
+            <div className="settings-hub-more"><span>More</span><div className="settings-hub-group">
+                <SettingsHubRow icon={<SlidersHorizontal />} title="Advanced" description="Family inbox, models, and usage" status={accessSource === 'byok' ? 'Owner controls' : 'Family controls'} onClick={() => setSettingsSection('advanced')} />
+                {isSuperadmin && <SettingsHubRow icon={<Wrench />} title="Admin" description="Jev debug and deployment access" status="Superadmin only" onClick={() => setSettingsSection('admin')} />}
+              </div>
+            </div>
+          </div>}
+
+          {settingsSection === 'you' && <section className="personal-settings settings-detail-section"><span>Your preferences</span><p>These choices affect only you.</p>
+            <label>Reading language</label>
+            <div className="language-setting" role="radiogroup" aria-label="My reading language">{(['en', 'hi', 'mr'] as const).map(code => <button type="button" key={code} role="radio" aria-checked={(user?.preferredLanguage ?? 'en') === code} className={(user?.preferredLanguage ?? 'en') === code ? 'selected' : ''} onClick={() => void saveProfile({ preferredLanguage: code })}>{languageLabel(code)}</button>)}</div>
+            <div className="settings-privacy-note"><ShieldCheck /><span><strong>Private preference</strong><small>Your reading language does not change anyone else’s view.</small></span></div>
+          </section>}
+
+          {settingsSection === 'family' && <>
+            <section className="settings-detail-section"><span>Your families</span><div className="settings-family-list">{families.map(row => <button type="button" className={row.space._id === family.space._id ? 'selected' : ''} key={row.space._id} onClick={() => row.space._id !== family.space._id && switchFamily(row.space._id)} aria-current={row.space._id === family.space._id ? 'true' : undefined}><span><strong>{row.space.name}</strong><small>{row.membership.role}</small></span>{row.space._id === family.space._id ? <Check /> : <ChevronRight />}</button>)}</div></section>
+            <section className="settings-detail-section"><span>Current family</span><h3>{family.space.name}</h3><p>{family.membership.role === 'owner' ? 'You can own up to 3 family spaces.' : 'Only owners can change family-wide settings.'}</p>{family.membership.role === 'owner' && (ownedFamilyCount < 3 ? <button type="button" className="connect-gmail" onClick={() => setCreateFamilyOpen(true)}><Plus /> Create another family</button> : <small className="gmail-status">You already own 3 families.</small>)}</section>
+            <section className="settings-detail-section"><span>Privacy</span><p className="confirmed"><ShieldCheck /> Live, authorized family data</p></section>
+            {family.membership.role === 'owner' && <section className="settings-detail-section"><span>Members and invitations</span><InviteMember spaceId={family.space._id} /></section>}
+          </>}
+
+          {settingsSection === 'apps' && <section className="gmail-connections settings-detail-section"><span>Your Gmail</span><p>Useful mail is added privately to My Saathi in families you allow. Other members cannot see your connected accounts.</p>
+            {(gmailConnections ?? []).map(connection => <div className="gmail-account" key={connection._id}><Mail /><span><strong>{connection.email ?? connection.alias}</strong><small>{connection.lastSyncedAt ? `Checked ${formatRelativeTime(connection.lastSyncedAt)}` : 'Reviewing the last 30 days…'}</small></span><button type="button" className="gmail-disable" onClick={() => { setGmailBusy(true); void disableGmailHere({ spaceId: family.space._id, connectedAccountId: connection.connectedAccountId }).then(() => setGmailMessage('Removed from this family. Mail stays in other families you enabled.')).catch(() => setGmailMessage('Could not update Gmail for this family.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}>Remove here</button></div>)}
+            {(reusableGmail ?? []).map(account => <button type="button" className="connect-gmail" key={account.connectedAccountId} disabled={gmailBusy} onClick={() => { setGmailBusy(true); void enableGmailHere({ spaceId: family.space._id, connectedAccountId: account.connectedAccountId }).then(() => setGmailMessage(`Added ${account.email ?? account.alias} to this family.`)).catch(() => setGmailMessage('Could not add that Gmail to this family.')).finally(() => setGmailBusy(false)) }}><Plus /> Use {account.email ?? account.alias} here</button>)}
+            <div className="settings-inline-actions"><button type="button" className="connect-gmail" onClick={() => void connectGmail()} disabled={gmailBusy}><Plus />{gmailConnections?.length ? 'Connect another Gmail' : 'Connect Gmail'}</button>{(gmailConnections?.length ?? 0) > 0 && <button type="button" className="connect-gmail secondary" onClick={() => { setGmailBusy(true); setGmailMessage('Checking connected Gmail…'); void checkGmailNow({ spaceId: family.space._id }).then(count => setGmailMessage(count ? 'Checking inboxes now. New bills and receipts appear in My Saathi first.' : 'No Gmail accounts are connected yet.')).catch(() => setGmailMessage('Could not check Gmail right now.')).finally(() => setGmailBusy(false)) }} disabled={gmailBusy}><RefreshCw /> Check mail</button>}</div>
+            {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
+          </section>}
+
+          {settingsSection === 'notifications' && <section className="settings-detail-section notification-settings-info"><Bell /><div><span>Unread inbox updates</span><p>Saathi tracks what each person has seen separately in each family. Opening Inbox marks the visible items as seen.</p><strong><Check /> On for {family.space.name}</strong></div></section>}
+
+          {settingsSection === 'images' && <section className="personal-settings settings-detail-section"><span>Image preferences</span><p>Choose the starting style for images you ask Saathi to create.</p><label htmlFor="preferred-image-style">Default image style</label><Select value={user?.preferredImageStyle ?? 'warm_family'} onValueChange={value => void saveProfile({ preferredImageStyle: value as (typeof IMAGE_PRESETS)[number]['id'] })}><SelectTrigger id="preferred-image-style" aria-label="Default image style"><SelectValue /></SelectTrigger><SelectContent>{IMAGE_PRESET_GROUPS.map(group => <SelectGroup key={group}><SelectLabel>{imagePresetGroupLabel(group)}</SelectLabel>{IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => <SelectItem value={preset.id} key={preset.id}>{preset.label}</SelectItem>)}</SelectGroup>)}</SelectContent></Select></section>}
+
+          {settingsSection === 'advanced' && <>
+            <section className="settings-detail-section"><span>Family inbox</span>{family.space.agentmailInboxId ? <div className="agentmail-id"><p className="confirmed"><Check /> Family inbox connected</p><code>{family.space.agentmailEmail ?? family.space.agentmailInboxId}</code><button type="button" onClick={() => { void navigator.clipboard.writeText(family.space.agentmailEmail ?? family.space.agentmailInboxId ?? '').then(() => { setCopiedInbox(true); window.setTimeout(() => setCopiedInbox(false), 2_000) }) }}><Copy />{copiedInbox ? 'Copied' : 'Copy address'}</button></div> : family.membership.role === 'owner' ? <ConnectInbox spaceId={family.space._id} /> : <p>Ask a family owner to create the family inbox.</p>}</section>
+            {family.membership.role === 'owner' && accessSource === 'byok' && <section className="settings-detail-section"><span>Models and usage</span><ModelTierControls spaceId={family.space._id} /></section>}
+            {family.membership.role === 'owner' && accessSource === 'byok' && <section className="settings-detail-section"><span>Your provider keys</span><ByokKeys spaceId={family.space._id} /></section>}
+          </>}
+
+          {settingsSection === 'admin' && isSuperadmin && <>
+            <section className="settings-detail-section"><span>Jev debug</span><p>Inspect recent routing decisions and tool activity without adding them to the conversation.</p><button type="button" className="connect-gmail" onClick={() => setJevOpen(true)}><Sparkles /> Open Jev debug</button></section>
+            <section className="settings-detail-section"><span>Deployment access</span><p>Approve or block accounts requesting deployment-funded AI access.</p><button type="button" className="connect-gmail" onClick={openAdminDashboard}><ShieldCheck /> Manage deployment access</button></section>
+          </>}
         </div>
       </aside>
       <nav className="mobile-workspace-nav" aria-label="Workspace">
-        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome}>{pane === 'chats' && <m.i layoutId="mobile-nav-active" />}<MessageSquareText /><span>Chat</span></button>
-        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')}>{pane === 'updates' && <m.i layoutId="mobile-nav-active" />}<Bell /><span>Inbox</span></button>
-        <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')}>{pane === 'files' && <m.i layoutId="mobile-nav-active" />}<Folder /><span>Files</span></button>
-        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-label="Settings">{pane === 'family' && <m.i layoutId="mobile-nav-active" />}<Settings2 /><span>Settings</span></button>
+        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={openHome} aria-current={pane === 'chats' ? 'page' : undefined}>{pane === 'chats' && <m.i layoutId="mobile-nav-active" />}<span className="mobile-nav-icon"><House /></span><span>Home</span></button>
+        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => openPane('updates')} aria-current={pane === 'updates' ? 'page' : undefined}>{pane === 'updates' && <m.i layoutId="mobile-nav-active" />}<span className="mobile-nav-icon"><Bell /></span><span>Inbox</span></button>
+        <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => openPane('files')} aria-current={pane === 'files' ? 'page' : undefined}>{pane === 'files' && <m.i layoutId="mobile-nav-active" />}<span className="mobile-nav-icon"><Folder /></span><span>Files</span></button>
+        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => openPane('family')} aria-current={pane === 'family' ? 'page' : undefined}>{pane === 'family' && <m.i layoutId="mobile-nav-active" />}<span className="mobile-nav-icon"><Settings2 /></span><span>Settings</span></button>
       </nav>
       <AnimatePresence>
         {profileOpen && <m.div className="mobile-companion-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setProfileOpen(false)}>
           <m.section className="mobile-companion-hub" role="dialog" aria-modal="true" aria-labelledby="companion-hub-title" initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -18, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: .97 }} transition={{ type: 'spring', stiffness: 410, damping: 34 }} onClick={event => event.stopPropagation()}>
             <header><m.span layoutId="mobile-companion-avatar">{initials}</m.span><div><small>CONNECTED TO</small><h2 id="companion-hub-title">{family.space.name}</h2><p>{user?.displayName ?? user?.email ?? 'Family member'}</p></div><button type="button" onClick={() => setProfileOpen(false)} aria-label="Close account hub"><X /></button></header>
             <div className="companion-hub-status"><i /><span><strong>Saathi is ready</strong><small>Private family memory · live translation</small></span></div>
-            <div className="companion-hub-actions"><button type="button" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /><span>Settings</span></button><button type="button" onClick={() => { setProfileOpen(false); setMembersOpen(true) }}><UserPlus /><span>Family</span></button><button type="button" onClick={() => void signOut()}><LogOut /><span>Sign out</span></button></div>
+            <div className="companion-hub-actions"><button type="button" onClick={() => { setProfileOpen(false); openPane('family') }}><Settings2 /><span>Settings</span></button><button type="button" onClick={() => { setProfileOpen(false); setMembersOpen(true) }}><UserPlus /><span>Invite</span></button><button type="button" onClick={() => void signOut()}><LogOut /><span>Sign out</span></button></div>
             <section className="companion-hub-overview"><span>TODAY</span><button type="button" onClick={() => { setProfileOpen(false); openPane('updates') }}><Bell /><span><strong>Family inbox</strong><small>{inboxItems?.length ?? 0} recent items</small></span><ArrowRight /></button><button type="button" onClick={() => { setProfileOpen(false); openHome() }}><MessageSquareText /><span><strong>Conversations</strong><small>{rooms?.filter(row => row.room).length ?? 0} available chats</small></span><ArrowRight /></button><div><ShieldCheck /><span><strong>Private by design</strong><small>Each family stays separate</small></span><Check /></div></section>
             <footer className="companion-hub-footer"><span>स</span><p>Your family’s chats and updates, in one place.</p></footer>
           </m.section>
@@ -598,6 +602,32 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
     </main>
     </LazyMotion>
   )
+}
+
+function SettingsHubRow({ icon, title, description, status, onClick }: { icon: ReactNode; title: string; description: string; status: string; onClick: () => void }) {
+  return <button type="button" className="settings-hub-row" onClick={onClick}><span className="settings-hub-icon">{icon}</span><span className="settings-hub-copy"><strong>{title}</strong><small>{description}</small><em>{status}</em></span><ChevronRight /></button>
+}
+
+function settingsSectionTitle(section: SettingsSection) {
+  if (section === 'you') return 'You'
+  if (section === 'family') return 'Family'
+  if (section === 'apps') return 'Connected apps'
+  if (section === 'notifications') return 'Notifications'
+  if (section === 'images') return 'Image preferences'
+  if (section === 'advanced') return 'Advanced'
+  if (section === 'admin') return 'Admin'
+  return 'Settings'
+}
+
+function settingsSectionDescription(section: SettingsSection) {
+  if (section === 'you') return 'Your language and personal preferences.'
+  if (section === 'family') return 'Family spaces, members, and invitations.'
+  if (section === 'apps') return 'Private accounts connected to Saathi.'
+  if (section === 'notifications') return 'How unread family updates work.'
+  if (section === 'images') return 'Choose how generated images begin.'
+  if (section === 'advanced') return 'Owner controls for inboxes, models, and usage.'
+  if (section === 'admin') return 'Restricted diagnostics and deployment access.'
+  return 'Manage your account, family, and Saathi.'
 }
 
 function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: () => void }) {
@@ -1051,7 +1081,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
               ? <article className="outgoing-message saved-voice-transcript" key={`message-${entry.item._id}`}><span>You · voice transcript · {formatRelativeTime(entry.item.createdAt)}</span><p>{entry.item.originalText}</p></article>
               : entry.item.voiceSpeaker === 'assistant'
                 ? <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
-                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><h3>Voice call summary <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><p>{entry.item.originalText}</p>{entry.item.voiceSeconds !== undefined && <small className="voice-call-cost">{formatVoiceDuration(entry.item.voiceSeconds)} · est. {formatVoiceCost(entry.item.voiceCostUsd ?? 0)} GPT‑Live{entry.item.voiceUsageFinalized === false ? ' · final usage unavailable' : ''}</small>}<ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} /></div></article>
+                : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><header><h3>Voice call</h3><small>{formatRelativeTime(entry.item.createdAt)}</small></header><p>{entry.item.originalText}</p>{entry.item.voiceSeconds !== undefined && <small className="voice-call-meta"><AudioLines /> {formatVoiceDuration(entry.item.voiceSeconds)}</small>}<ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} /></div></article>
             : entry.item.actorType === 'user'
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
@@ -1220,8 +1250,8 @@ function AgentStreamingResponse({ status, activity, responseText }: {
     <details className="agent-reasoning-trace" open={!hasText}>
       <summary aria-label={`${activityLabel}. ${hasText ? 'Reply is appearing' : 'In progress'}`}>
         <span className="agent-stream-pulse"><ThinkingState /></span>
-        <strong>{activityLabel}</strong>
-        <span>{hasText ? 'REPLY APPEARING' : 'IN PROGRESS'}</span>
+        <span className="agent-trace-copy"><strong>{activityLabel}</strong><small>{hasText ? 'Reply appearing' : 'In progress'}</small></span>
+        <span className="agent-trace-action"><span className="when-closed">Show activity</span><span className="when-open">Hide activity</span><ChevronDown /></span>
       </summary>
       <div className="agent-stream-steps" aria-label="Saathi activity">
         <span className="done"><Check /> Request received</span>
@@ -1417,7 +1447,7 @@ function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove 
     <label htmlFor="image-prompt">What should Saathi draw?</label>
     <Textarea id="image-prompt" value={prompt} onChange={event => onPrompt(event.target.value)} rows={2} placeholder="A family rangoli by the door, in Hindi labels…" />
     <details className="image-style-disclosure">
-      <summary>Style: {selected?.label ?? 'Warm household'} <small>Optional</small></summary>
+      <summary><span>Style: {selected?.label ?? 'Warm household'} <small>Optional</small></span><span className="image-style-action"><span className="when-closed">Change</span><span className="when-open">Done</span><ChevronDown /></span></summary>
       <label id="image-style-label">Choose a style</label>
       <Select value={style} onValueChange={value => onStyle(value as (typeof IMAGE_PRESETS)[number]['id'])}>
         <SelectTrigger aria-labelledby="image-style-label"><SelectValue /></SelectTrigger>

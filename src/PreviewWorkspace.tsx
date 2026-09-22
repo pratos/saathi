@@ -5,7 +5,6 @@ import {
   AudioLines,
   Brain,
   Check,
-  ChevronDown,
   CircleStop,
   ExternalLink,
   Eye,
@@ -297,7 +296,7 @@ function PrivacyTask({ done, onComplete }: { done: boolean; onComplete: () => vo
   const [family, setFamily] = useState<'kapoor' | 'rao'>(done ? 'rao' : 'kapoor')
   const switchFamily = () => setFamily('rao')
   return <div className="privacy-task">
-    <section className="preview-family-switcher"><span>ACTIVE FAMILY SPACE</span><Button variant="outline" type="button" onClick={switchFamily}><i className={family} />{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}<ChevronDown /></Button><small>One account. Separate access and information for each family.</small></section>
+    <section className="preview-family-switcher"><span>ACTIVE FAMILY SPACE</span><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><Button variant="outline" type="button" onClick={switchFamily} disabled={family === 'rao'}>{family === 'kapoor' ? <><i className="rao" /> Switch to Rao family <ArrowRight /></> : <><Check /> Viewing Rao family</>}</Button><small>One account. Separate access and information for each family.</small></section>
     <section className="scope-view"><header><div><span>{family === 'kapoor' ? 'KF' : 'RF'}</span><div><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><small>Sample family space</small></div></div><b>{family === 'kapoor' ? '3 ROOMS · 1 INBOX' : '2 ROOMS · 0 INBOX'}</b></header>{family === 'kapoor' ? <div className="scope-content"><Inbox /><span><strong>Mysuru school trip</strong><small>₹18,500 · 24 September · Greenwood School</small></span></div> : <div className="scope-empty"><LockKeyhole /><h2>The Kapoor trip is not shown here</h2><p>You’re viewing the Rao family example.</p></div>}</section>
     <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Check that the Kapoor trip is hidden' : 'Switch to the Rao family first'}</strong><p>In live mode, access is checked separately for each family.</p></div><Button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Preview check complete</> : 'Confirm trip is hidden'}</Button></section>
   </div>

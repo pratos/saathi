@@ -214,9 +214,11 @@
 
 .privacy-task { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 9px; }
 .preview-family-switcher { padding: 14px; }
-.preview-family-switcher button { width: 100%; display: grid; grid-template-columns: 12px 1fr 15px; gap: 8px; align-items: center; margin: 12px 0 8px; padding: 0 9px; border-color: var(--line); background: #f2f5f6; text-align: left; font-size: 10px; font-weight: 800; }
+.preview-family-switcher > strong { display: block; margin-top: 7px; color: var(--deep); font-size: 14px; }
+.preview-family-switcher button { width: 100%; min-height: 48px !important; display: grid; grid-template-columns: 12px minmax(0, 1fr) 15px; gap: 8px; align-items: center; margin: 12px 0 8px; padding: 0 9px; border-color: var(--line); background: #f2f5f6; text-align: left; font-size: 10px; font-weight: 800; }
 .preview-family-switcher button i { width: 9px; height: 9px; background: var(--teal); }
 .preview-family-switcher button i.rao { background: #5d71b0; }
+.preview-family-switcher button:disabled { opacity: 1; color: #4f4081; background: #eee9ff; }
 .preview-family-switcher small { color: var(--muted); font-size: 8px; line-height: 1.4; }
 .scope-view { min-height: 276px; overflow: hidden; }
 .scope-view header { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); background: #e9eef0; }

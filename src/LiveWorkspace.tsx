@@ -481,7 +481,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         <section className="mobile-family-overview" aria-label={`${family.space.name} overview`}>
           <button type="button" onClick={() => openPane('updates')}><span><Bell /><strong>Inbox</strong></span><small>{inboxItems === undefined ? 'Loading…' : `${inboxItems.length} recent ${inboxItems.length === 1 ? 'email' : 'emails'}`}</small><ArrowRight /></button>
           <button type="button" onClick={() => openPane('files')}><span><Folder /><strong>Files</strong></span><small>{spaceFiles === undefined ? 'Loading…' : `${spaceFiles.length} shared ${spaceFiles.length === 1 ? 'item' : 'items'}`}</small><ArrowRight /></button>
-          <button type="button" onClick={() => sharedRoom && openRoom(sharedRoom._id)} disabled={!sharedRoom}><span><MessageSquareText /><strong>Family chat</strong></span><small>{rooms === undefined ? 'Loading…' : `${rooms.filter(row => row.room).length} available ${rooms.filter(row => row.room).length === 1 ? 'chat' : 'chats'}`}</small><ArrowRight /></button>
         </section>
         <span className="list-heading">Private</span>
         {personalRoom
@@ -494,7 +493,6 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
         <span className="list-heading section-gap family-activity-heading">Family activity</span>
         <button className={`conversation-link family-activity-link ${pane === 'updates' ? 'selected' : ''}`} onClick={() => openPane('updates')}><i /><span>Family inbox</span><FamilyUnreadBadge spaceId={family.space._id} /></button>
-        <button className="dark-sign-out" onClick={() => void signOut()}><LogOut /> Sign out</button>
       </aside>
 
       <AnimatePresence mode="wait" initial={false}>

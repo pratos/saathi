@@ -127,9 +127,9 @@
 .choice-panel { padding: 13px; border: 1px solid var(--line); background: #e8edef; }
 .choice-panel h2 { margin: 6px 0 12px; font-size: 15px; }
 .choice-panel > div { display: grid; gap: 5px; }
-.choice-panel button { min-height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border-color: #c4cfd4; background: #f8fafb; font-size: 10px; font-weight: 750; }
-.choice-panel button > span { width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid #aebbc1; }
-.choice-panel button > span svg { width: 11px; }
+.choice-panel button { width: 100%; min-height: 40px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 12px; border-color: #c4cfd4; background: #f8fafb; font-size: 10px; font-weight: 750; text-align: left; }
+.choice-panel button > span { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; border: 1px solid #aebbc1; border-radius: 6px; }
+.choice-panel button > span svg { width: 12px; }
 .choice-panel button.selected { color: #fff !important; border-color: var(--deep) !important; background: var(--deep) !important; }
 .choice-panel > small { display: block; margin-top: 11px; color: var(--muted); font-size: 8px; line-height: 1.45; }
 
@@ -302,7 +302,7 @@
   .evidence-panel { display: none; }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .onboarding-shell { height: 100dvh; max-height: none; grid-template-rows: 58px minmax(0, 1fr) auto; overflow: hidden; }
   .onboarding-shell.journey-complete { grid-template-rows: 58px minmax(0, 1fr); }
   .onboarding-topbar { position: sticky; top: 0; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 7px; padding: 7px 9px; }
@@ -321,7 +321,7 @@
   .mobile-step-select { display: grid; gap: 4px; padding: 0 13px 9px; }
   .mobile-step-select > label { color: var(--muted); font: 750 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
   .mobile-step-select .mobile-step-trigger { min-height: 44px; border-color: var(--line); border-radius: 3px; color: var(--ink); background: #e5ecee; font: 800 10px/1 var(--font-sans); }
-  .task-stage { padding: 0 10px 18px; }
+  .task-stage { padding: 0 16px 24px; }
   .task-two-up, .language-task, .research-results, .handoff-task, .privacy-task { grid-template-columns: 1fr; }
   .task-card { min-height: 0; padding: 14px; }
   .source-card, .original-message { order: 1; }
@@ -330,14 +330,19 @@
   .source-card .email-body { margin: 10px 0; padding: 10px; line-height: 1.35; }
   .empty-result { min-height: 74px; }
   .language-task { align-items: stretch; }
-  .original-message, .translated-message { min-height: 230px; }
+  .original-message, .translated-message { min-height: 0; }
+  .choice-panel { padding: 16px; }
+  .choice-panel > div { gap: 8px; }
   .choice-panel button, .handoff-options button { min-height: 52px; }
+  .choice-panel button { padding: 0 16px; font-size: 12px; }
+  .choice-panel button > span { width: 22px; height: 22px; flex-basis: 22px; }
   .research-results .task-card { min-height: 0; }
   .handoff-brief { grid-column: 1; }
   .scope-view { min-height: 220px; }
   .scope-empty { min-height: 150px; }
   .boundary-check { grid-column: 1; grid-template-columns: 24px minmax(0, 1fr); }
-  .boundary-check button { grid-column: 1 / -1; }
+  .boundary-check button { grid-column: 1 / -1; min-height: 48px !important; }
+  .task-action, .research-empty button, .confirmation-gate button { min-height: 48px !important; }
   .onboarding-controls { position: static; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; padding: 7px 9px calc(7px + env(safe-area-inset-bottom)); box-shadow: 0 -5px 18px rgba(19,36,45,.08); }
   .onboarding-controls > span { display: none; }
   .onboarding-controls .restart-button { width: 44px; min-width: 44px; padding: 0; }
@@ -594,14 +599,14 @@
 .completion-grid > span { min-height: 54px; border-radius: 14px; background: rgba(255,255,255,.72); box-shadow: 0 7px 20px rgba(71,62,96,.06); font-size: 11px; }
 .completion-actions button { min-height: 48px; border-color: rgba(91,78,129,.12); border-radius: 14px; background: rgba(255,255,255,.76); font-size: 12px; }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .onboarding-topbar { border-radius: 0 0 20px 20px; }
   .task-heading { padding: 18px 16px 10px; }
   .task-heading h1 { font-size: 24px; }
   .task-heading p { font-size: 12px; }
   .mobile-step-select { padding-right: 16px; padding-left: 16px; }
   .mobile-step-select .mobile-step-trigger { border: 0; border-radius: 14px; color: #302a38; background: rgba(255,255,255,.72); box-shadow: 0 7px 20px rgba(71,62,96,.06); font-size: 12px; }
-  .task-stage { padding-right: 12px; padding-left: 12px; }
+  .task-stage { padding-right: 16px; padding-left: 16px; }
   .task-card { padding: 16px; }
   .onboarding-controls { border-radius: 20px 20px 0 0; }
 }

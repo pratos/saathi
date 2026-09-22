@@ -144,7 +144,7 @@ function ExperienceCard({ icon, title, description, detail, tone, disabled, onCl
 }) {
   const live = tone === 'live'
   return <m.div whileHover={reduceMotion || disabled ? undefined : { y: -3 }} whileTap={reduceMotion || disabled ? undefined : { scale: .99 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
-    <Card className={`experience-card ${live ? 'experience-card-live' : 'experience-card-preview'} h-full overflow-hidden rounded-[4px] border shadow-none ${live ? 'border-[#152630] bg-[#152630] text-white' : 'border-[#cbd4d9] bg-white text-[#14212b]'}`}>
+    <Card className={`experience-card ${live ? 'experience-card-live' : 'experience-card-preview'} h-full overflow-hidden rounded-[4px] border p-0 shadow-none ${live ? 'border-[#152630] bg-[#152630] text-white' : 'border-[#cbd4d9] bg-white text-[#14212b]'}`}>
       <Button type="button" variant="ghost" disabled={disabled} onClick={onClick} className="experience-card-button group grid h-full min-h-[142px] w-full grid-cols-[42px_minmax(0,1fr)_18px] content-start items-start gap-3 rounded-none p-4 text-left whitespace-normal hover:bg-transparent">
         <span className={`grid size-[42px] place-items-center rounded-[3px] ${live ? 'bg-[#61d6bd] text-[#092c27]' : 'bg-[#dcecff] text-[#224c79]'}`}>{icon}</span>
         <span className="grid gap-1.5 pt-0.5">

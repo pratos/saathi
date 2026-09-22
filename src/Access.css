@@ -66,7 +66,7 @@
 .access-user-identity { min-width: 0; display: flex; align-items: center; gap: 13px; }
 .access-user-identity > span { width: 43px; height: 43px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #fff; background: #233f72; font-weight: 900; }
 .access-user-identity div { min-width: 0; display: grid; gap: 2px; }
-.access-user-identity strong, .access-user-identity a, .access-user-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.access-user-identity strong, .access-user-identity a, .access-user-identity small { overflow-wrap: anywhere; white-space: normal; }
 .access-user-identity a { color: #9a4a2d; font-size: 12px; }
 .access-user-identity small { color: #596273; font-size: 11px; }
 .access-status { padding: 6px 9px; border-radius: 999px; color: #66501a; background: #fbf0d4; font-size: 11px; font-weight: 900; text-transform: uppercase; }
@@ -81,6 +81,8 @@
 @media (max-width: 900px) {
   .usage-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .usage-admin-grid { grid-template-columns: 1fr; }
+  .access-user-row { grid-template-columns: 1fr; padding: 16px; }
+  .access-user-actions { justify-content: flex-start; }
 }
 
 @media (max-width: 760px) {

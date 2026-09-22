@@ -48,7 +48,7 @@ button { border: 0; background: none; color: inherit; }
 .field-with-icon:focus-within { border-color: #c8755e; box-shadow: 0 0 0 3px rgba(227, 109, 79, .13); }
 .field-with-icon input { width: 100%; height: 100%; padding: 8px 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 17px; }
 .field-with-icon .otp-input { font-size: 25px; letter-spacing: .28em; text-align: center; }
-.primary.large, .secondary.large { min-height: 54px; margin-top: 14px; padding: 8px 20px; font-size: 16px; }
+.primary.large, .secondary.large { min-height: 54px; height: auto; margin-top: 14px; padding: 8px 20px; font-size: 16px; line-height: 1.35; white-space: normal; }
 .secondary { display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #d8cec7; border-radius: 10px; background: #fff; color: #5f565b; font-weight: 700; }
 .live-auth-card .text-button { min-height: 42px; font-size: 13px; }
 .security-note { display: flex; gap: 12px; align-items: flex-start; margin-top: 28px; padding: 15px; border-radius: 12px; color: #5e6e65; background: #edf4f0; font-size: 13px; line-height: 1.45; }
@@ -163,7 +163,7 @@ button { border: 0; background: none; color: inherit; }
 .language-setting button { min-height: 40px !important; border-radius: 12px; color: var(--text-warm); background: #202b25; font-size: 13px; font-weight: 700; }
 .language-setting button.selected { color: #143334; background: var(--aqua); }
 .agentmail-id { display: grid; gap: 8px; margin-top: 12px; }
-.agentmail-id code { overflow: hidden; padding: 10px 12px; border-radius: 10px; color: var(--text-warm); background: #202b25; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.agentmail-id code { overflow-wrap: anywhere; padding: 10px 12px; border-radius: 10px; color: var(--text-warm); background: #202b25; font-size: 12px; white-space: normal; }
 .agentmail-id button { min-height: 40px !important; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 10px; color: #17332f; background: var(--aqua); font-size: 12px; font-weight: 800; }
 .agentmail-id svg { width: 16px; }
 .open-file-room { min-height: 36px !important; margin-top: 8px; color: var(--aqua-soft); font-size: 12px; font-weight: 700; }
@@ -217,7 +217,7 @@ button { border: 0; background: none; color: inherit; }
 .live-conversation-workspace { grid-template-columns: clamp(92px, 8vw, 130px) clamp(280px, 20vw, 360px) minmax(480px, 1fr); }
 .live-conversation-workspace .conversation-context { display: none; }
 .live-conversation-workspace.is-family-open { grid-template-columns: clamp(92px, 8vw, 130px) clamp(280px, 20vw, 360px) minmax(480px, 1fr); }
-.live-conversation-workspace.is-family-open > .conversation-pane { display: none; }
+.live-conversation-workspace.is-family-open > .workspace-view-transition { display: none; }
 .live-conversation-workspace.is-family-open .conversation-context { display: block; min-width: 0; overflow-y: auto; }
 .conversation-context { min-width: 0; padding: 29px 28px; border-left: 1px solid var(--border-dark); background: #171e1a; }
 .context-title { min-height: 50px; display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
@@ -1634,7 +1634,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .centered-status h1 { color: #1c1c24; font-weight: 800; letter-spacing: -.04em; }
 .live-auth-card > p,
 .onboarding-card > p,
-.centered-status > p { color: #646574; }
+.centered-status > p { overflow-wrap: anywhere; color: #646574; }
 .field-with-icon,
 .onboarding-card input {
   border-color: rgba(91,78,129,.13);
@@ -1678,7 +1678,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   .saathi-entry .entry-story { min-height: 300px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.76); }
   .saathi-entry .entry-copy { margin-top: 38px; }
   .saathi-entry .entry-copy h1 { font-size: clamp(36px, 10vw, 46px); }
-  .saathi-entry .entry-access { padding: 28px 14px 38px; }
+  .saathi-entry .entry-access { padding: 28px 16px 38px; }
   .saathi-entry .experience-card-button { min-height: 126px; }
-  .live-auth-card, .onboarding-card { border-radius: 22px; }
+  .live-auth-card, .onboarding-card { padding: 16px; border-radius: 22px; }
 }

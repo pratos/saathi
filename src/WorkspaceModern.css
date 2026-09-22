@@ -2514,11 +2514,14 @@
   background: #f2effa;
 }
 .live-conversation-workspace .conversation-composer form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
   border-color: rgba(84,75,105,.14);
   background: #fff;
   box-shadow: 0 3px 12px rgba(54,45,76,.08);
   backdrop-filter: none;
 }
+.live-conversation-workspace .conversation-composer textarea { min-width: 0; }
 .live-conversation-workspace .composer-send,
 .live-conversation-workspace .composer-attachment,
 .live-conversation-workspace .composer-guidance-actions > button,

@@ -44,7 +44,11 @@ import { IMAGE_PRESET_GROUPS, IMAGE_PRESETS } from '../convex/lib/imageSafety'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
+import { Checkbox } from './components/ui/checkbox'
+import { Input } from './components/ui/input'
+import { Label } from './components/ui/label'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from './components/ui/select'
+import { Textarea } from './components/ui/textarea'
 import { AdminDashboard } from './AdminDashboard'
 import { VoiceBlob } from './VoiceBlob'
 import { emailBodyHtml } from './emailFormatting'
@@ -171,14 +175,14 @@ function AiAccessSetup({ family, access, onExit }: {
   </section></main>
 
   return <main className="onboarding-page access-onboarding">
-    <button className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</button>
+    <Button variant="bare" size="content" className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
     <section className="onboarding-card access-setup-card">
       <Badge className="mode-badge live"><KeyRound size={15} /> Choose your AI access</Badge>
       <h1>Bring your keys or request access</h1>
       <p>Your OpenRouter key unlocks chat, images, and structured decisions for <strong>{family.space.name}</strong>. Or request managed access from this deployment's administrator.</p>
       {family.membership.role === 'owner' ? <form onSubmit={saveKeys} className="onboarding-key-form">
         <label htmlFor="onboarding-openrouter">OpenRouter API key <small>required for BYOK</small></label>
-        <input id="onboarding-openrouter" type="password" autoComplete="off" value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-…" required />
+        <Input id="onboarding-openrouter" type="password" autoComplete="off" value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-…" required />
         <Button className="primary large" type="submit" disabled={busy || openRouterKey.trim().length < 20}>{busy ? 'Saving securely…' : 'Save key and start'} <ArrowRight /></Button>
       </form> : <p className="form-notice">Ask a family owner to add an OpenRouter key, or request deployment access below.</p>}
       <div className="access-divider"><span>or</span></div>
@@ -224,14 +228,14 @@ function UsernameSetup({ onExit }: { onExit: () => void }) {
   }
 
   return <main className="onboarding-page username-onboarding">
-    <button className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</button>
+    <Button variant="bare" size="content" className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
     <section className="onboarding-card">
       <Badge className="mode-badge live"><MessageSquareText size={15} /> One last step</Badge>
       <h1>How should your family tag you?</h1>
       <p>Choose a short username for family chats. People can type it after @ when they want your attention.</p>
       <form onSubmit={submit}>
         <label htmlFor="username">Your username</label>
-        <div className="username-field"><span aria-hidden="true">@</span><input id="username" value={username} onChange={event => setUsernameDraft(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} placeholder="priya_shah" minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" autoComplete="username" required autoFocus /></div>
+        <div className="username-field"><span aria-hidden="true">@</span><Input id="username" value={username} onChange={event => setUsernameDraft(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} placeholder="priya_shah" minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" autoComplete="username" required autoFocus /></div>
         <small className="username-help">Start with a letter. Use letters, numbers, or underscores.</small>
         <Button className="primary large" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Continue to chat'} <ArrowRight /></Button>
       </form>
@@ -271,17 +275,17 @@ function CreateFirstFamily({ onExit, isSuperadmin = false }: { onExit: () => voi
 
   return (
     <main className="onboarding-page">
-      <button className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</button>
+      <Button variant="bare" size="content" className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
       <section className="onboarding-card">
         <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
         <h1>Create your first family space</h1>
         <p>Each family keeps its conversations, inbox, members, and Saathi context separate.</p>
         <form onSubmit={submit}>
           <label htmlFor="family-name">What should we call this family?</label>
-          <input id="family-name" value={name} onChange={(event) => { setName(event.target.value); if (!alias || alias === suggestFamilyAliasFromName(name)) setAlias(suggestFamilyAliasFromName(event.target.value)) }} placeholder="For example, Parents’ home" minLength={2} maxLength={80} required autoFocus />
-          <label className="alias-toggle"><input type="checkbox" checked={wantInbox} onChange={event => setWantInbox(event.target.checked)} /> Create a family email address</label>
+          <Input id="family-name" value={name} onChange={(event) => { setName(event.target.value); if (!alias || alias === suggestFamilyAliasFromName(name)) setAlias(suggestFamilyAliasFromName(event.target.value)) }} placeholder="For example, Parents’ home" minLength={2} maxLength={80} required autoFocus />
+          <Label className="alias-toggle" htmlFor="first-family-inbox"><Checkbox id="first-family-inbox" checked={wantInbox} onCheckedChange={checked => setWantInbox(checked === true)} /> Create a family email address</Label>
           {wantInbox && <FamilyAliasFields alias={alias} onAlias={setAlias} />}
-          <button className="primary large" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create private family space'} <Plus /></button>
+          <Button className="primary large" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create private family space'} <Plus /></Button>
         </form>
         {error && <p className="form-error" role="alert">{error}</p>}
         {isSuperadmin && <Button className="secondary large" type="button" onClick={openAdminDashboard}><ShieldCheck /> Open superadmin dashboard</Button>}
@@ -591,7 +595,7 @@ function JevLabDrawer({ spaceId, onClose }: { spaceId: Id<'spaces'>; onClose: ()
       </section>
       <form className="jev-test-form" onSubmit={submit}>
         <label htmlFor="jev-test-input">Preview a routing decision</label>
-        <textarea id="jev-test-input" value={text} onChange={event => setText(event.target.value)} rows={4} maxLength={12_000} />
+        <Textarea id="jev-test-input" value={text} onChange={event => setText(event.target.value)} rows={4} maxLength={12_000} />
         <div className="jev-examples" aria-label="Example languages"><span>Try:</span>{[
           ['English', 'Book a table for dinner tomorrow'],
           ['Hinglish', 'Kal raat ke liye Pune mein family dinner table book karo'],
@@ -1064,9 +1068,9 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
           }}
         />}
         <form onSubmit={submit}>
-          <input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files, 'library')} />
-          <input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => chooseFiles(event.target.files, 'camera')} />
-          <input ref={receiptInputRef} className="visually-hidden" type="file" accept="image/*,application/pdf" onChange={(event) => chooseFiles(event.target.files, 'receipt')} />
+          <Input ref={fileInputRef} className="visually-hidden" type="file" accept={ACCEPTED_ATTACHMENTS} multiple onChange={(event) => chooseFiles(event.target.files, 'library')} />
+          <Input ref={cameraInputRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => chooseFiles(event.target.files, 'camera')} />
+          <Input ref={receiptInputRef} className="visually-hidden" type="file" accept="image/*,application/pdf" onChange={(event) => chooseFiles(event.target.files, 'receipt')} />
           {mentionMatch && <div className="mention-menu" role="listbox" aria-label="People you can mention">
             {mentionCandidates === undefined && <span className="mention-loading">Finding people…</span>}
             {mentionCandidates !== undefined && filteredMentions.length === 0 && <span className="mention-empty">No matching person in this chat</span>}
@@ -1074,7 +1078,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
               <b>{candidate.kind === 'assistant' ? <Bot /> : initialsFor(candidate.label)}</b><span><strong>@{candidate.kind === 'assistant' ? 'Saathi' : candidate.username}</strong><small>{candidate.kind === 'assistant' ? 'Family assistant' : candidate.label}</small></span>
             </button>)}
           </div>}
-          <textarea ref={textareaRef} value={message} onChange={(event) => { setMessage(event.target.value); updateMentionMatch(event.target.value, event.target.selectionStart) }} onSelect={(event) => updateMentionMatch(event.currentTarget.value, event.currentTarget.selectionStart)} onKeyDown={handleComposerKeyDown} placeholder={room.type === 'private' ? 'Ask Saathi anything… Type @ to tag' : 'Message your family… Type @ to tag'} aria-label="Message for your family" aria-autocomplete="list" aria-expanded={Boolean(mentionMatch)} rows={1} />
+          <Textarea ref={textareaRef} value={message} onChange={(event) => { setMessage(event.target.value); updateMentionMatch(event.target.value, event.target.selectionStart) }} onSelect={(event) => updateMentionMatch(event.currentTarget.value, event.currentTarget.selectionStart)} onKeyDown={handleComposerKeyDown} placeholder={room.type === 'private' ? 'Ask Saathi anything… Type @ to tag' : 'Message your family… Type @ to tag'} aria-label="Message for your family" aria-autocomplete="list" aria-expanded={Boolean(mentionMatch)} rows={1} />
           <Button className="composer-attachment" variant="ghost" size="icon" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Attach photos or documents"><Paperclip /></Button>
           <Button className="composer-send" type="submit" disabled={busy || !message.trim()}>{busy ? 'Sending…' : 'Send'} <Send /></Button>
         </form>
@@ -1314,7 +1318,7 @@ function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove 
   const selected = IMAGE_PRESETS.find(preset => preset.id === style)
   return <Card className="image-prompt-box" role="dialog" aria-label="Create an image">
     <label htmlFor="image-prompt">What should Saathi draw?</label>
-    <textarea id="image-prompt" value={prompt} onChange={event => onPrompt(event.target.value)} rows={2} placeholder="A family rangoli by the door, in Hindi labels…" />
+    <Textarea id="image-prompt" value={prompt} onChange={event => onPrompt(event.target.value)} rows={2} placeholder="A family rangoli by the door, in Hindi labels…" />
     <details className="image-style-disclosure">
       <summary>Style: {selected?.label ?? 'Warm household'} <small>Optional</small></summary>
       <label id="image-style-label">Choose a style</label>
@@ -1382,14 +1386,14 @@ function CreateFamilyDialog({ ownedCount, onClose, onCreated, createSpace }: {
   }
   return <div className="family-dialog-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="create-family-title" onMouseDown={event => event.stopPropagation()}>
-      <header><div><span>New family</span><h2 id="create-family-title">Create another family space</h2></div><button type="button" onClick={onClose} aria-label="Close"><X /></button></header>
+      <header><div><span>New family</span><h2 id="create-family-title">Create another family space</h2></div><Button variant="ghost" size="icon" type="button" onClick={onClose} aria-label="Close"><X /></Button></header>
       <p>You own {ownedCount} of 3 families. Each family keeps its chats, inbox, and Saathi separate.</p>
       <form className="dark-connect-card" onSubmit={submit}>
         <label htmlFor="new-family-name">Family name</label>
-        <input id="new-family-name" value={name} onChange={event => { setName(event.target.value); if (!alias || alias === suggestFamilyAliasFromName(name)) setAlias(suggestFamilyAliasFromName(event.target.value)) }} minLength={2} maxLength={80} required autoFocus />
-        <label className="alias-toggle"><input type="checkbox" checked={wantInbox} onChange={event => setWantInbox(event.target.checked)} /> Create a family email address</label>
+        <Input id="new-family-name" value={name} onChange={event => { setName(event.target.value); if (!alias || alias === suggestFamilyAliasFromName(name)) setAlias(suggestFamilyAliasFromName(event.target.value)) }} minLength={2} maxLength={80} required autoFocus />
+        <Label className="alias-toggle" htmlFor="additional-family-inbox"><Checkbox id="additional-family-inbox" checked={wantInbox} onCheckedChange={checked => setWantInbox(checked === true)} /> Create a family email address</Label>
         {wantInbox && <FamilyAliasFields alias={alias} onAlias={setAlias} />}
-        <button type="submit" disabled={busy || name.trim().length < 2}>{busy ? 'Creating…' : 'Create family'}</button>
+        <Button type="submit" disabled={busy || name.trim().length < 2}>{busy ? 'Creating…' : 'Create family'}</Button>
         {error && <small role="alert">{error}</small>}
       </form>
     </section>
@@ -1414,7 +1418,7 @@ function ConnectInbox({ spaceId }: { spaceId: Id<'spaces'> }) {
     }
   }
 
-  return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Choose an unused alias, then create a private address for this family.</p><FamilyAliasFields alias={alias} onAlias={setAlias} /><button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</button>{error && <small role="alert">{error}</small>}</form>
+  return <form className="dark-connect-card" onSubmit={submit}><label><Settings2 /> Family email inbox</label><p>Choose an unused alias, then create a private address for this family.</p><FamilyAliasFields alias={alias} onAlias={setAlias} /><Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create inbox'}</Button>{error && <small role="alert">{error}</small>}</form>
 }
 
 function FamilyAliasFields({ alias, onAlias }: { alias: string; onAlias: (value: string) => void }) {
@@ -1439,8 +1443,8 @@ function FamilyAliasFields({ alias, onAlias }: { alias: string; onAlias: (value:
   return <div className="family-alias-fields">
     <label htmlFor="family-alias">Family email alias</label>
     <div className="family-alias-row">
-      <input id="family-alias" value={alias} onChange={event => onAlias(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="kapoor-family" minLength={3} maxLength={32} />
-      <button type="button" onClick={() => void check()} disabled={checking || alias.trim().length < 3}>{checking ? 'Checking…' : 'Check'}</button>
+      <Input id="family-alias" value={alias} onChange={event => onAlias(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="kapoor-family" minLength={3} maxLength={32} />
+      <Button variant="outline" type="button" onClick={() => void check()} disabled={checking || alias.trim().length < 3}>{checking ? 'Checking…' : 'Check'}</Button>
     </div>
     <small>We’ll ask AgentMail if this address is free before creating it.</small>
     {status && <small role="status">{status}</small>}
@@ -1526,8 +1530,8 @@ function ByokKeys({ spaceId }: { spaceId: Id<'spaces'> }) {
           <button type="button" key={option.id} role="radio" aria-checked={provider === option.id} className={provider === option.id ? 'selected' : ''} onClick={() => setProvider(option.id)}>{option.label}</button>
         ))}
       </div>
-      <input type="password" autoComplete="off" value={secret} onChange={event => setSecret(event.target.value)} placeholder={provider === 'openrouter' ? 'sk-or-…' : 'sk-…'} aria-label="API key" required />
-      <button type="submit" disabled={busy || secret.trim().length < 20}>{busy ? 'Saving…' : 'Save key'}</button>
+      <Input type="password" autoComplete="off" value={secret} onChange={event => setSecret(event.target.value)} placeholder={provider === 'openrouter' ? 'sk-or-…' : 'sk-…'} aria-label="API key" required />
+      <Button type="submit" disabled={busy || secret.trim().length < 20}>{busy ? 'Saving…' : 'Save key'}</Button>
     </form>
     {feedback && <small role="status">{feedback}</small>}
     {(keys ?? []).map(key => <div className="byok-row" key={key.provider}>
@@ -1566,12 +1570,12 @@ function InviteMember({ spaceId }: { spaceId: Id<'spaces'> }) {
   }
 
   const pending = invitations?.filter(invitation => !invitation.acceptedAt && !invitation.revokedAt && !invitation.expired) ?? []
-  return <div className="invite-member-card"><form onSubmit={submit}><label htmlFor={`invite-email-${spaceId}`}><UserPlus /> Invite by email</label><input id={`invite-email-${spaceId}`} type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="family@example.com" required /><div className="chip-row" role="radiogroup" aria-label="Invitation role">{(['member', 'owner'] as const).map(option => <button type="button" key={option} role="radio" aria-checked={role === option} className={role === option ? 'selected' : ''} onClick={() => setRole(option)}>{option === 'owner' ? 'Owner' : 'Member'}</button>)}<button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</button></div></form>{feedback && <small role="status">{feedback}</small>}{pending.map(invitation => <div className="pending-invitation" key={invitation._id}><span><strong>{invitation.targetEmail}</strong><small>{invitation.role} · expires {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(invitation.expiresAt)}</small></span><button type="button" onClick={() => void revokeInvitation({ invitationId: invitation._id })}>Revoke</button></div>)}</div>
+  return <div className="invite-member-card"><form onSubmit={submit}><label htmlFor={`invite-email-${spaceId}`}><UserPlus /> Invite by email</label><Input id={`invite-email-${spaceId}`} type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="family@example.com" required /><div className="chip-row" role="radiogroup" aria-label="Invitation role">{(['member', 'owner'] as const).map(option => <Button variant="outline" type="button" key={option} role="radio" aria-checked={role === option} className={role === option ? 'selected' : ''} onClick={() => setRole(option)}>{option === 'owner' ? 'Owner' : 'Member'}</Button>)}<Button type="submit" disabled={busy}>{busy ? 'Sending…' : 'Invite'}</Button></div></form>{feedback && <small role="status">{feedback}</small>}{pending.map(invitation => <div className="pending-invitation" key={invitation._id}><span><strong>{invitation.targetEmail}</strong><small>{invitation.role} · expires {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(invitation.expiresAt)}</small></span><Button variant="outline" type="button" onClick={() => void revokeInvitation({ invitationId: invitation._id })}>Revoke</Button></div>)}</div>
 }
 
 function InvitationError({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const { signOut } = useAuthActions()
-  return <main className="centered-status"><Mail size={34} /><h1>Could not accept invitation</h1><p>{message}</p><div className="status-actions"><button className="primary" onClick={() => void signOut()}>Sign in with another email</button><button className="secondary" onClick={onDismiss}>Open my workspace</button></div></main>
+  return <main className="centered-status"><Mail size={34} /><h1>Could not accept invitation</h1><p>{message}</p><div className="status-actions"><Button className="primary" onClick={() => void signOut()}>Sign in with another email</Button><Button variant="outline" className="secondary" onClick={onDismiss}>Open my workspace</Button></div></main>
 }
 
 function LiveStatus({ message }: { message: string }) {

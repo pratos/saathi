@@ -25,6 +25,12 @@ import {
   Sparkles,
   WandSparkles,
 } from 'lucide-react'
+import { Badge } from './components/ui/badge'
+import { Button } from './components/ui/button'
+import { Checkbox } from './components/ui/checkbox'
+import { Label } from './components/ui/label'
+import { Progress } from './components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select'
 import './PreviewWorkspace.css'
 
 type StepId = 'inbox' | 'language' | 'memory' | 'research' | 'handoff' | 'approval' | 'privacy'
@@ -89,12 +95,12 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
   return (
     <main className={`onboarding-shell ${showCompletion ? 'journey-complete' : ''}`}>
       <header className="onboarding-topbar">
-        <button className="topbar-exit" type="button" onClick={onExit} aria-label="Exit preview"><ArrowLeft /><span>Exit preview</span></button>
+        <Button variant="bare" size="content" className="topbar-exit" type="button" onClick={onExit} aria-label="Exit preview"><ArrowLeft /><span>Exit preview</span></Button>
         <div className="topbar-title"><span>Saathi onboarding</span><b>Kapoor family journey</b></div>
-        <span className="simulation-badge"><Eye /> SIMULATION · SAMPLE DATA</span>
+        <Badge variant="accent" className="simulation-badge"><Eye /> SIMULATION · SAMPLE DATA</Badge>
         <div className="topbar-progress" aria-label={`${completed.length} of ${steps.length} steps complete`}>
           <span>{String(Math.min(activeIndex + 1, steps.length)).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</span>
-          <i><b style={{ width: `${(completed.length / steps.length) * 100}%` }} /></i>
+          <Progress value={(completed.length / steps.length) * 100} />
         </div>
       </header>
 
@@ -106,8 +112,10 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
               const Icon = step.icon
               const done = completed.includes(step.id)
               const locked = index > completed.length
-              return <button
+              return <Button
                 type="button"
+                variant="bare"
+                size="content"
                 key={step.id}
                 className={`${index === activeIndex ? 'active' : ''} ${done ? 'done' : ''}`}
                 disabled={locked}
@@ -117,7 +125,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
                 <span className="rail-index">{done ? <Check /> : locked ? <LockKeyhole /> : index + 1}</span>
                 <span><strong>{step.label}</strong><small>{done ? 'Complete' : locked ? 'Finish previous step' : 'Ready for you'}</small></span>
                 <Icon />
-              </button>
+              </Button>
             })}
           </nav>
           <div className="rail-safety"><ShieldCheck /><span><strong>Safe preview</strong>No account, personal data, provider calls, or external actions.</span></div>
@@ -133,7 +141,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
               </header>
               <div className="mobile-step-select">
                 <label htmlFor="mobile-journey-step">Journey step</label>
-                <div><select id="mobile-journey-step" value={activeIndex} onChange={(event) => goTo(Number(event.target.value))}>{steps.map((step, index) => <option key={step.id} value={index} disabled={index > completed.length}>{index + 1}. {step.label}{index > completed.length ? ' · locked' : ''}</option>)}</select><ChevronDown /></div>
+                <Select value={String(activeIndex)} onValueChange={(value) => goTo(Number(value))}><SelectTrigger id="mobile-journey-step" className="mobile-step-trigger"><SelectValue /></SelectTrigger><SelectContent>{steps.map((step, index) => <SelectItem key={step.id} value={String(index)} disabled={index > completed.length}>{index + 1}. {step.label}{index > completed.length ? ' · locked' : ''}</SelectItem>)}</SelectContent></Select>
               </div>
               <div className="task-stage" key={`${active.id}-${restartGeneration}`}>
                 {active.id === 'inbox' && <InboxTask done={isComplete} setRunning={() => setRunState('running')} onComplete={completeStep} />}
@@ -165,11 +173,11 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
       </div>
 
       {!showCompletion && <footer className="onboarding-controls">
-          <button className="restart-button" type="button" onClick={restart}><RefreshCcw /> Restart</button>
+          <Button variant="bare" size="content" className="restart-button" type="button" onClick={restart}><RefreshCcw /> Restart</Button>
           <span>{isComplete ? 'Task complete. Continue when ready.' : 'Complete the task to unlock Next.'}</span>
           <div>
-            <button type="button" onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}><ArrowLeft /> Back</button>
-            <button className="next-button" type="button" onClick={() => goTo(activeIndex + 1)} disabled={!isComplete || activeIndex === steps.length - 1}>Next <ArrowRight /></button>
+            <Button variant="outline" type="button" onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}><ArrowLeft /> Back</Button>
+            <Button className="next-button" type="button" onClick={() => goTo(activeIndex + 1)} disabled={!isComplete || activeIndex === steps.length - 1}>Next <ArrowRight /></Button>
           </div>
         </footer>}
     </main>
@@ -185,7 +193,7 @@ function Trace({ done, active, held, title, detail }: { done?: boolean; active?:
 }
 
 function ActionButton({ done, busy = false, onClick, children }: { done: boolean; busy?: boolean; onClick: () => void; children: ReactNode }) {
-  return <button type="button" className={`task-action ${done ? 'done' : ''}`} onClick={onClick} disabled={done || busy}>{done ? <><Check /> Task complete</> : children}</button>
+  return <Button type="button" className={`task-action ${done ? 'done' : ''}`} onClick={onClick} disabled={done || busy}>{done ? <><Check /> Task complete</> : children}</Button>
 }
 
 function InboxTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
@@ -227,7 +235,7 @@ function LanguageTask({ done, onComplete }: { done: boolean; onComplete: () => v
   const choose = (next: keyof typeof translations) => { setLanguage(next); onComplete() }
   return <div className="language-task">
     <article className="task-card original-message"><CardLabel icon={<Languages />} label="ORIGINAL · HINDI" /><div className="message-head"><span>AP</span><div><strong>Appa</strong><small>10:44 · same family conversation</small></div></div><p lang="hi">स्कूल ट्रिप का भुगतान चौबीस सितंबर तक करना है।</p></article>
-    <div className="choice-panel"><span>READ THIS AS</span><h2>Choose Asha’s view</h2><div>{(Object.keys(translations) as Array<keyof typeof translations>).map((id) => <button type="button" className={language === id ? 'selected' : ''} key={id} onClick={() => choose(id)}><span>{language === id ? <Check /> : null}</span>{translations[id].label}</button>)}</div><small>Names, dates, amounts, and source links stay unchanged.</small></div>
+    <div className="choice-panel"><span>READ THIS AS</span><h2>Choose Asha’s view</h2><div>{(Object.keys(translations) as Array<keyof typeof translations>).map((id) => <Button variant="outline" type="button" className={language === id ? 'selected' : ''} key={id} onClick={() => choose(id)}><span>{language === id ? <Check /> : null}</span>{translations[id].label}</Button>)}</div><small>Names, dates, amounts, and source links stay unchanged.</small></div>
     <article className={`task-card translated-message ${language ? 'visible' : ''}`}><CardLabel icon={<Sparkles />} label="SAATHI · READER VIEW" /><div className="message-head"><span className="saathi-avatar">स</span><div><strong>Saathi</strong><small>{language ? `Translated to ${translations[language].label}` : 'Waiting for your choice'}</small></div></div><p>{language ? translations[language].text : 'Choose a reading language to create this view.'}</p></article>
   </div>
 }
@@ -263,7 +271,7 @@ function ResearchTask({ done, setRunning, onComplete }: { done: boolean; setRunn
   const selected = citations.find((citation) => citation.id === selectedCitation)
   return <div className="research-task">
     <div className="query-strip"><Search /><div><small>SANITIZED PUBLIC QUERY</small><strong>Current Mysuru road conditions for Saturday morning</strong></div><span>Private names removed</span></div>
-    {!searched ? <section className="research-empty"><Globe2 /><h2>{searching ? 'Checking public sources…' : 'Ready to check the public web'}</h2><p>No private family message or memory will be included.</p><button type="button" onClick={run} disabled={searching}><Search />{searching ? ' Researching…' : ' Run cited research'}</button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span>{selected && <div className="citation-detail" role="status"><span>INSPECTED SOURCE</span><strong>{selected.title}</strong><p>{selected.excerpt}</p><small>{selected.provenance}</small></div>}</article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{citations.map((citation) => <button type="button" key={citation.id} className={selectedCitation === citation.id ? 'selected' : ''} onClick={() => inspect(citation.id)}><ExternalLink /><span><strong>{citation.title}</strong><small>{citation.kind} · retrieved today</small></span>{selectedCitation === citation.id ? <Check /> : <ArrowRight />}</button>)}</section></div>}
+    {!searched ? <section className="research-empty"><Globe2 /><h2>{searching ? 'Checking public sources…' : 'Ready to check the public web'}</h2><p>No private family message or memory will be included.</p><Button type="button" onClick={run} disabled={searching}><Search />{searching ? ' Researching…' : ' Run cited research'}</Button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span>{selected && <div className="citation-detail" role="status"><span>INSPECTED SOURCE</span><strong>{selected.title}</strong><p>{selected.excerpt}</p><small>{selected.provenance}</small></div>}</article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{citations.map((citation) => <Button variant="outline" type="button" key={citation.id} className={selectedCitation === citation.id ? 'selected' : ''} onClick={() => inspect(citation.id)}><ExternalLink /><span><strong>{citation.title}</strong><small>{citation.kind} · retrieved today</small></span>{selectedCitation === citation.id ? <Check /> : <ArrowRight />}</Button>)}</section></div>}
   </div>
 }
 
@@ -272,7 +280,7 @@ function HandoffTask({ done, onComplete }: { done: boolean; onComplete: () => vo
   const choose = (next: 'voice' | 'browser') => { setChoice(next); onComplete() }
   return <div className="handoff-task">
     <section className="handoff-brief"><CardLabel icon={<AudioLines />} label="ACTIVE GOAL" /><h2>“Find an accessible Mysuru hotel, but let me sign in.”</h2><p>Jev has observed two read-only results. Choose how to take control.</p></section>
-    <div className="handoff-options"><button type="button" className={choice === 'voice' ? 'selected' : ''} onClick={() => choose('voice')}><Mic /><span><strong>Continue by voice</strong><small>Discuss choices with Saathi Live</small></span>{choice === 'voice' && <Check />}</button><button type="button" className={choice === 'browser' ? 'selected' : ''} onClick={() => choose('browser')}><Monitor /><span><strong>Open live browser</strong><small>Take over for login or payment</small></span>{choice === 'browser' && <Check />}</button></div>
+    <div className="handoff-options"><Button variant="outline" type="button" className={choice === 'voice' ? 'selected' : ''} onClick={() => choose('voice')}><Mic /><span><strong>Continue by voice</strong><small>Discuss choices with Saathi Live</small></span>{choice === 'voice' && <Check />}</Button><Button variant="outline" type="button" className={choice === 'browser' ? 'selected' : ''} onClick={() => choose('browser')}><Monitor /><span><strong>Open live browser</strong><small>Take over for login or payment</small></span>{choice === 'browser' && <Check />}</Button></div>
     <section className="browser-preview"><header><Monitor /><span><strong>stay.example / mysuru</strong><small>{choice ? 'HANDOFF READY' : 'READ-ONLY OBSERVATION'}</small></span></header><div className="hotel-result"><i /><span><strong>Garden Courtyard</strong><small>Step-free entrance · family room</small></span><b>₹6,800</b></div><div className="hotel-result"><i /><span><strong>Lakeview House</strong><small>Lift · accessible bathroom</small></span><b>₹7,250</b></div><footer><ShieldCheck /> Saathi stores site cookies, never your password.</footer></section>
   </div>
 }
@@ -280,8 +288,8 @@ function HandoffTask({ done, onComplete }: { done: boolean; onComplete: () => vo
 function ApprovalTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
   const [reviewed, setReviewed] = useState(done)
   return <div className="task-two-up approval-task">
-    <article className="task-card draft-card"><CardLabel icon={<Mail />} label="DRAFT REPLY · NOT SENT" /><dl className="draft-meta"><div><dt>TO</dt><dd>trips@greenwood-school.example</dd></div><div><dt>SUBJECT</dt><dd>Re: Mysuru field trip</dd></div></dl><div className="draft-body">Hello,<br /><br />Thank you. We have noted the 24 September deadline and will review the ₹18,500 payment tonight.<br /><br />Regards,<br />Asha Kapoor</div><label><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /> I reviewed the exact recipient and final body</label></article>
-    <article className={`task-card confirmation-gate ${done ? 'confirmed' : ''}`}><ShieldCheck /><span>{done ? 'SIMULATED CONFIRMATION RECORDED' : 'EXTERNAL ACTION PAUSED'}</span><h2>{done ? 'Sample reply marked sent' : 'Only you can send this reply'}</h2><p>{done ? 'In live mode, delivery metadata would be saved to the same thread.' : 'Saathi can draft, but execution requires a fresh permission check and explicit confirmation.'}</p><button type="button" onClick={onComplete} disabled={!reviewed || done}>{done ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample send</>}</button><small>Simulation only · no email will be sent</small></article>
+    <article className="task-card draft-card"><CardLabel icon={<Mail />} label="DRAFT REPLY · NOT SENT" /><dl className="draft-meta"><div><dt>TO</dt><dd>trips@greenwood-school.example</dd></div><div><dt>SUBJECT</dt><dd>Re: Mysuru field trip</dd></div></dl><div className="draft-body">Hello,<br /><br />Thank you. We have noted the 24 September deadline and will review the ₹18,500 payment tonight.<br /><br />Regards,<br />Asha Kapoor</div><Label className="draft-review" htmlFor="review-sample-send"><Checkbox id="review-sample-send" checked={reviewed} onCheckedChange={(checked) => setReviewed(checked === true)} /> I reviewed the exact recipient and final body</Label></article>
+    <article className={`task-card confirmation-gate ${done ? 'confirmed' : ''}`}><ShieldCheck /><span>{done ? 'SIMULATED CONFIRMATION RECORDED' : 'EXTERNAL ACTION PAUSED'}</span><h2>{done ? 'Sample reply marked sent' : 'Only you can send this reply'}</h2><p>{done ? 'In live mode, delivery metadata would be saved to the same thread.' : 'Saathi can draft, but execution requires a fresh permission check and explicit confirmation.'}</p><Button type="button" onClick={onComplete} disabled={!reviewed || done}>{done ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample send</>}</Button><small>Simulation only · no email will be sent</small></article>
   </div>
 }
 
@@ -289,9 +297,9 @@ function PrivacyTask({ done, onComplete }: { done: boolean; onComplete: () => vo
   const [family, setFamily] = useState<'kapoor' | 'rao'>(done ? 'rao' : 'kapoor')
   const switchFamily = () => setFamily('rao')
   return <div className="privacy-task">
-    <section className="family-switcher"><span>ACTIVE FAMILY SPACE</span><button type="button" onClick={switchFamily}><i className={family} />{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}<ChevronDown /></button><small>One account, independent memberships and data scopes.</small></section>
+    <section className="family-switcher"><span>ACTIVE FAMILY SPACE</span><Button variant="outline" type="button" onClick={switchFamily}><i className={family} />{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}<ChevronDown /></Button><small>One account, independent memberships and data scopes.</small></section>
     <section className="scope-view"><header><div><span>{family === 'kapoor' ? 'KF' : 'RF'}</span><div><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><small>Authorized workspace</small></div></div><b>{family === 'kapoor' ? '3 ROOMS · 1 INBOX' : '2 ROOMS · 0 INBOX'}</b></header>{family === 'kapoor' ? <div className="scope-content"><Inbox /><span><strong>Mysuru school trip</strong><small>₹18,500 · 24 September · Greenwood School</small></span></div> : <div className="scope-empty"><LockKeyhole /><h2>No Kapoor data in this scope</h2><p>Rooms, inbox subscriptions, search, memory, and model context were replaced together.</p></div>}</section>
-    <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Boundary ready to verify' : 'Switch to the Rao family first'}</strong><p>The live app authorizes each family independently on the server.</p></div><button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Boundary verified</> : 'Verify isolation'}</button></section>
+    <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Boundary ready to verify' : 'Switch to the Rao family first'}</strong><p>The live app authorizes each family independently on the server.</p></div><Button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Boundary verified</> : 'Verify isolation'}</Button></section>
   </div>
 }
 
@@ -303,7 +311,7 @@ function Completion({ onOpenLive, onRestart }: { onOpenLive: () => void; onResta
   return <section className="completion-state">
     <span className="completion-mark"><Check /></span><span>ONBOARDING COMPLETE · 7 / 7</span><h1>You completed one family journey.</h1><p>You turned a school email into translated, remembered, researched, human-approved work—without crossing a family or safety boundary.</p>
     <div className="completion-grid">{steps.map((step) => { const Icon = step.icon; return <span key={step.id}><Icon /><Check />{step.label}</span> })}</div>
-    <div className="completion-actions"><button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></button><button type="button" onClick={onRestart}><RefreshCcw /> Replay simulation</button></div>
+    <div className="completion-actions"><Button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></Button><Button variant="outline" type="button" onClick={onRestart}><RefreshCcw /> Replay simulation</Button></div>
     <small><ShieldCheck /> Live mode requires sign-in and uses only your authorized family data. Preview data never carries over.</small>
   </section>
 }

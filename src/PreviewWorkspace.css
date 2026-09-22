@@ -24,7 +24,7 @@
 .onboarding-shell.journey-complete { grid-template-rows: 58px minmax(0, 1fr); }
 .onboarding-shell *, .onboarding-shell *::before, .onboarding-shell *::after { box-sizing: border-box; }
 .onboarding-shell h1, .onboarding-shell h2 { font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.035em; }
-.onboarding-shell button { min-height: 42px; border: 1px solid transparent; border-radius: 3px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.onboarding-shell button { min-height: 44px; border: 1px solid transparent; border-radius: 3px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
 .onboarding-shell button:focus-visible, .onboarding-shell input:focus-visible { outline: 3px solid rgba(32,130,111,.32); outline-offset: 2px; }
 .onboarding-shell button:disabled { cursor: not-allowed; opacity: .46; }
 .onboarding-shell svg { width: 18px; height: 18px; }
@@ -46,8 +46,8 @@
 .simulation-badge { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid #acd3c9; border-radius: 3px; color: #176354; background: #e0f1ed; font: 800 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .04em; }
 .simulation-badge svg { width: 13px; }
 .topbar-progress { display: grid; grid-template-columns: auto 1fr; gap: 9px; align-items: center; font: 750 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.topbar-progress > i { height: 5px; overflow: hidden; background: #dbe2e5; }
-.topbar-progress > i b { height: 100%; display: block; background: var(--teal); transition: width .25s ease; }
+.topbar-progress [data-slot="progress"] { height: 5px; border-radius: 0; background: #dbe2e5; }
+.topbar-progress [data-slot="progress-indicator"] { background: var(--teal); }
 .onboarding-grid { min-height: 0; display: grid; grid-template-columns: 236px minmax(580px, 1fr) 270px; }
 
 .journey-rail, .evidence-panel { min-height: 0; overflow-y: auto; background: var(--panel); }
@@ -201,8 +201,8 @@
 .draft-meta dt { color: var(--muted); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .draft-meta dd { overflow-wrap: anywhere; margin: 0; font-size: 9px; font-weight: 750; }
 .draft-body { padding: 13px; color: #41545e; background: #edf1f3; font-size: 10px; line-height: 1.55; }
-.draft-card label { display: flex; align-items: center; gap: 8px; margin-top: 13px; font-size: 9px; font-weight: 750; }
-.draft-card input { width: 17px; height: 17px; accent-color: var(--teal); }
+.draft-card .draft-review { display: flex; align-items: center; gap: 8px; margin-top: 13px; font-size: 9px; font-weight: 750; }
+.draft-card .draft-review [data-slot="checkbox"] { width: 17px; height: 17px; border-color: #8da099; }
 .confirmation-gate { display: grid; justify-items: center; align-content: center; text-align: center; }
 .confirmation-gate > svg { width: 38px; height: 38px; padding: 8px; color: #986021; background: #f2e6d3; }
 .confirmation-gate > span { margin-top: 13px; color: var(--amber); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -318,9 +318,7 @@
   .run-state { padding: 0 7px; }
   .mobile-step-select { display: grid; gap: 4px; padding: 0 13px 9px; }
   .mobile-step-select > label { color: var(--muted); font: 750 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
-  .mobile-step-select > div { position: relative; }
-  .mobile-step-select select { width: 100%; min-height: 44px; padding: 0 34px 0 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: #e5ecee; appearance: none; font: 800 10px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  .mobile-step-select > div > svg { position: absolute; top: 50%; right: 10px; width: 15px; pointer-events: none; transform: translateY(-50%); }
+  .mobile-step-select .mobile-step-trigger { min-height: 44px; border-color: var(--line); border-radius: 3px; color: var(--ink); background: #e5ecee; font: 800 10px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .task-stage { padding: 0 10px 88px; }
   .task-two-up, .language-task, .research-results, .handoff-task, .privacy-task { grid-template-columns: 1fr; }
   .task-card { min-height: 0; padding: 14px; }

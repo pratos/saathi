@@ -29,9 +29,9 @@ export function PwaInstallReminder({ controller }: { controller: PwaInstallContr
         : 'Tap Share, then Add to Home Screen.'}</small>
       <span className="pwa-install-reminder-actions">
         {controller.mode === 'native' && <Button onClick={() => void controller.install()}>Install</Button>}
-        <button type="button" onClick={controller.dismiss}>Not now</button>
+        <Button variant="ghost" onClick={controller.dismiss}>Not now</Button>
       </span>
     </div>
-    <button type="button" className="pwa-install-reminder-close" onClick={controller.dismiss} aria-label="Dismiss install reminder"><X size={18} /></button>
+    <Button variant="ghost" size="icon" className="pwa-install-reminder-close" onClick={controller.dismiss} aria-label="Dismiss install reminder"><X size={18} /></Button>
   </aside>
 }

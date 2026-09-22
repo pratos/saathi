@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import { fileURLToPath } from 'node:url'
 
 const portalLatencyOptimizations = {
   name: 'portal-latency-optimizations',
@@ -21,20 +22,25 @@ export default defineConfig(({ mode }) => {
   const portalBuild = mode === 'portal'
 
   return {
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
+    },
     plugins: [
       react(),
       tailwindcss(),
       ...(portalBuild
-        ? [portalLatencyOptimizations, viteSingleFile({ removeViteModuleLoader: true })]
+        ? [portalLatencyOptimizations, VitePWA({ disable: true }), viteSingleFile({ removeViteModuleLoader: true })]
         : [VitePWA({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png'],
             workbox: {
               globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
-              globIgnores: ['**/PreviewWorkspace-*.*', '**/LiveWorkspace-*.*'],
+              globIgnores: ['**/PreviewWorkspace-*.*', '**/LiveWorkspace-*.*', '**/agent-signal-field-*.*'],
               navigateFallback: 'index.html',
               runtimeCaching: [{
-                urlPattern: /\/assets\/(?:PreviewWorkspace|LiveWorkspace)-[^/]+\.(?:js|css)$/,
+                urlPattern: /\/assets\/(?:PreviewWorkspace|LiveWorkspace|agent-signal-field)-[^/]+\.(?:js|css)$/,
                 handler: 'CacheFirst',
                 options: {
                   // Stable legacy key: existing installed PWAs already use this runtime cache.

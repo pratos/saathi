@@ -3,6 +3,9 @@ import { useMutation, useQuery } from 'convex/react'
 import { Activity, ArrowLeft, Ban, Check, DollarSign, ExternalLink, Mail, RefreshCw, Search, ShieldCheck, UserRoundCheck } from 'lucide-react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
+import { Button } from './components/ui/button'
+import { Card } from './components/ui/card'
+import { Input } from './components/ui/input'
 
 type AccessStatus = 'pending' | 'approved' | 'blocked'
 
@@ -46,22 +49,22 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   return <main className="access-admin-page">
     <header className="access-admin-header">
-      <button type="button" onClick={onClose}><ArrowLeft /> Back to Saathi</button>
+      <Button variant="outline" type="button" onClick={onClose}><ArrowLeft /> Back to Saathi</Button>
       <div><span><ShieldCheck /> Superadmin</span><h1>Operations</h1><p>Monitor deployment-funded AI usage by family, then manage account access.</p></div>
     </header>
     <section className="usage-admin" aria-labelledby="usage-heading">
       <div className="usage-admin-heading">
         <div><span><Activity /> Usage & cost</span><h2 id="usage-heading">Tracked AI cost</h2><p>Estimated provider cost from metered Saathi activity. GPT-Live session time and delegated Luna work are itemized separately.</p></div>
-        <button type="button" onClick={() => setReportNow(Date.now())}><RefreshCw /> Refresh</button>
+        <Button variant="outline" type="button" onClick={() => setReportNow(Date.now())}><RefreshCw /> Refresh</Button>
       </div>
       {usage === undefined
         ? <p className="usage-loading">Loading usage…</p>
         : <>
           <div className="usage-summary-cards">
-            <article><DollarSign /><span>Platform-funded this month</span><strong>{formatUsd(usage.totals.monthPlatformCostUsd)}</strong><small>Deployment keys + legacy rows</small></article>
-            <article><Activity /><span>Projected platform cost</span><strong>{formatUsd(usage.totals.projectedPlatformMonthlyUsd)}</strong><small>Current UTC-month run rate</small></article>
-            <article><DollarSign /><span>Family BYOK spend</span><strong>{formatUsd(usage.totals.familyByokCostUsd)}</strong><small>Tracked, paid by families</small></article>
-            <article><Activity /><span>{usage.rowLimitReached ? 'Latest tracked spend' : 'All tracked spend'}</span><strong>{formatUsd(usage.totals.trackedCostUsd)}</strong><small>{usage.trackedRows.toLocaleString()} ledger rows</small></article>
+            <Card><DollarSign /><span>Platform-funded this month</span><strong>{formatUsd(usage.totals.monthPlatformCostUsd)}</strong><small>Deployment keys + legacy rows</small></Card>
+            <Card><Activity /><span>Projected platform cost</span><strong>{formatUsd(usage.totals.projectedPlatformMonthlyUsd)}</strong><small>Current UTC-month run rate</small></Card>
+            <Card><DollarSign /><span>Family BYOK spend</span><strong>{formatUsd(usage.totals.familyByokCostUsd)}</strong><small>Tracked, paid by families</small></Card>
+            <Card><Activity /><span>{usage.rowLimitReached ? 'Latest tracked spend' : 'All tracked spend'}</span><strong>{formatUsd(usage.totals.trackedCostUsd)}</strong><small>{usage.trackedRows.toLocaleString()} ledger rows</small></Card>
           </div>
           <div className="usage-admin-grid">
             <section className="usage-panel">
@@ -89,12 +92,12 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
     <section className="access-admin-toolbar">
       <div className="access-section-heading"><h2>Account access</h2><p>Approve people who can use deployment-funded AI keys.</p></div>
       <div className="access-stats">
-        <button className={filter === 'pending' ? 'selected' : ''} onClick={() => setFilter('pending')}><strong>{counts.pending}</strong><span>Pending</span></button>
-        <button className={filter === 'approved' ? 'selected' : ''} onClick={() => setFilter('approved')}><strong>{counts.approved}</strong><span>Approved</span></button>
-        <button className={filter === 'blocked' ? 'selected' : ''} onClick={() => setFilter('blocked')}><strong>{counts.blocked}</strong><span>Blocked</span></button>
-        <button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}><strong>{users?.length ?? 0}</strong><span>All</span></button>
+        <Button variant="outline" className={filter === 'pending' ? 'selected' : ''} onClick={() => setFilter('pending')}><strong>{counts.pending}</strong><span>Pending</span></Button>
+        <Button variant="outline" className={filter === 'approved' ? 'selected' : ''} onClick={() => setFilter('approved')}><strong>{counts.approved}</strong><span>Approved</span></Button>
+        <Button variant="outline" className={filter === 'blocked' ? 'selected' : ''} onClick={() => setFilter('blocked')}><strong>{counts.blocked}</strong><span>Blocked</span></Button>
+        <Button variant="outline" className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}><strong>{users?.length ?? 0}</strong><span>All</span></Button>
       </div>
-      <label className="access-search"><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name or email" /></label>
+      <label className="access-search"><Search /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name or email" /></label>
       {message && <p role="status">{message}</p>}
     </section>
     <section className="access-user-list" aria-label="User access requests">
@@ -105,11 +108,11 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
         <span className="access-status">{user.isSuperadmin ? 'superadmin' : user.status}</span>
         <div className="access-user-actions">
           <a href={`mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('Your Saathi access')}`}><Mail /> Email</a>
-          {!user.isSuperadmin && user.status !== 'approved' && <button disabled={busyUserId === user._id} onClick={() => void update(user._id, 'approved')}><UserRoundCheck /> Approve</button>}
+          {!user.isSuperadmin && user.status !== 'approved' && <Button disabled={busyUserId === user._id} onClick={() => void update(user._id, 'approved')}><UserRoundCheck /> Approve</Button>}
           {!user.isSuperadmin && user.status !== 'blocked' && (confirmingBlockId === user._id
-            ? <><button className="danger" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'blocked')}><Ban /> Confirm block</button><button disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(null)}>Cancel</button></>
-            : <button className="danger" disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(user._id)}><Ban /> Block</button>)}
-          {!user.isSuperadmin && user.status !== 'pending' && <button disabled={busyUserId === user._id} onClick={() => void update(user._id, 'pending')}><Check /> Reset</button>}
+            ? <><Button variant="destructive" className="danger" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'blocked')}><Ban /> Confirm block</Button><Button variant="outline" disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(null)}>Cancel</Button></>
+            : <Button variant="destructive" className="danger" disabled={busyUserId === user._id} onClick={() => setConfirmingBlockId(user._id)}><Ban /> Block</Button>)}
+          {!user.isSuperadmin && user.status !== 'pending' && <Button variant="outline" disabled={busyUserId === user._id} onClick={() => void update(user._id, 'pending')}><Check /> Reset</Button>}
         </div>
       </article>)}
     </section>

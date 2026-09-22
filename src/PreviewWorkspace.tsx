@@ -1,12 +1,11 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import { useState, type ComponentType, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
   AudioLines,
   Brain,
   Check,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   CircleStop,
   ExternalLink,
   Eye,
@@ -14,364 +13,271 @@ import {
   Globe2,
   Inbox,
   Languages,
+  LockKeyhole,
   Mail,
   MemoryStick,
   Mic,
   Monitor,
-  Pause,
-  Play,
+  RefreshCcw,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
-  Volume2,
   WandSparkles,
 } from 'lucide-react'
 import './PreviewWorkspace.css'
 
-type ChapterId = 'inbox' | 'language' | 'memory' | 'research' | 'voice' | 'approval'
-type Language = 'en' | 'hi' | 'mr'
-
-type Chapter = {
-  id: ChapterId
+type StepId = 'inbox' | 'language' | 'memory' | 'research' | 'handoff' | 'approval' | 'privacy'
+type Step = {
+  id: StepId
   label: string
-  shortLabel: string
-  description: string
-  proof: string
+  task: string
+  guide: string
   icon: ComponentType<{ size?: number; strokeWidth?: number }>
+  route: string
   providers: string[]
 }
 
-const chapters: Chapter[] = [
-  {
-    id: 'inbox',
-    label: 'Family inbox',
-    shortLabel: 'Inbox',
-    description: 'Turn incoming family email into structured, source-linked work.',
-    proof: 'Signed inbound mail → durable workflow → validated extraction',
-    icon: Inbox,
-    providers: ['AgentMail', 'Convex', 'OpenAI'],
-  },
-  {
-    id: 'language',
-    label: 'One family, three languages',
-    shortLabel: 'Language',
-    description: 'Each person reads the same canonical conversation in their own language.',
-    proof: 'Original preserved → translation cached once per language',
-    icon: Languages,
-    providers: ['Convex', 'OpenRouter'],
-  },
-  {
-    id: 'memory',
-    label: 'Memory + Jev',
-    shortLabel: 'Memory',
-    description: 'Recall explicit family facts while Jev recommends the safest route.',
-    proof: 'Room-scoped memory → Jev route → authorized Pi tools',
-    icon: Brain,
-    providers: ['TypeSafe Jev', 'Pi', 'Convex'],
-  },
-  {
-    id: 'research',
-    label: 'Current, cited research',
-    shortLabel: 'Research',
-    description: 'Research the public web without sending private family content.',
-    proof: 'Public query only → fresh sources → citations saved with answer',
-    icon: Globe2,
-    providers: ['Firecrawl', 'Pi', 'OpenRouter'],
-  },
-  {
-    id: 'voice',
-    label: 'Voice + live browser',
-    shortLabel: 'Voice',
-    description: 'Move naturally from speech to safe browser actions and human handoff.',
-    proof: 'GPT Live → page-derived actions → Jev browser decision',
-    icon: AudioLines,
-    providers: ['OpenAI', 'Jev', 'Pi'],
-  },
-  {
-    id: 'approval',
-    label: 'Draft, then confirm',
-    shortLabel: 'Approval',
-    description: 'Keep consequential actions behind a clear human decision.',
-    proof: 'Draft separated from execution → permission rechecked → idempotent send',
-    icon: ShieldCheck,
-    providers: ['Convex', 'AgentMail'],
-  },
+const steps: Step[] = [
+  { id: 'inbox', label: 'Extract family email', task: 'Turn a school note into trusted work', guide: 'Review the source, then ask Saathi to extract the details that matter.', icon: Inbox, route: 'agentmail.inbound → inbox.extract', providers: ['AgentMail', 'OpenAI', 'Convex'] },
+  { id: 'language', label: 'Translate the conversation', task: 'Let everyone read in their language', guide: 'Choose how Asha should read Appa’s original message.', icon: Languages, route: 'message.original → translation.cache', providers: ['OpenRouter', 'Convex'] },
+  { id: 'memory', label: 'Guide Saathi + Jev', task: 'Save one useful family preference', guide: 'Inspect Jev’s route, then explicitly decide whether this fact should be remembered.', icon: Brain, route: 'jev.route → agent.memory', providers: ['TypeSafe Jev', 'Pi', 'Convex'] },
+  { id: 'research', label: 'Research with citations', task: 'Check current public information', guide: 'Run a privacy-safe web query, then inspect one retrieved source.', icon: Globe2, route: 'query.sanitize → firecrawl.search', providers: ['Firecrawl', 'Pi', 'OpenRouter'] },
+  { id: 'handoff', label: 'Try voice + live browser', task: 'Choose the right human handoff', guide: 'Pick a way to continue. Sign-in and payment always return to you.', icon: AudioLines, route: 'voice.intent → jev.browser → handoff', providers: ['OpenAI Live', 'Jev', 'Firecrawl'] },
+  { id: 'approval', label: 'Review and confirm', task: 'Approve the exact draft, not an idea', guide: 'Inspect the recipient and final body before confirming the simulated send.', icon: ShieldCheck, route: 'draft.create → permission.check → confirm', providers: ['AgentMail', 'Convex'] },
+  { id: 'privacy', label: 'Verify family boundaries', task: 'Switch spaces without carrying data over', guide: 'Move to another family and verify the Kapoor trip disappears from scope.', icon: LockKeyhole, route: 'space.switch → subscription.replace', providers: ['Convex Auth', 'Convex'] },
 ]
 
-const traces: Record<ChapterId, Array<{ title: string; detail: string; state: 'done' | 'active' | 'held' }>> = {
-  inbox: [
-    { title: 'Inbound verified', detail: 'AgentMail message ID deduplicated', state: 'done' },
-    { title: 'Fields extracted', detail: '₹18,500 · 24 Sep · school', state: 'done' },
-    { title: 'Action held', detail: 'Nothing is sent automatically', state: 'held' },
-  ],
-  language: [
-    { title: 'Original stored', detail: 'Hindi remains canonical', state: 'done' },
-    { title: 'Reader view resolved', detail: 'English for Asha', state: 'active' },
-    { title: 'Translation cached', detail: 'Reused for the next reader', state: 'done' },
-  ],
-  memory: [
-    { title: 'Intent classified', detail: 'memory · 94% confidence', state: 'done' },
-    { title: 'Fact stored', detail: 'Explicit, room-scoped memory', state: 'active' },
-    { title: 'Pi continues', detail: 'Authorized tools remain available', state: 'done' },
-  ],
-  research: [
-    { title: 'Query sanitized', detail: 'No private household text leaves Saathi', state: 'done' },
-    { title: 'Public web searched', detail: '3 current sources retrieved', state: 'active' },
-    { title: 'Evidence attached', detail: 'URLs and retrieval times saved', state: 'done' },
-  ],
-  voice: [
-    { title: 'Speech understood', detail: 'Live transcript stays in the room', state: 'done' },
-    { title: 'Page observed', detail: 'Safe actions derived from page state', state: 'active' },
-    { title: 'Human handoff', detail: 'Login and confirmation stay with you', state: 'held' },
-  ],
-  approval: [
-    { title: 'Draft prepared', detail: 'Recipient and final body are visible', state: 'done' },
-    { title: 'Permission checked', detail: 'Room participant may send', state: 'done' },
-    { title: 'Awaiting confirmation', detail: 'External action is paused', state: 'held' },
-  ],
+const boundaries: Record<StepId, string> = {
+  inbox: 'Original email stays beside every extracted field.',
+  language: 'Translation changes the reader view, never the canonical message.',
+  memory: 'Only explicit facts are retained, scoped to this room and family.',
+  research: 'Only the sanitized public question reaches web research.',
+  handoff: 'Passwords, OTPs, payments, and confirmation stay with the person.',
+  approval: 'Drafting and execution are separate, freshly authorized operations.',
+  privacy: 'Family scope changes at the authorization boundary, not with a UI filter.',
 }
 
-export function PreviewWorkspace({ onExit }: { onExit: () => void }) {
-  const [activeId, setActiveId] = useState<ChapterId>('inbox')
-  const [isPlaying, setIsPlaying] = useState(false)
-  const activeIndex = chapters.findIndex((chapter) => chapter.id === activeId)
-  const active = chapters[activeIndex]
+export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; onOpenLive: () => void }) {
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [completed, setCompleted] = useState<StepId[]>([])
+  const [runState, setRunState] = useState<'waiting' | 'running' | 'complete'>('waiting')
+  const active = steps[activeIndex]
+  const isComplete = completed.includes(active.id)
+  const journeyComplete = completed.length === steps.length
 
-  const move = (direction: -1 | 1) => {
-    const nextIndex = (activeIndex + direction + chapters.length) % chapters.length
-    setActiveId(chapters[nextIndex].id)
+  const completeStep = () => {
+    setCompleted((current) => current.includes(active.id) ? current : [...current, active.id])
+    setRunState('complete')
   }
 
-  useEffect(() => {
-    if (!isPlaying) return
-    const timer = window.setTimeout(() => {
-      setActiveId(chapters[(activeIndex + 1) % chapters.length].id)
-    }, 7_000)
-    return () => window.clearTimeout(timer)
-  }, [activeIndex, isPlaying])
+  const goTo = (index: number) => {
+    if (index > completed.length || index < 0 || index >= steps.length) return
+    setActiveIndex(index)
+    setRunState(completed.includes(steps[index].id) ? 'complete' : 'waiting')
+  }
 
-  useEffect(() => {
-    const pauseWhenHidden = () => document.hidden && setIsPlaying(false)
-    document.addEventListener('visibilitychange', pauseWhenHidden)
-    return () => document.removeEventListener('visibilitychange', pauseWhenHidden)
-  }, [])
+  const restart = () => {
+    setActiveIndex(0)
+    setCompleted([])
+    setRunState('waiting')
+  }
 
   return (
-    <main className="preview-showroom">
-      <header className="preview-tourbar">
-        <button className="preview-back" type="button" onClick={onExit}><ArrowLeft /> <span>Exit workspace</span></button>
-        <div className="preview-tour-title">
-          <span><Sparkles /> Agent workspace</span>
-          <strong>{active.label}</strong>
-          <small>{String(activeIndex + 1).padStart(2, '0')} / {String(chapters.length).padStart(2, '0')}</small>
-        </div>
-        <div className="preview-tour-progress" aria-hidden="true"><i style={{ transform: `scaleX(${(activeIndex + 1) / chapters.length})` }} /></div>
-        <div className="preview-tour-actions">
-          <button type="button" onClick={() => move(-1)} aria-label="Previous workflow"><ChevronLeft /></button>
-          <button type="button" className="preview-play" onClick={() => setIsPlaying((value) => !value)}>{isPlaying ? <Pause /> : <Play fill="currentColor" />}<span>{isPlaying ? 'Pause run' : 'Run workflow'}</span></button>
-          <button type="button" onClick={() => move(1)} aria-label="Next workflow"><ChevronRight /></button>
+    <main className={`onboarding-shell ${journeyComplete ? 'journey-complete' : ''}`}>
+      <header className="onboarding-topbar">
+        <button className="topbar-exit" type="button" onClick={onExit}><ArrowLeft /><span>Exit preview</span></button>
+        <div className="topbar-title"><span>Saathi onboarding</span><b>Kapoor family journey</b></div>
+        <span className="simulation-badge"><Eye /> SIMULATION · SAMPLE DATA</span>
+        <div className="topbar-progress" aria-label={`${completed.length} of ${steps.length} steps complete`}>
+          <span>{String(Math.min(activeIndex + 1, steps.length)).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</span>
+          <i><b style={{ width: `${(completed.length / steps.length) * 100}%` }} /></i>
         </div>
       </header>
 
-      <section className="preview-showroom-grid">
-        <aside className="preview-chapters" aria-label="Preview capabilities">
-          <div className="preview-brand"><span>स</span><div><strong>Saathi</strong><small>Family operations, understood</small></div></div>
-          <p className="preview-chapters-intro">Choose what to inspect. Every scene uses fictional data and mirrors a shipped workflow.</p>
+      <div className="onboarding-grid">
+        <aside className="journey-rail" aria-label="Onboarding steps">
+          <div className="rail-brand"><span>स</span><div><strong>Learn by doing</strong><small>One connected family task</small></div></div>
           <nav>
-            {chapters.map((chapter) => {
-              const Icon = chapter.icon
+            {steps.map((step, index) => {
+              const Icon = step.icon
+              const done = completed.includes(step.id)
+              const locked = index > completed.length
               return <button
                 type="button"
-                key={chapter.id}
-                className={activeId === chapter.id ? 'active' : ''}
-                aria-current={activeId === chapter.id ? 'page' : undefined}
-                onClick={() => { setIsPlaying(false); setActiveId(chapter.id) }}
+                key={step.id}
+                className={`${index === activeIndex ? 'active' : ''} ${done ? 'done' : ''}`}
+                disabled={locked}
+                aria-current={index === activeIndex ? 'step' : undefined}
+                onClick={() => goTo(index)}
               >
+                <span className="rail-index">{done ? <Check /> : locked ? <LockKeyhole /> : index + 1}</span>
+                <span><strong>{step.label}</strong><small>{done ? 'Complete' : locked ? 'Finish previous step' : 'Ready for you'}</small></span>
                 <Icon />
-                <span><strong>{chapter.label}</strong><small>{chapter.providers.join(' · ')}</small></span>
-                <ArrowRight />
               </button>
             })}
           </nav>
-          <div className="preview-data-note"><Eye /><span><strong>Safe to explore</strong>Seeded data only. No account, email, or external action.</span></div>
+          <div className="rail-safety"><ShieldCheck /><span><strong>Safe preview</strong>No account, personal data, provider calls, or external actions.</span></div>
         </aside>
 
-        <section className="preview-stage" aria-live="polite">
-          <header className="preview-stage-header">
-            <div>
-              <span className="preview-family"><i /> Kapoor family · Mysuru school trip</span>
-              <h1>{active.label}</h1>
-              <p>{active.description}</p>
-              <div className="preview-mobile-proof"><span>{active.proof}</span><small>{active.providers.join(' · ')}</small></div>
-            </div>
-            <span className={`preview-run-state ${isPlaying ? 'running' : ''}`} role="status">
-              <i aria-hidden="true" />
-              {isPlaying ? 'Agent run active' : 'Run ready'}
-            </span>
-          </header>
-          <div className="preview-stage-body" key={activeId}>
-            {activeId === 'inbox' && <InboxScene />}
-            {activeId === 'language' && <LanguageScene />}
-            {activeId === 'memory' && <MemoryScene />}
-            {activeId === 'research' && <ResearchScene />}
-            {activeId === 'voice' && <VoiceScene />}
-            {activeId === 'approval' && <ApprovalScene />}
-          </div>
+        <section className="task-column" aria-live="polite">
+          {journeyComplete && activeIndex === steps.length - 1 && isComplete
+            ? <Completion onOpenLive={onOpenLive} onRestart={restart} />
+            : <>
+              <header className="task-heading">
+                <div><span>STEP {String(activeIndex + 1).padStart(2, '0')} · KAPOOR FAMILY / MYSURU TRIP</span><h1>{active.task}</h1><p>{active.guide}</p></div>
+                <RunState state={runState} />
+              </header>
+              <div className="mobile-step-select">
+                <span>Journey step</span><button type="button">{activeIndex + 1}. {active.label}<ChevronDown /></button>
+              </div>
+              <div className="task-stage" key={active.id}>
+                {active.id === 'inbox' && <InboxTask done={isComplete} setRunning={() => setRunState('running')} onComplete={completeStep} />}
+                {active.id === 'language' && <LanguageTask done={isComplete} onComplete={completeStep} />}
+                {active.id === 'memory' && <MemoryTask done={isComplete} onComplete={completeStep} />}
+                {active.id === 'research' && <ResearchTask done={isComplete} setRunning={() => setRunState('running')} onComplete={completeStep} />}
+                {active.id === 'handoff' && <HandoffTask done={isComplete} onComplete={completeStep} />}
+                {active.id === 'approval' && <ApprovalTask done={isComplete} onComplete={completeStep} />}
+                {active.id === 'privacy' && <PrivacyTask done={isComplete} onComplete={completeStep} />}
+              </div>
+            </>}
         </section>
 
-        <aside className="preview-proof" aria-label="How this capability works">
-          <header><span>Agent run</span><h2>{isPlaying ? 'Running workflow' : 'Ready to inspect'}</h2><p>{active.proof}</p></header>
-          <div className="preview-run-meta" aria-label="Preview run status">
-            <span><small>State</small><strong>{isPlaying ? 'RUNNING' : 'READY'}</strong></span>
-            <span><small>Step</small><strong>{String(activeIndex + 1).padStart(2, '0')} / {String(chapters.length).padStart(2, '0')}</strong></span>
+        <aside className="evidence-panel" aria-label="Agent run evidence">
+          <header><span>RUN TELEMETRY</span><h2>{runState === 'complete' ? 'Step verified' : runState === 'running' ? 'Agent working' : 'Waiting for you'}</h2></header>
+          <div className="telemetry-cells">
+            <span><small>STATE</small><strong className={runState}>{runState.toUpperCase()}</strong></span>
+            <span><small>RUN</small><strong>SIM-{activeIndex + 1}04</strong></span>
           </div>
-          <div className="preview-trace">
-            {traces[activeId].map((item, index) => <div className={`preview-trace-row ${item.state}`} key={item.title}>
-              <span className="trace-index">{item.state === 'done' ? <Check /> : item.state === 'held' ? <CircleStop /> : <i />}</span>
-              <div><strong>{item.title}</strong><small>{item.detail}</small></div>
-              {index < traces[activeId].length - 1 && <b />}
-            </div>)}
-          </div>
-          <section className="preview-provider-section"><span>Running on</span><div>{active.providers.map((provider) => <strong key={provider}>{provider}</strong>)}</div></section>
-          <section className="preview-boundary"><ShieldCheck /><div><strong>Boundary stays visible</strong><p>{boundaryCopy(activeId)}</p></div></section>
-          <footer><span><Check /> Implemented in the live workspace</span><small>Preview interactions are simulated; product claims reflect repository behavior.</small></footer>
+          <ol className="run-trace">
+            <Trace done title="Context scoped" detail="Kapoor family · trip room" />
+            <Trace done={runState !== 'waiting'} active={runState === 'running'} title={active.label} detail={active.route} />
+            <Trace done={runState === 'complete'} held={runState !== 'complete'} title={runState === 'complete' ? 'Result verified' : 'Awaiting interaction'} detail={runState === 'complete' ? 'Ready for next step' : 'Nothing advances without you'} />
+          </ol>
+          <section className="provider-block"><span>ROUTE</span><code>{active.route}</code><div>{active.providers.map((provider) => <b key={provider}>{provider}</b>)}</div></section>
+          <section className="boundary-block"><ShieldCheck /><div><strong>Boundary in this step</strong><p>{boundaries[active.id]}</p></div></section>
+          <footer><Check /><span><strong>Implemented capability</strong>Interactions here are simulated; architecture claims reflect the repository.</span></footer>
         </aside>
-      </section>
+      </div>
 
-      <nav className="preview-mobile-tabs" aria-label="Preview capabilities">
-        {chapters.map((chapter) => {
-          const Icon = chapter.icon
-          return <button type="button" key={chapter.id} className={activeId === chapter.id ? 'active' : ''} onClick={() => { setIsPlaying(false); setActiveId(chapter.id) }}><Icon /><span>{chapter.shortLabel}</span></button>
-        })}
-      </nav>
+      {!journeyComplete && <footer className="onboarding-controls">
+          <button className="restart-button" type="button" onClick={restart}><RefreshCcw /> Restart</button>
+          <span>{isComplete ? 'Task complete. Continue when ready.' : 'Complete the task to unlock Next.'}</span>
+          <div>
+            <button type="button" onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}><ArrowLeft /> Back</button>
+            <button className="next-button" type="button" onClick={() => goTo(activeIndex + 1)} disabled={!isComplete || activeIndex === steps.length - 1}>Next <ArrowRight /></button>
+          </div>
+        </footer>}
     </main>
   )
 }
 
-function InboxScene() {
-  const [processed, setProcessed] = useState(true)
-  return <div className="scene-inbox">
-    <article className="source-email">
-      <header><span className="source-icon"><Mail /></span><div><small>Original email · AgentMail</small><strong>Mysuru field trip — payment due</strong><span>Greenwood School · Today, 9:14 AM</span></div></header>
-      <div className="email-copy"><p>Dear parents,</p><p>Please complete the field-trip payment of <strong>₹18,500</strong> by <strong>24 September</strong>. The bus leaves school at 6:30 AM.</p><p>Regards,<br />Trip coordinator</p></div>
-      <footer><FileText /> Original source preserved</footer>
-    </article>
-    <div className="scene-transfer" aria-hidden="true"><i /><Sparkles /><i /></div>
-    <article className={`extraction-sheet ${processed ? 'ready' : 'processing'}`}>
-      <header><div><small>Saathi extracted</small><h2>{processed ? 'Ready for the family' : 'Reading the email…'}</h2></div><span>{processed ? <Check /> : <Sparkles />}</span></header>
-      {processed ? <>
-        <dl><div><dt>Category</dt><dd>School & family</dd></div><div><dt>Amount</dt><dd>₹18,500</dd></div><div><dt>Due date</dt><dd>24 September</dd></div><div><dt>Next step</dt><dd>Review payment</dd></div></dl>
-        <div className="extraction-confidence"><span>Validated structured extraction</span><strong>High confidence</strong></div>
-      </> : <div className="preview-processing"><i /><i /><i /></div>}
-      <button type="button" onClick={() => { setProcessed(false); window.setTimeout(() => setProcessed(true), 900) }} disabled={!processed}>{processed ? 'Replay processing' : 'Processing safely…'}</button>
-    </article>
-    <section className="scene-run-log" aria-label="Agent run log">
-      <header><span>Run log</span><strong>agentmail.inbound → inbox.extract → action.hold</strong></header>
-      <ol>
-        <li><time>09:14:02</time><i className="complete" /><span><strong>Inbound verified</strong><small>Message ID accepted and deduplicated</small></span></li>
-        <li><time>09:14:03</time><i className="complete" /><span><strong>Fields extracted</strong><small>Amount, due date, and category validated</small></span></li>
-        <li><time>09:14:04</time><i /><span><strong>Awaiting command</strong><small>External action remains held for review</small></span></li>
-      </ol>
-    </section>
-  </div>
+function RunState({ state }: { state: 'waiting' | 'running' | 'complete' }) {
+  return <span className={`run-state ${state}`} role="status"><i /> {state === 'complete' ? 'COMPLETE' : state === 'running' ? 'RUNNING' : 'WAITING'}</span>
 }
 
-function LanguageScene() {
-  const [language, setLanguage] = useState<Language>('en')
-  const translations: Record<Language, { label: string; text: string; reply: string }> = {
-    en: { label: 'English', text: 'The school trip payment is due by 24 September. Should I add it to our family list?', reply: 'Yes, add it. I’ll review the amount tonight.' },
-    hi: { label: 'हिन्दी', text: 'स्कूल यात्रा का भुगतान 24 सितंबर तक करना है। क्या मैं इसे परिवार की सूची में जोड़ दूँ?', reply: 'हाँ, जोड़ दो। मैं आज रात राशि देख लूँगी।' },
-    mr: { label: 'मराठी', text: 'शाळेच्या सहलीचे पैसे २४ सप्टेंबरपर्यंत भरायचे आहेत. कुटुंबाच्या यादीत टाकू का?', reply: 'हो, टाक. मी आज रात्री रक्कम तपासते.' },
+function Trace({ done, active, held, title, detail }: { done?: boolean; active?: boolean; held?: boolean; title: string; detail: string }) {
+  return <li className={done ? 'done' : active ? 'active' : held ? 'held' : ''}><span>{done ? <Check /> : held ? <CircleStop /> : <i />}</span><div><strong>{title}</strong><small>{detail}</small></div></li>
+}
+
+function ActionButton({ done, onClick, children }: { done: boolean; onClick: () => void; children: ReactNode }) {
+  return <button type="button" className={`task-action ${done ? 'done' : ''}`} onClick={onClick} disabled={done}>{done ? <><Check /> Task complete</> : children}</button>
+}
+
+function InboxTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
+  const [processing, setProcessing] = useState(false)
+  const process = () => {
+    setProcessing(true)
+    setRunning()
+    window.setTimeout(() => { setProcessing(false); onComplete() }, 650)
   }
-  return <div className="scene-language">
-    <div className="language-switch" aria-label="Reading language">{(['en', 'hi', 'mr'] as const).map((id) => <button type="button" className={language === id ? 'active' : ''} onClick={() => setLanguage(id)} key={id}>{translations[id].label}</button>)}</div>
-    <div className="language-conversation">
-      <article className="language-message incoming"><span className="scene-avatar">AP</span><div><header><strong>Appa</strong><small>Hindi original · 10:44</small></header><p lang="hi">स्कूल ट्रिप का भुगतान चौबीस सितंबर तक करना है।</p><button type="button"><Volume2 /> Listen to original</button></div></article>
-      <div className="translation-link"><Languages /><span>Translated for Asha · {translations[language].label}</span></div>
-      <article className="language-message assistant"><span className="scene-avatar saathi">स</span><div><header><strong>Saathi</strong><small>reader-language view</small></header><p>{translations[language].text}</p><small>Names, dates, amounts, and source links stay unchanged.</small></div></article>
-      <article className="language-message outgoing"><div><header><strong>You</strong><small>same conversation</small></header><p>{translations[language].reply}</p></div></article>
-    </div>
-  </div>
-}
-
-function MemoryScene() {
-  const [remembered, setRemembered] = useState(false)
-  return <div className="scene-memory">
-    <section className="memory-conversation">
-      <div className="memory-prompt"><span>You</span><p>Remember that Appa prefers morning appointments and needs step-free access.</p></div>
-      <div className="jev-decision"><header><span><WandSparkles /> Jev recommendation</span><strong>memory</strong></header><div><i style={{ width: '94%' }} /><span>94%</span></div><small>Concrete request · no clarification needed</small></div>
-      <button type="button" className={remembered ? 'remembered' : ''} onClick={() => setRemembered(true)}>{remembered ? <><Check /> Remembered for this room</> : <><MemoryStick /> Store explicit memory</>}</button>
-    </section>
-    <section className="memory-vault">
-      <header><div><span>Saathi memory</span><h2>Recalled data, never instructions</h2></div><Brain /></header>
-      <div className={`memory-fact ${remembered ? 'new' : ''}`}><span>Preference</span><p>{remembered ? 'Appa prefers morning appointments and needs step-free access.' : 'Family prefers vegetarian restaurants.'}</p><small>{remembered ? 'Added just now · room-scoped' : 'Updated 8 days ago · room-scoped'}</small></div>
-      <div className="memory-fact"><span>Recent episode</span><p>Compared three Mysuru stays and kept the accessible option.</p><small>Conversation outcome · bounded recall</small></div>
-      <footer><ShieldCheck /> Current conversation wins if memory is stale.</footer>
-    </section>
-  </div>
-}
-
-function ResearchScene() {
-  const [searched, setSearched] = useState(true)
-  return <div className="scene-research">
-    <div className="research-question"><Search /><div><small>Public question sent to Firecrawl</small><strong>Current Mysuru road conditions for Saturday morning</strong></div><span>Private names removed</span></div>
-    <article className={`research-answer ${searched ? 'ready' : 'loading'}`}>
-      <header><span className="scene-avatar saathi">स</span><div><strong>Saturday morning is the calmer window.</strong><small>{searched ? 'Checked 3 current sources · retrieved today' : 'Searching current public sources…'}</small></div></header>
-      {searched ? <>
-        <p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p>
-        <div className="source-list"><a href="https://www.karnataka.gov.in/" target="_blank" rel="noreferrer"><ExternalLink /> Karnataka traffic advisory <span>Official</span></a><a href="https://mausam.imd.gov.in/" target="_blank" rel="noreferrer"><ExternalLink /> IMD weather outlook <span>Official</span></a><a href="https://www.google.com/maps" target="_blank" rel="noreferrer"><ExternalLink /> Route conditions <span>Current</span></a></div>
-      </> : <div className="research-loading"><i /><i /><i /></div>}
+  return <div className="task-two-up">
+    <article className="task-card source-card">
+      <CardLabel icon={<Mail />} label="ORIGINAL EMAIL · AGENTMAIL" />
+      <h2>Mysuru field trip — payment due</h2><small>Greenwood School · Today, 9:14 AM</small>
+      <div className="email-body"><p>Dear parents,</p><p>Please complete the field-trip payment of <b>₹18,500</b> by <b>24 September</b>. The bus leaves school at 6:30 AM.</p><p>Regards,<br />Trip coordinator</p></div>
+      <span className="source-proof"><FileText /> Source preserved in the family inbox</span>
     </article>
-    <button className="research-replay" type="button" disabled={!searched} onClick={() => { setSearched(false); window.setTimeout(() => setSearched(true), 1000) }}>{searched ? 'Replay cited research' : 'Searching without private context…'}</button>
+    <article className="task-card result-card">
+      <CardLabel icon={<Sparkles />} label="STRUCTURED EXTRACTION" />
+      <h2>{processing ? 'Reading the email…' : done ? 'Details ready to review' : 'Waiting for your command'}</h2>
+      {done ? <dl className="data-grid"><div><dt>Category</dt><dd>School & family</dd></div><div><dt>Amount</dt><dd>₹18,500</dd></div><div><dt>Due date</dt><dd>24 September</dd></div><div><dt>Next step</dt><dd>Review payment</dd></div></dl> : <div className={`empty-result ${processing ? 'processing' : ''}`}><Inbox /><span>{processing ? 'Validating extracted fields' : 'No extraction has run yet'}</span></div>}
+      <ActionButton done={done} onClick={process}><Sparkles /> Extract key details</ActionButton>
+    </article>
   </div>
 }
 
-function VoiceScene() {
-  const [running, setRunning] = useState(false)
-  return <div className="scene-voice">
-    <section className="voice-presence">
-      <div className={`preview-voice-orb ${running ? 'listening' : ''}`}><i /><b /><span><Mic /></span></div>
-      <div><span>{running ? 'Listening' : 'Voice preview paused'}</span><h2>“Find an accessible Mysuru hotel, but let me sign in.”</h2><p>Live speech, tool activity, and handoffs remain in the same family conversation.</p></div>
-      <button type="button" onClick={() => setRunning((value) => !value)}>{running ? <><CircleStop /> Pause simulation</> : <><Mic /> Simulate voice request</>}</button>
-    </section>
-    <section className="browser-handoff">
-      <header><Monitor /><div><strong>Live browser handoff</strong><small>Jev chooses from page-derived safe actions</small></div><span>{running ? 'Observing page' : 'Ready'}</span></header>
-      <div className="browser-frame">
-        <div className="browser-chrome"><i /><i /><i /><span>stay.example/mysuru</span></div>
-        <div className="hotel-row"><div /><span><strong>Garden Courtyard</strong><small>Step-free entrance · family room</small></span><b>₹6,800</b></div>
-        <div className="hotel-row"><div /><span><strong>Lakeview House</strong><small>Lift · accessible bathroom</small></span><b>₹7,250</b></div>
-      </div>
-      <footer><ShieldCheck /><span><strong>Your turn for sign-in or payment</strong><small>Saathi keeps site cookies, never your password.</small></span></footer>
-    </section>
+const translations = {
+  en: { label: 'English', text: 'The school trip payment is due by 24 September. Should I add it to our family list?' },
+  hi: { label: 'हिन्दी', text: 'स्कूल यात्रा का भुगतान 24 सितंबर तक करना है। क्या मैं इसे परिवार की सूची में जोड़ दूँ?' },
+  mr: { label: 'मराठी', text: 'शाळेच्या सहलीचे पैसे २४ सप्टेंबरपर्यंत भरायचे आहेत. कुटुंबाच्या यादीत टाकू का?' },
+}
+
+function LanguageTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
+  const [language, setLanguage] = useState<keyof typeof translations | null>(done ? 'en' : null)
+  const choose = (next: keyof typeof translations) => { setLanguage(next); onComplete() }
+  return <div className="language-task">
+    <article className="task-card original-message"><CardLabel icon={<Languages />} label="ORIGINAL · HINDI" /><div className="message-head"><span>AP</span><div><strong>Appa</strong><small>10:44 · same family conversation</small></div></div><p lang="hi">स्कूल ट्रिप का भुगतान चौबीस सितंबर तक करना है।</p></article>
+    <div className="choice-panel"><span>READ THIS AS</span><h2>Choose Asha’s view</h2><div>{(Object.keys(translations) as Array<keyof typeof translations>).map((id) => <button type="button" className={language === id ? 'selected' : ''} key={id} onClick={() => choose(id)}><span>{language === id ? <Check /> : null}</span>{translations[id].label}</button>)}</div><small>Names, dates, amounts, and source links stay unchanged.</small></div>
+    <article className={`task-card translated-message ${language ? 'visible' : ''}`}><CardLabel icon={<Sparkles />} label="SAATHI · READER VIEW" /><div className="message-head"><span className="saathi-avatar">स</span><div><strong>Saathi</strong><small>{language ? `Translated to ${translations[language].label}` : 'Waiting for your choice'}</small></div></div><p>{language ? translations[language].text : 'Choose a reading language to create this view.'}</p></article>
   </div>
 }
 
-function ApprovalScene() {
-  const [confirmed, setConfirmed] = useState(false)
-  return <div className="scene-approval">
-    <section className="approval-draft">
-      <header><div><span>Draft reply</span><h2>Everything visible before it leaves</h2></div><Mail /></header>
-      <dl><div><dt>To</dt><dd>trips@greenwood-school.example</dd></div><div><dt>Subject</dt><dd>Re: Mysuru field trip</dd></div></dl>
-      <div className="draft-body">Hello,<br /><br />Thank you. We have noted the 24 September deadline and will review the ₹18,500 payment tonight.<br /><br />Regards,<br />Asha Kapoor</div>
-      <small><FileText /> Seeded recipient and body · no real email address</small>
-    </section>
-    <section className={`approval-gate ${confirmed ? 'confirmed' : ''}`}>
-      <div className="approval-lock"><ShieldCheck /></div>
-      <span>{confirmed ? 'Confirmation recorded' : 'External action paused'}</span>
-      <h2>{confirmed ? 'Sample reply marked as sent' : 'Only you can send this reply'}</h2>
-      <p>{confirmed ? 'In live mode, AgentMail delivery metadata would be saved to the same thread.' : 'Saathi can draft, but sending requires a fresh permission check and your explicit confirmation.'}</p>
-      <button type="button" onClick={() => setConfirmed(true)} disabled={confirmed}>{confirmed ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample send</>}</button>
-      {!confirmed && <small>Preview only · nothing will be sent</small>}
-    </section>
+function MemoryTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
+  return <div className="task-two-up">
+    <article className="task-card memory-request"><CardLabel icon={<WandSparkles />} label="MESSAGE TO SAATHI" /><div className="user-prompt">Remember that Appa prefers morning appointments and needs step-free access.</div><div className="jev-route"><header><span>JEV RECOMMENDATION</span><b>memory · 94%</b></header><div><i /></div><small>Concrete explicit fact · no clarification needed</small></div><ActionButton done={done} onClick={onComplete}><MemoryStick /> Store explicit memory</ActionButton></article>
+    <article className="task-card memory-vault"><CardLabel icon={<Brain />} label="ROOM-SCOPED MEMORY" /><h2>Facts, never hidden instructions</h2><div className={`memory-record ${done ? 'new' : ''}`}><span>PREFERENCE</span><p>{done ? 'Appa prefers morning appointments and needs step-free access.' : 'Family prefers vegetarian restaurants.'}</p><small>{done ? 'Added just now · Kapoor family / trip room' : 'Updated 8 days ago · Kapoor family / trip room'}</small></div><div className="memory-record"><span>RECALL POLICY</span><p>Current conversation wins if this memory becomes stale.</p></div></article>
   </div>
 }
 
-function boundaryCopy(id: ChapterId) {
-  if (id === 'inbox') return 'The original email remains visible beside every extracted field.'
-  if (id === 'language') return 'Translation changes the reader view, never the canonical family record.'
-  if (id === 'memory') return 'Memory is explicit, bounded, room-scoped, and treated as potentially stale.'
-  if (id === 'research') return 'Only a public search question reaches Firecrawl; private family text stays behind.'
-  if (id === 'voice') return 'Login, payment, and consequential browser steps return control to the person.'
-  return 'Drafting and execution are separate operations with fresh authorization.'
+function ResearchTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
+  const [searched, setSearched] = useState(done)
+  const [inspected, setInspected] = useState(done)
+  const run = () => { setRunning(); window.setTimeout(() => setSearched(true), 600) }
+  const inspect = () => { setInspected(true); onComplete() }
+  return <div className="research-task">
+    <div className="query-strip"><Search /><div><small>SANITIZED PUBLIC QUERY</small><strong>Current Mysuru road conditions for Saturday morning</strong></div><span>Private names removed</span></div>
+    {!searched ? <section className="research-empty"><Globe2 /><h2>Ready to check the public web</h2><p>No private family message or memory will be included.</p><button type="button" onClick={run}><Search /> Run cited research</button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span></article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{['Karnataka traffic advisory', 'IMD weather outlook', 'Route conditions'].map((source, index) => <button type="button" key={source} className={inspected && index === 0 ? 'selected' : ''} onClick={inspect}><ExternalLink /><span><strong>{source}</strong><small>{index < 2 ? 'Official source' : 'Current map data'} · retrieved today</small></span>{inspected && index === 0 ? <Check /> : <ArrowRight />}</button>)}</section></div>}
+  </div>
+}
+
+function HandoffTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
+  const [choice, setChoice] = useState<'voice' | 'browser' | null>(done ? 'browser' : null)
+  const choose = (next: 'voice' | 'browser') => { setChoice(next); onComplete() }
+  return <div className="handoff-task">
+    <section className="handoff-brief"><CardLabel icon={<AudioLines />} label="ACTIVE GOAL" /><h2>“Find an accessible Mysuru hotel, but let me sign in.”</h2><p>Jev has observed two read-only results. Choose how to take control.</p></section>
+    <div className="handoff-options"><button type="button" className={choice === 'voice' ? 'selected' : ''} onClick={() => choose('voice')}><Mic /><span><strong>Continue by voice</strong><small>Discuss choices with Saathi Live</small></span>{choice === 'voice' && <Check />}</button><button type="button" className={choice === 'browser' ? 'selected' : ''} onClick={() => choose('browser')}><Monitor /><span><strong>Open live browser</strong><small>Take over for login or payment</small></span>{choice === 'browser' && <Check />}</button></div>
+    <section className="browser-preview"><header><Monitor /><span><strong>stay.example / mysuru</strong><small>{choice ? 'HANDOFF READY' : 'READ-ONLY OBSERVATION'}</small></span></header><div className="hotel-result"><i /><span><strong>Garden Courtyard</strong><small>Step-free entrance · family room</small></span><b>₹6,800</b></div><div className="hotel-result"><i /><span><strong>Lakeview House</strong><small>Lift · accessible bathroom</small></span><b>₹7,250</b></div><footer><ShieldCheck /> Saathi stores site cookies, never your password.</footer></section>
+  </div>
+}
+
+function ApprovalTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
+  const [reviewed, setReviewed] = useState(done)
+  return <div className="task-two-up approval-task">
+    <article className="task-card draft-card"><CardLabel icon={<Mail />} label="DRAFT REPLY · NOT SENT" /><dl className="draft-meta"><div><dt>TO</dt><dd>trips@greenwood-school.example</dd></div><div><dt>SUBJECT</dt><dd>Re: Mysuru field trip</dd></div></dl><div className="draft-body">Hello,<br /><br />Thank you. We have noted the 24 September deadline and will review the ₹18,500 payment tonight.<br /><br />Regards,<br />Asha Kapoor</div><label><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /> I reviewed the exact recipient and final body</label></article>
+    <article className={`task-card confirmation-gate ${done ? 'confirmed' : ''}`}><ShieldCheck /><span>{done ? 'SIMULATED CONFIRMATION RECORDED' : 'EXTERNAL ACTION PAUSED'}</span><h2>{done ? 'Sample reply marked sent' : 'Only you can send this reply'}</h2><p>{done ? 'In live mode, delivery metadata would be saved to the same thread.' : 'Saathi can draft, but execution requires a fresh permission check and explicit confirmation.'}</p><button type="button" onClick={onComplete} disabled={!reviewed || done}>{done ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample send</>}</button><small>Simulation only · no email will be sent</small></article>
+  </div>
+}
+
+function PrivacyTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
+  const [family, setFamily] = useState<'kapoor' | 'rao'>(done ? 'rao' : 'kapoor')
+  const switchFamily = () => setFamily('rao')
+  return <div className="privacy-task">
+    <section className="family-switcher"><span>ACTIVE FAMILY SPACE</span><button type="button" onClick={switchFamily}><i className={family} />{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}<ChevronDown /></button><small>One account, independent memberships and data scopes.</small></section>
+    <section className="scope-view"><header><div><span>{family === 'kapoor' ? 'KF' : 'RF'}</span><div><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><small>Authorized workspace</small></div></div><b>{family === 'kapoor' ? '3 ROOMS · 1 INBOX' : '2 ROOMS · 0 INBOX'}</b></header>{family === 'kapoor' ? <div className="scope-content"><Inbox /><span><strong>Mysuru school trip</strong><small>₹18,500 · 24 September · Greenwood School</small></span></div> : <div className="scope-empty"><LockKeyhole /><h2>No Kapoor data in this scope</h2><p>Rooms, inbox subscriptions, search, memory, and model context were replaced together.</p></div>}</section>
+    <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Boundary ready to verify' : 'Switch to the Rao family first'}</strong><p>The live app authorizes each family independently on the server.</p></div><button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Boundary verified</> : 'Verify isolation'}</button></section>
+  </div>
+}
+
+function CardLabel({ icon, label }: { icon: ReactNode; label: string }) {
+  return <div className="card-label">{icon}<span>{label}</span></div>
+}
+
+function Completion({ onOpenLive, onRestart }: { onOpenLive: () => void; onRestart: () => void }) {
+  return <section className="completion-state">
+    <span className="completion-mark"><Check /></span><span>ONBOARDING COMPLETE · 7 / 7</span><h1>You completed one family journey.</h1><p>You turned a school email into translated, remembered, researched, human-approved work—without crossing a family or safety boundary.</p>
+    <div className="completion-grid">{steps.map((step) => { const Icon = step.icon; return <span key={step.id}><Icon /><Check />{step.label}</span> })}</div>
+    <div className="completion-actions"><button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></button><button type="button" onClick={onRestart}><RefreshCcw /> Replay simulation</button></div>
+    <small><ShieldCheck /> Live mode requires sign-in and uses only your authorized family data. Preview data never carries over.</small>
+  </section>
 }

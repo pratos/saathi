@@ -44,7 +44,7 @@ export default function App({ backendAvailable }: { backendAvailable: boolean })
     setMode(nextMode)
   }
 
-  if (mode === 'preview') return <Suspense fallback={<FullPageStatus message="Opening the guided preview…" />}><PreviewWorkspace onExit={() => chooseMode('choose')} /></Suspense>
+  if (mode === 'preview') return <Suspense fallback={<FullPageStatus message="Opening the guided preview…" />}><PreviewWorkspace onExit={() => chooseMode('choose')} onOpenLive={() => chooseMode('live')} /></Suspense>
   if (mode === 'live' && backendAvailable) return <LiveExperience onExit={() => chooseMode('choose')} pwaInstall={pwaInstall} />
   if (mode === 'live') return <BackendUnavailable onBack={() => chooseMode('choose')} />
   return <ModeChooser onChoose={chooseMode} backendAvailable={backendAvailable} pwaInstall={pwaInstall} />

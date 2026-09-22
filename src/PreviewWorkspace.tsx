@@ -45,13 +45,13 @@ type Step = {
 }
 
 const steps: Step[] = [
-  { id: 'inbox', label: 'Extract family email', task: 'Turn a school note into trusted work', guide: 'Review the source, then ask Saathi to extract the details that matter.', icon: Inbox, route: 'agentmail.inbound → inbox.extract', providers: ['AgentMail', 'OpenAI', 'Convex'] },
+  { id: 'inbox', label: 'Review a family email', task: 'Turn a school note into trusted work', guide: 'Review the source, then ask Saathi to find the amount and due date.', icon: Inbox, route: 'agentmail.inbound → inbox.extract', providers: ['AgentMail', 'OpenAI', 'Convex'] },
   { id: 'language', label: 'Translate the conversation', task: 'Let everyone read in their language', guide: 'Choose how Asha should read Appa’s original message.', icon: Languages, route: 'message.original → translation.cache', providers: ['OpenRouter', 'Convex'] },
-  { id: 'memory', label: 'Guide Saathi + Jev', task: 'Save one useful family preference', guide: 'Inspect Jev’s route, then explicitly decide whether this fact should be remembered.', icon: Brain, route: 'jev.route → agent.memory', providers: ['TypeSafe Jev', 'Pi', 'Convex'] },
-  { id: 'research', label: 'Research with citations', task: 'Check current public information', guide: 'Run a privacy-safe web query, then inspect one retrieved source.', icon: Globe2, route: 'query.sanitize → firecrawl.search', providers: ['Firecrawl', 'Pi', 'OpenRouter'] },
-  { id: 'handoff', label: 'Try voice + live browser', task: 'Choose the right human handoff', guide: 'Pick a way to continue. Sign-in and payment always return to you.', icon: AudioLines, route: 'voice.intent → jev.browser → handoff', providers: ['OpenAI Live', 'Jev', 'Firecrawl'] },
-  { id: 'approval', label: 'Review and confirm', task: 'Approve the exact draft, not an idea', guide: 'Inspect the recipient and final body before confirming the simulated send.', icon: ShieldCheck, route: 'draft.create → permission.check → confirm', providers: ['AgentMail', 'Convex'] },
-  { id: 'privacy', label: 'Verify family boundaries', task: 'Switch spaces without carrying data over', guide: 'Move to another family and verify the Kapoor trip disappears from scope.', icon: LockKeyhole, route: 'space.switch → subscription.replace', providers: ['Convex Auth', 'Convex'] },
+  { id: 'memory', label: 'Save a family preference', task: 'Save one useful family preference', guide: 'Review what Saathi understood, then choose whether to remember it.', icon: Brain, route: 'jev.route → agent.memory', providers: ['TypeSafe Jev', 'Pi', 'Convex'] },
+  { id: 'research', label: 'Check live travel updates', task: 'Check current public information', guide: 'Run a privacy-safe web search, then inspect one source.', icon: Globe2, route: 'query.sanitize → firecrawl.search', providers: ['Firecrawl', 'Pi', 'OpenRouter'] },
+  { id: 'handoff', label: 'Continue by voice or browser', task: 'Choose the right human handoff', guide: 'Choose how to continue. You always handle sign-in and payment.', icon: AudioLines, route: 'voice.intent → jev.browser → handoff', providers: ['OpenAI Live', 'Jev', 'Firecrawl'] },
+  { id: 'approval', label: 'Review a draft reply', task: 'Approve the exact draft, not an idea', guide: 'Check the recipient and final message before confirming the sample reply.', icon: ShieldCheck, route: 'draft.create → permission.check → confirm', providers: ['AgentMail', 'Convex'] },
+  { id: 'privacy', label: 'Switch family workspaces', task: 'Switch spaces without carrying data over', guide: 'Move to the Rao family and confirm that the Kapoor trip is no longer visible.', icon: LockKeyhole, route: 'space.switch → subscription.replace', providers: ['Convex Auth', 'Convex'] },
 ]
 
 const boundaries: Record<StepId, string> = {
@@ -174,10 +174,10 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
 
       {!showCompletion && <footer className="onboarding-controls">
           <Button variant="bare" size="content" className="restart-button" type="button" onClick={restart}><RefreshCcw /> Restart</Button>
-          <span>{isComplete ? 'Task complete. Continue when ready.' : 'Complete the task to unlock Next.'}</span>
+          <span id="next-step-hint">{isComplete ? 'Task complete. Continue when ready.' : 'Complete this task to continue.'}</span>
           <div>
             <Button variant="outline" type="button" onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}><ArrowLeft /> Back</Button>
-            <Button className="next-button" type="button" onClick={() => goTo(activeIndex + 1)} disabled={!isComplete || activeIndex === steps.length - 1}>Next <ArrowRight /></Button>
+            <Button className="next-button" type="button" onClick={() => goTo(activeIndex + 1)} disabled={!isComplete || activeIndex === steps.length - 1} aria-describedby="next-step-hint">Next step <ArrowRight /></Button>
           </div>
         </footer>}
     </main>
@@ -212,14 +212,14 @@ function InboxTask({ done, setRunning, onComplete }: { done: boolean; setRunning
     <article className="task-card source-card">
       <CardLabel icon={<Mail />} label="ORIGINAL EMAIL · AGENTMAIL" />
       <h2>Mysuru field trip — payment due</h2><small>Greenwood School · Today, 9:14 AM</small>
-      <div className="email-body"><p>Dear parents,</p><p>Please complete the field-trip payment of <b>₹18,500</b> by <b>24 September</b>. The bus leaves school at 6:30 AM.</p><p>Regards,<br />Trip coordinator</p></div>
+      <div className="email-body"><p>Dear parents,</p><p>Please complete the field-trip payment of <b>₹18,500</b> by <b>24 September</b>. The bus leaves school at 6:30&nbsp;AM.</p><p>Regards,<br />Trip coordinator</p></div>
       <span className="source-proof"><FileText /> Source preserved in the family inbox</span>
     </article>
     <article className="task-card result-card">
       <CardLabel icon={<Sparkles />} label="STRUCTURED EXTRACTION" />
       <h2>{processing ? 'Reading the email…' : done ? 'Details ready to review' : 'Waiting for your command'}</h2>
       {done ? <dl className="data-grid"><div><dt>Category</dt><dd>School & family</dd></div><div><dt>Amount</dt><dd>₹18,500</dd></div><div><dt>Due date</dt><dd>24 September</dd></div><div><dt>Next step</dt><dd>Review payment</dd></div></dl> : <div className={`empty-result ${processing ? 'processing' : ''}`}><Inbox /><span>{processing ? 'Validating extracted fields' : 'No extraction has run yet'}</span></div>}
-      <ActionButton done={done} busy={processing} onClick={process}><Sparkles />{processing ? ' Extracting details…' : ' Extract key details'}</ActionButton>
+      <ActionButton done={done} busy={processing} onClick={process}><Sparkles />{processing ? ' Finding amount and due date…' : ' Find amount and due date'}</ActionButton>
     </article>
   </div>
 }
@@ -242,7 +242,7 @@ function LanguageTask({ done, onComplete }: { done: boolean; onComplete: () => v
 
 function MemoryTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
   return <div className="task-two-up">
-    <article className="task-card memory-request"><CardLabel icon={<WandSparkles />} label="MESSAGE TO SAATHI" /><div className="user-prompt">Remember that Appa prefers morning appointments and needs step-free access.</div><div className="jev-route"><header><span>JEV RECOMMENDATION</span><b>memory · 94%</b></header><div><i /></div><small>Concrete explicit fact · no clarification needed</small></div><ActionButton done={done} onClick={onComplete}><MemoryStick /> Store explicit memory</ActionButton></article>
+    <article className="task-card memory-request"><CardLabel icon={<WandSparkles />} label="MESSAGE TO SAATHI" /><div className="user-prompt">Remember that Appa prefers morning appointments and needs step-free access.</div><div className="jev-route"><header><span>JEV RECOMMENDATION</span><b>memory · 94%</b></header><div><i /></div><small>Concrete explicit fact · no clarification needed</small></div><ActionButton done={done} onClick={onComplete}><MemoryStick /> Save family preference</ActionButton></article>
     <article className="task-card memory-vault"><CardLabel icon={<Brain />} label="ROOM-SCOPED MEMORY" /><h2>Facts, never hidden instructions</h2><div className={`memory-record ${done ? 'new' : ''}`}><span>PREFERENCE</span><p>{done ? 'Appa prefers morning appointments and needs step-free access.' : 'Family prefers vegetarian restaurants.'}</p><small>{done ? 'Added just now · Kapoor family / trip room' : 'Updated 8 days ago · Kapoor family / trip room'}</small></div><div className="memory-record"><span>RECALL POLICY</span><p>Current conversation wins if this memory becomes stale.</p></div></article>
   </div>
 }
@@ -271,7 +271,7 @@ function ResearchTask({ done, setRunning, onComplete }: { done: boolean; setRunn
   const selected = citations.find((citation) => citation.id === selectedCitation)
   return <div className="research-task">
     <div className="query-strip"><Search /><div><small>SANITIZED PUBLIC QUERY</small><strong>Current Mysuru road conditions for Saturday morning</strong></div><span>Private names removed</span></div>
-    {!searched ? <section className="research-empty"><Globe2 /><h2>{searching ? 'Checking public sources…' : 'Ready to check the public web'}</h2><p>No private family message or memory will be included.</p><Button type="button" onClick={run} disabled={searching}><Search />{searching ? ' Researching…' : ' Run cited research'}</Button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span>{selected && <div className="citation-detail" role="status"><span>INSPECTED SOURCE</span><strong>{selected.title}</strong><p>{selected.excerpt}</p><small>{selected.provenance}</small></div>}</article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{citations.map((citation) => <Button variant="outline" type="button" key={citation.id} className={selectedCitation === citation.id ? 'selected' : ''} onClick={() => inspect(citation.id)}><ExternalLink /><span><strong>{citation.title}</strong><small>{citation.kind} · retrieved today</small></span>{selectedCitation === citation.id ? <Check /> : <ArrowRight />}</Button>)}</section></div>}
+    {!searched ? <section className="research-empty"><Globe2 /><h2>{searching ? 'Checking public sources…' : 'Ready to check the public web'}</h2><p>No private family message or memory will be included.</p><Button type="button" onClick={run} disabled={searching}><Search />{searching ? ' Checking travel updates…' : ' Check current travel updates'}</Button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAATHI ANSWER" /><h2>Saturday morning is the calmer window.</h2><p>Leave Bengaluru around 6:30 AM. Current advisories show lighter traffic before 8 AM, with construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sources retrieved and attached</span>{selected && <div className="citation-detail" role="status"><span>INSPECTED SOURCE</span><strong>{selected.title}</strong><p>{selected.excerpt}</p><small>{selected.provenance}</small></div>}</article><section className="citation-list"><span>CITATIONS · SELECT ONE TO INSPECT</span>{citations.map((citation) => <Button variant="outline" type="button" key={citation.id} className={selectedCitation === citation.id ? 'selected' : ''} onClick={() => inspect(citation.id)}><ExternalLink /><span><strong>{citation.title}</strong><small>{citation.kind} · retrieved today</small></span>{selectedCitation === citation.id ? <Check /> : <ArrowRight />}</Button>)}</section></div>}
   </div>
 }
 
@@ -289,7 +289,7 @@ function ApprovalTask({ done, onComplete }: { done: boolean; onComplete: () => v
   const [reviewed, setReviewed] = useState(done)
   return <div className="task-two-up approval-task">
     <article className="task-card draft-card"><CardLabel icon={<Mail />} label="DRAFT REPLY · NOT SENT" /><dl className="draft-meta"><div><dt>TO</dt><dd>trips@greenwood-school.example</dd></div><div><dt>SUBJECT</dt><dd>Re: Mysuru field trip</dd></div></dl><div className="draft-body">Hello,<br /><br />Thank you. We have noted the 24 September deadline and will review the ₹18,500 payment tonight.<br /><br />Regards,<br />Asha Kapoor</div><Label className="draft-review" htmlFor="review-sample-send"><Checkbox id="review-sample-send" checked={reviewed} onCheckedChange={(checked) => setReviewed(checked === true)} /> I reviewed the exact recipient and final body</Label></article>
-    <article className={`task-card confirmation-gate ${done ? 'confirmed' : ''}`}><ShieldCheck /><span>{done ? 'SIMULATED CONFIRMATION RECORDED' : 'EXTERNAL ACTION PAUSED'}</span><h2>{done ? 'Sample reply marked sent' : 'Only you can send this reply'}</h2><p>{done ? 'In live mode, delivery metadata would be saved to the same thread.' : 'Saathi can draft, but execution requires a fresh permission check and explicit confirmation.'}</p><Button type="button" onClick={onComplete} disabled={!reviewed || done}>{done ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample send</>}</Button><small>Simulation only · no email will be sent</small></article>
+    <article className={`task-card confirmation-gate ${done ? 'confirmed' : ''}`}><ShieldCheck /><span>{done ? 'SIMULATED CONFIRMATION RECORDED' : 'EXTERNAL ACTION PAUSED'}</span><h2>{done ? 'Sample reply confirmed' : 'Only you can send this reply'}</h2><p>{done ? 'In live mode, delivery metadata would be saved to the same thread.' : 'Saathi can draft, but execution requires a fresh permission check and explicit confirmation.'}</p><Button type="button" onClick={onComplete} disabled={!reviewed || done}>{done ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample reply</>}</Button><small>Simulation only · no email will be sent</small></article>
   </div>
 }
 
@@ -299,7 +299,7 @@ function PrivacyTask({ done, onComplete }: { done: boolean; onComplete: () => vo
   return <div className="privacy-task">
     <section className="family-switcher"><span>ACTIVE FAMILY SPACE</span><Button variant="outline" type="button" onClick={switchFamily}><i className={family} />{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}<ChevronDown /></Button><small>One account, independent memberships and data scopes.</small></section>
     <section className="scope-view"><header><div><span>{family === 'kapoor' ? 'KF' : 'RF'}</span><div><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><small>Authorized workspace</small></div></div><b>{family === 'kapoor' ? '3 ROOMS · 1 INBOX' : '2 ROOMS · 0 INBOX'}</b></header>{family === 'kapoor' ? <div className="scope-content"><Inbox /><span><strong>Mysuru school trip</strong><small>₹18,500 · 24 September · Greenwood School</small></span></div> : <div className="scope-empty"><LockKeyhole /><h2>No Kapoor data in this scope</h2><p>Rooms, inbox subscriptions, search, memory, and model context were replaced together.</p></div>}</section>
-    <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Boundary ready to verify' : 'Switch to the Rao family first'}</strong><p>The live app authorizes each family independently on the server.</p></div><Button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Boundary verified</> : 'Verify isolation'}</Button></section>
+    <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Privacy boundary ready to verify' : 'Switch to the Rao family first'}</strong><p>The live app authorizes each family independently on the server.</p></div><Button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Family privacy verified</> : 'Verify family privacy'}</Button></section>
   </div>
 }
 
@@ -311,7 +311,7 @@ function Completion({ onOpenLive, onRestart }: { onOpenLive: () => void; onResta
   return <section className="completion-state">
     <span className="completion-mark"><Check /></span><span>ONBOARDING COMPLETE · 7 / 7</span><h1>You completed one family journey.</h1><p>You turned a school email into translated, remembered, researched, human-approved work—without crossing a family or safety boundary.</p>
     <div className="completion-grid">{steps.map((step) => { const Icon = step.icon; return <span key={step.id}><Icon /><Check />{step.label}</span> })}</div>
-    <div className="completion-actions"><Button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></Button><Button variant="outline" type="button" onClick={onRestart}><RefreshCcw /> Replay simulation</Button></div>
+    <div className="completion-actions"><Button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></Button><Button variant="outline" type="button" onClick={onRestart}><RefreshCcw /> Restart preview</Button></div>
     <small><ShieldCheck /> Live mode requires sign-in and uses only your authorized family data. Preview data never carries over.</small>
   </section>
 }

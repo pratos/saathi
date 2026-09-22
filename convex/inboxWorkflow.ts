@@ -11,7 +11,9 @@ import {
   inboxClassificationResultValidator,
   type InboxClassificationResult,
 } from "./lib/inboxClassification";
-import { resolveOpenAiKey, resolveOptionalDecisionCredential } from "./lib/providerKeys";
+import { runOpenRouterDecision, type OpenRouterDecisionResult } from "./lib/decisionProvider";
+import { MODEL_TIERS } from "./lib/modelTiers";
+import { resolveOpenRouterCredential, resolveOptionalDecisionCredential } from "./lib/providerKeys";
 
 const category = v.union(
   v.literal("bills"),
@@ -48,6 +50,53 @@ const extractionSchema = z.object({
     url: z.string().nullable(),
   })),
 });
+
+type InboxExtraction = {
+  category: z.infer<typeof extractionSchema>["category"];
+  amount: string | null;
+  amountInr: string | null;
+  amountUsd: string | null;
+  dueAt: number | null;
+  merchant: string | null;
+  period: string | null;
+  direction: "incoming" | "outgoing";
+  notes: string | null;
+  actions: Array<{ kind: string; label: string; detail?: string; url?: string }>;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+const extractionJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["category", "amount", "amountInr", "amountUsd", "dueAt", "merchant", "period", "direction", "notes", "actions"],
+  properties: {
+    category: { type: "string", enum: ["bills", "school", "travel", "subscriptions", "home", "receipts", "bank", "needs_review"] },
+    amount: { type: ["string", "null"] },
+    amountInr: { type: ["string", "null"] },
+    amountUsd: { type: ["string", "null"] },
+    dueAt: { type: ["integer", "null"] },
+    merchant: { type: ["string", "null"] },
+    period: { type: ["string", "null"] },
+    direction: { type: "string", enum: ["incoming", "outgoing"] },
+    notes: { type: ["string", "null"] },
+    actions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "label", "detail", "url"],
+        properties: {
+          kind: { type: "string" },
+          label: { type: "string" },
+          detail: { type: ["string", "null"] },
+          url: { type: ["string", "null"] },
+        },
+      },
+    },
+  },
+} satisfies Record<string, unknown>;
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -255,15 +304,27 @@ export const extract = internalAction({
     direction: v.union(v.literal("incoming"), v.literal("outgoing")),
     notes: v.union(v.string(), v.null()),
     actions: v.array(actionValidator),
+    model: v.union(v.string(), v.null()),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
   }),
-  handler: async (ctx, args) => {
-    const item = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
+  handler: async (ctx, args): Promise<InboxExtraction> => {
+    const item: {
+      subject: string;
+      originalText: string;
+      originalHtml: string | null;
+      sender: string;
+      familyInboxId: string | null;
+      agentmailMessageId: string;
+      spaceId: Id<"spaces">;
+      credentialUserId: Id<"users">;
+    } = await ctx.runQuery(internal.inboxWorkflow.itemForExtraction, args);
     const fallbackDirection = inferDirection(item.sender, item.familyInboxId ?? undefined, item.originalText);
     let apiKey = "";
     try {
-      apiKey = await resolveOpenAiKey(ctx, item.spaceId, item.credentialUserId);
+      apiKey = (await resolveOpenRouterCredential(ctx, item.spaceId, item.credentialUserId)).apiKey;
     } catch {
-      // Inbox ingestion remains useful without OpenAI; document parsing and manual review still work.
+      // Inbox ingestion remains useful without OpenRouter; document parsing and manual review still work.
     }
     if (!apiKey) {
       return {
@@ -275,70 +336,32 @@ export const extract = internalAction({
         merchant: null,
         period: null,
         direction: fallbackDirection,
-        notes: args.documentMarkdown ? "Parsed an attached document without an extraction model." : null,
+        notes: args.documentMarkdown
+          ? "Parsed an attached document, but Flash extraction is not available for this family."
+          : "Flash extraction is not available for this family.",
         actions: [],
+        model: null,
+        inputTokens: 0,
+        outputTokens: 0,
       };
     }
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "gpt-5-mini",
-        input: [
-          {
-            role: "system",
-            content: "Classify this household email. Subscriptions, tax invoices, and software receipts are purchases. Extract the exact paid amount in INR and USD when stated (amountInr, amountUsd), plus merchant and billing period. direction is incoming unless the family clearly sent money. Suggest confirmable household actions such as unsubscribe, pay_bill, or review_statement. Never invent URLs. dueAt must be a Unix timestamp in milliseconds or null.",
-          },
-          {
-            role: "user",
-            content: `Subject: ${item.subject}\nFrom: ${item.sender}\n\n${item.originalText.slice(0, 16_000)}\n\nDocument:\n${(args.documentMarkdown ?? "").slice(0, 12_000)}`,
-          },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "household_email_extraction",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["category", "amount", "amountInr", "amountUsd", "dueAt", "merchant", "period", "direction", "notes", "actions"],
-              properties: {
-                category: { type: "string", enum: ["bills", "school", "travel", "subscriptions", "home", "receipts", "bank", "needs_review"] },
-                amount: { type: ["string", "null"] },
-                amountInr: { type: ["string", "null"] },
-                amountUsd: { type: ["string", "null"] },
-                dueAt: { type: ["integer", "null"] },
-                merchant: { type: ["string", "null"] },
-                period: { type: ["string", "null"] },
-                direction: { type: "string", enum: ["incoming", "outgoing"] },
-                notes: { type: ["string", "null"] },
-                actions: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: ["kind", "label", "detail", "url"],
-                    properties: {
-                      kind: { type: "string" },
-                      label: { type: "string" },
-                      detail: { type: ["string", "null"] },
-                      url: { type: ["string", "null"] },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
+    const result: OpenRouterDecisionResult<unknown> = await runOpenRouterDecision<unknown>({
+      kind: "byok_openrouter",
+      apiKey,
+      model: MODEL_TIERS.low.model,
+    }, {
+      name: "household_email_extraction",
+      state: {
+        subject: item.subject,
+        sender: item.sender,
+        email: item.originalText.slice(0, 16_000),
+        document: (args.documentMarkdown ?? "").slice(0, 12_000),
+      },
+      instructions: "Classify this household email. Subscriptions, tax invoices, and software receipts are purchases. Extract the exact paid amount in INR and USD when stated (amountInr, amountUsd), plus merchant and billing period. direction is incoming unless the family clearly sent money. Suggest confirmable household actions such as unsubscribe, pay_bill, or review_statement. Never invent URLs. dueAt must be a Unix timestamp in milliseconds or null.",
+      schema: extractionJsonSchema,
     });
-    if (!response.ok) throw new Error(`OpenAI extraction failed with status ${response.status}`);
-    const payload = await response.json() as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
-    const text = payload.output?.flatMap(output => output.content ?? []).find(content => content.type === "output_text")?.text;
-    if (!text) throw new Error("OpenAI extraction returned no text output");
-    const parsed = extractionSchema.parse(JSON.parse(text));
+    const parsed = extractionSchema.parse(result.output);
     return {
       ...parsed,
       direction: parsed.direction || fallbackDirection,
@@ -348,6 +371,9 @@ export const extract = internalAction({
         detail: action.detail?.slice(0, 240) || undefined,
         url: action.url && action.url.startsWith("https://") ? action.url.slice(0, 500) : undefined,
       })),
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
     };
   },
 });
@@ -365,6 +391,9 @@ export const applyExtraction = internalMutation({
     direction: v.union(v.literal("incoming"), v.literal("outgoing")),
     notes: v.union(v.string(), v.null()),
     actions: v.array(actionValidator),
+    model: v.union(v.string(), v.null()),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
     documentParseStatus: v.optional(v.union(v.literal("none"), v.literal("parsed"), v.literal("password"), v.literal("failed"))),
     documentParseRetryable: v.optional(v.boolean()),
     processingNotes: v.union(v.string(), v.null()),
@@ -414,15 +443,17 @@ export const applyExtraction = internalMutation({
       status: "ready",
     });
     const userId = item.privateOwnerId ?? space?.createdBy;
-    if (userId) {
+    if (userId && args.model) {
       await ctx.db.insert("usageLedger", {
         spaceId: item.spaceId,
         userId,
-        provider: "openai",
-        model: "gpt-5-mini",
+        provider: "openrouter",
+        model: args.model,
         unit: "request",
         quantity: 1,
         costClass: "email_extraction",
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
         createdAt: Date.now(),
       });
     }

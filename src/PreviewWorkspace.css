@@ -19,11 +19,11 @@
   overflow: hidden;
   color: var(--ink);
   background: var(--canvas);
-  font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
 }
 .onboarding-shell.journey-complete { grid-template-rows: 58px minmax(0, 1fr); }
 .onboarding-shell *, .onboarding-shell *::before, .onboarding-shell *::after { box-sizing: border-box; }
-.onboarding-shell h1, .onboarding-shell h2 { font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.035em; }
+.onboarding-shell h1, .onboarding-shell h2 { font-family: var(--font-sans) !important; letter-spacing: -.035em; }
 .onboarding-shell button { min-height: 44px; border: 1px solid transparent; border-radius: 3px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
 .onboarding-shell button:focus-visible, .onboarding-shell input:focus-visible { outline: 3px solid rgba(32,130,111,.32); outline-offset: 2px; }
 .onboarding-shell button:disabled { cursor: not-allowed; opacity: .46; }
@@ -105,7 +105,7 @@
 .empty-result { min-height: 178px; display: grid; place-content: center; justify-items: center; gap: 9px; color: #849199; border: 1px dashed #c7d1d5; background: #f3f6f7; font-size: 10px; }
 .empty-result svg { width: 28px; height: 28px; }
 .empty-result.processing svg { animation: signal-pulse .75s ease infinite; }
-.task-action, .research-empty button, .confirmation-gate button, .boundary-check button { width: 100%; min-height: 44px !important; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: auto; color: #fff !important; background: var(--deep) !important; font-size: 11px !important; font-weight: 800 !important; }
+.task-action, .research-empty button, .confirmation-gate button, .boundary-check button { width: 100%; min-height: 44px !important; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 12px; color: #fff !important; background: var(--deep) !important; font-size: 11px !important; font-weight: 800 !important; }
 .task-action:hover:not(:disabled), .research-empty button:hover, .confirmation-gate button:hover:not(:disabled), .boundary-check button:hover:not(:disabled) { background: #0b574b !important; }
 .task-action.done { color: #176354 !important; border-color: #9ec8be; background: #dceeea !important; }
 .data-grid { display: grid; margin: 17px 0; border-top: 1px solid #dce3e6; }
@@ -201,8 +201,8 @@
 .draft-meta dt { color: var(--muted); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .draft-meta dd { overflow-wrap: anywhere; margin: 0; font-size: 9px; font-weight: 750; }
 .draft-body { padding: 13px; color: #41545e; background: #edf1f3; font-size: 10px; line-height: 1.55; }
-.draft-card .draft-review { display: flex; align-items: center; gap: 8px; margin-top: 13px; font-size: 9px; font-weight: 750; }
-.draft-card .draft-review [data-slot="checkbox"] { width: 17px; height: 17px; border-color: #8da099; }
+.draft-card .draft-review { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; margin-top: 13px; padding: 8px 0; font-size: 10px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; cursor: pointer; }
+.draft-card .draft-review [data-slot="checkbox"] { width: 22px; height: 22px; flex: 0 0 22px; border-color: #748a82; }
 .confirmation-gate { display: grid; justify-items: center; align-content: center; text-align: center; }
 .confirmation-gate > svg { width: 38px; height: 38px; padding: 8px; color: #986021; background: #f2e6d3; }
 .confirmation-gate > span { margin-top: 13px; color: var(--amber); font: 800 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -279,6 +279,8 @@
 .onboarding-controls button { min-width: 100px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border-color: var(--line); background: #f6f8f9; font-size: 10px; font-weight: 800; }
 .onboarding-controls .restart-button { justify-self: start; min-width: 0; border-color: transparent; background: transparent; }
 .onboarding-controls .next-button { color: #fff; border-color: var(--deep); background: var(--deep); }
+.onboarding-controls button:disabled { opacity: 1; color: #667780; border-color: #d0d9dd; background: #e7ecef; }
+.onboarding-controls .next-button:disabled { color: #65756f; border-color: #c9d5d1; background: #dfe7e4; }
 
 .completion-state { max-width: 780px; min-height: 100%; display: grid; align-content: center; justify-items: center; margin: 0 auto; padding: 30px 28px; text-align: center; }
 .completion-mark { width: 54px; height: 54px; display: grid; place-items: center; margin-bottom: 13px; color: #fff; background: var(--teal); }
@@ -301,25 +303,25 @@
 }
 
 @media (max-width: 760px) {
-  .onboarding-shell { max-height: none; grid-template-rows: 58px auto 66px; overflow: visible; }
-  .onboarding-shell.journey-complete { grid-template-rows: 58px auto; }
+  .onboarding-shell { height: 100dvh; max-height: none; grid-template-rows: 58px minmax(0, 1fr) auto; overflow: hidden; }
+  .onboarding-shell.journey-complete { grid-template-rows: 58px minmax(0, 1fr); }
   .onboarding-topbar { position: sticky; top: 0; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 7px; padding: 7px 9px; }
   .topbar-exit { width: 44px; padding: 0; justify-content: center; }
   .topbar-exit span, .topbar-title span, .topbar-progress { display: none; }
   .topbar-title b { font-size: 11px; }
   .simulation-badge { padding: 0 7px; font-size: 7px; }
   .simulation-badge svg { display: none; }
-  .onboarding-grid { display: block; }
+  .onboarding-grid { min-height: 0; display: block; overflow: hidden; }
   .journey-rail { display: none; }
-  .task-column { min-height: calc(100dvh - 124px); overflow: visible; }
+  .task-column { height: 100%; min-height: 0; overflow-y: auto; }
   .task-heading { padding: 14px 13px 9px; }
   .task-heading h1 { margin-top: 5px; font-size: 22px; }
   .task-heading p { font-size: 10px; }
   .run-state { padding: 0 7px; }
   .mobile-step-select { display: grid; gap: 4px; padding: 0 13px 9px; }
   .mobile-step-select > label { color: var(--muted); font: 750 7px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-transform: uppercase; }
-  .mobile-step-select .mobile-step-trigger { min-height: 44px; border-color: var(--line); border-radius: 3px; color: var(--ink); background: #e5ecee; font: 800 10px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  .task-stage { padding: 0 10px 88px; }
+  .mobile-step-select .mobile-step-trigger { min-height: 44px; border-color: var(--line); border-radius: 3px; color: var(--ink); background: #e5ecee; font: 800 10px/1 var(--font-sans); }
+  .task-stage { padding: 0 10px 18px; }
   .task-two-up, .language-task, .research-results, .handoff-task, .privacy-task { grid-template-columns: 1fr; }
   .task-card { min-height: 0; padding: 14px; }
   .source-card, .original-message { order: 1; }
@@ -336,12 +338,12 @@
   .scope-empty { min-height: 150px; }
   .boundary-check { grid-column: 1; grid-template-columns: 24px minmax(0, 1fr); }
   .boundary-check button { grid-column: 1 / -1; }
-  .onboarding-controls { position: sticky; bottom: 0; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; padding: 7px 9px calc(7px + env(safe-area-inset-bottom)); box-shadow: 0 -5px 18px rgba(19,36,45,.08); }
+  .onboarding-controls { position: static; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; padding: 7px 9px calc(7px + env(safe-area-inset-bottom)); box-shadow: 0 -5px 18px rgba(19,36,45,.08); }
   .onboarding-controls > span { display: none; }
   .onboarding-controls .restart-button { width: 44px; min-width: 44px; padding: 0; }
   .onboarding-controls .restart-button svg { width: 16px; }
   .onboarding-controls .restart-button { font-size: 0; }
-  .onboarding-controls > div { display: grid; grid-template-columns: 1fr 1fr; }
+  .onboarding-controls > div { min-width: 0; display: grid; grid-template-columns: 1fr 1fr; }
   .onboarding-controls button { min-height: 48px; }
   .completion-state { min-height: calc(100dvh - 124px); padding: 24px 14px; }
   .completion-grid { grid-template-columns: 1fr; }

@@ -1,11 +1,70 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
 describe("family inbox processing", () => {
+  test("extracts inbox values with DeepSeek Flash through OpenRouter", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test-platform-key");
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { model: string };
+      expect(request.model).toBe("deepseek/deepseek-v4.1-flash");
+      return new Response(JSON.stringify({
+        model: request.model,
+        choices: [{ message: { content: JSON.stringify({
+          category: "subscriptions",
+          amount: "$30.00",
+          amountInr: null,
+          amountUsd: "$30.00",
+          dueAt: null,
+          merchant: "Grok xAI",
+          period: "September 2026",
+          direction: "incoming",
+          notes: null,
+          actions: [],
+        }) } }],
+        usage: { prompt_tokens: 120, completion_tokens: 40 },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const t = convexTest(schema, modules);
+      const inboxItemId = await t.run(async ctx => {
+        const createdAt = Date.now();
+        const ownerId = await ctx.db.insert("users", { email: "owner@example.test", accessStatus: "approved" });
+        const spaceId = await ctx.db.insert("spaces", { name: "Family", createdBy: ownerId, creationKey: "flash-extraction", createdAt });
+        await ctx.db.insert("memberships", { spaceId, userId: ownerId, role: "owner", status: "active", joinedAt: createdAt });
+        return ctx.db.insert("inboxItems", {
+          spaceId,
+          agentmailMessageId: "grok-receipt",
+          agentmailThreadId: "grok-thread",
+          sender: "billing@x.ai",
+          subject: "Your receipt from Grok xAI",
+          originalText: "Grok xAI subscription $30.00 for September 2026",
+          visibility: "space",
+          category: "needs_review",
+          status: "processing",
+          receivedAt: createdAt,
+        });
+      });
+
+      await expect(t.action(internal.inboxWorkflow.extract, { inboxItemId })).resolves.toMatchObject({
+        category: "subscriptions",
+        amountUsd: "$30.00",
+        merchant: "Grok xAI",
+        model: "deepseek/deepseek-v4.1-flash",
+        inputTokens: 120,
+        outputTokens: 40,
+      });
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   test("tracks unread family inbox items independently for each member and family", async () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async ctx => {
@@ -147,6 +206,9 @@ describe("family inbox processing", () => {
       direction: "incoming",
       notes: "PDF parsed",
       actions: [{ kind: "pay_bill", label: "Review electricity bill" }],
+      model: "deepseek/deepseek-v4.1-flash",
+      inputTokens: 240,
+      outputTokens: 80,
       documentParseStatus: "parsed",
       documentParseRetryable: false,
       processingNotes: "Attached document read.",

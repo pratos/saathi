@@ -109,6 +109,7 @@ button { cursor: pointer; }
 @media (pointer: coarse) { input, textarea, select { font-size: 16px; } }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(35, 63, 114, .22); outline-offset: 2px; }
 button:disabled { cursor: not-allowed; opacity: .48; }
+::selection { color: #fff8ee; background: #176354; }
 
 @layer base {
   * { border-color: var(--border); outline-color: color-mix(in oklab, var(--ring) 50%, transparent); }

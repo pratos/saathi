@@ -907,7 +907,7 @@
 .live-conversation-workspace .session-menu { border-color: #303034; color: #f5f5f2; background: #171719; }
 .live-conversation-workspace .conversation-list { border-color: #242426; background: #090909; }
 .live-conversation-workspace .family-select-label,
-.live-conversation-workspace .list-heading { color: #717176; }
+.live-conversation-workspace .list-heading { color: #a1a1aa; }
 .live-conversation-workspace .family-switcher button { border-color: #2c2c30; color: #d1d1d3; background: #141416; }
 .live-conversation-workspace .family-switcher button.selected { border-color: #f5f5f2; color: #050505; background: #f5f5f2; }
 .live-conversation-workspace .conversation-link { color: #c5c5c8; }
@@ -915,20 +915,21 @@
 .live-conversation-workspace .conversation-link.selected { color: #fff; background: #202023; box-shadow: inset 3px 0 #f5f5f2; }
 .live-conversation-workspace .conversation-link i { background: #717176; }
 .live-conversation-workspace .personal-chat-link small,
-.live-conversation-workspace .dark-sign-out { color: #7f7f84; }
+.live-conversation-workspace .dark-sign-out { color: #a1a1aa; }
+.live-conversation-workspace .dark-sign-out:hover { color: #f5f5f2; background: #171719; }
 .live-conversation-workspace .conversation-pane,
 .live-conversation-workspace .conversation-context { background: #000; }
 .live-conversation-workspace .conversation-header { border-color: #242426; background: rgba(0,0,0,.94); }
 .live-conversation-workspace .conversation-header h2,
 .live-conversation-workspace .context-title h2 { color: #f5f5f2; }
-.live-conversation-workspace .conversation-header p { color: #909095; }
+.live-conversation-workspace .conversation-header p { color: #a1a1aa; }
 .live-conversation-workspace .live-label { border-color: #28633c; color: #79d891; background: #102919; }
 .live-conversation-workspace .header-invite,
 .live-conversation-workspace .context-title button { border-color: #303034; color: #f5f5f2; background: #141416; }
 .live-conversation-workspace .participant-stack span { border-color: #000; }
 .live-conversation-workspace .person-message h3 { color: #f5f5f2; }
 .live-conversation-workspace .person-message h3 small,
-.live-conversation-workspace .outgoing-message > span { color: #85858a; }
+.live-conversation-workspace .outgoing-message > span { color: #a1a1aa; }
 .live-conversation-workspace .translation-card,
 .live-conversation-workspace .assistant-card,
 .live-conversation-workspace .simple-message { border-color: #29292d !important; color: #ededeb; background: #141416; }
@@ -940,8 +941,8 @@
 .live-conversation-workspace .conversation-composer { background: #000; }
 .live-conversation-workspace .conversation-composer form { border-color: #343438; background: #141416; box-shadow: 0 12px 32px rgba(0,0,0,.42); }
 .live-conversation-workspace .conversation-composer textarea { color: #f5f5f2; caret-color: #fff; }
-.live-conversation-workspace .conversation-composer textarea::placeholder { color: #77777c; }
-.live-conversation-workspace .composer-guidance { color: #77777c; }
+.live-conversation-workspace .conversation-composer textarea::placeholder { color: #a1a1aa; }
+.live-conversation-workspace .composer-guidance { color: #a1a1aa; }
 .live-conversation-workspace .composer-guidance button,
 .live-conversation-workspace .composer-more > summary,
 .live-conversation-workspace .composer-attachment { color: #c2c2c5; }
@@ -953,6 +954,14 @@
 .live-conversation-workspace .inbox-subject-button { color: #f5f5f2; }
 .live-conversation-workspace .inbox-message-card p { color: #a5a5aa; }
 .live-conversation-workspace .inbox-message-card .inbox-sender { color: #dededc; }
+.live-conversation-workspace .inbox-message-card {
+  padding: 0;
+  border: 0 !important;
+  background: transparent;
+  box-shadow: none;
+}
+.live-conversation-workspace .inbox-message-card .inbox-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.live-conversation-workspace .inbox-status { color: #d1d1d3 !important; }
 .live-conversation-workspace .inbox-actions button { color: #050505; background: #f5f5f2; }
 .live-conversation-workspace .inbox-actions button.secondary { border-color: #343438; color: #ededeb; background: #171719; }
 .live-conversation-workspace .settings-scroll > section,
@@ -962,6 +971,15 @@
 .live-conversation-workspace .settings-disclosure > summary { color: #f5f5f2; }
 .live-conversation-workspace .settings-disclosure > summary small,
 .live-conversation-workspace .personal-settings > p { color: #96969b !important; }
+.live-conversation-workspace .settings-intro p,
+.live-conversation-workspace .gmail-connections > p,
+.live-conversation-workspace .byok-card > p,
+.live-conversation-workspace .model-tier-card > p,
+.live-conversation-workspace .conversation-context section > span,
+.live-conversation-workspace .conversation-context section p,
+.live-conversation-workspace .personal-settings label { color: #a1a1aa !important; }
+.live-conversation-workspace .conversation-context section > span,
+.live-conversation-workspace .personal-settings label { color: #ededeb !important; }
 .live-conversation-workspace .settings-disclosure[open] > summary { background: #1c1c1f; }
 .live-conversation-workspace .language-setting button.selected,
 .live-conversation-workspace .chip-row button.selected,
@@ -993,6 +1011,15 @@
 .family-dialog .invite-member-card input { border-color: #343438; color: #f5f5f2; background: #0d0d0f; }
 
 @media (max-width: 820px) {
+  .live-conversation-workspace {
+    --mobile-nav-clearance: calc(76px + max(10px, env(safe-area-inset-bottom)));
+    padding-bottom: var(--mobile-nav-clearance);
+  }
+  .live-conversation-workspace.is-family-open .workspace-view-transition,
+  .live-conversation-workspace.is-mobile-home .workspace-view-transition { display: none; }
+  .live-conversation-workspace.is-mobile-home .conversation-list,
+  .live-conversation-workspace.is-mobile-detail .conversation-pane,
+  .live-conversation-workspace.is-mobile-family .conversation-context { height: 100%; min-height: 0; }
   .live-conversation-workspace .conversation-list { background: #000; }
   .live-conversation-workspace .mobile-workspace-nav { border-color: #303034; background: rgba(16,16,18,.94); box-shadow: 0 18px 42px rgba(0,0,0,.55); }
   .live-conversation-workspace .mobile-workspace-nav button { color: #838388; }
@@ -1023,4 +1050,50 @@
   .companion-hub-overview small { color: #a5a5aa; }
   .companion-hub-footer { color: #99999e; background: #0b0b0d; }
   .companion-hub-footer span { border-color: #343438; color: #f5f5f2; }
+}
+
+@media (max-width: 820px), (pointer: coarse) {
+  .live-conversation-workspace :is(
+    .composer-guidance button,
+    .composer-more > summary,
+    .family-switcher button,
+    .inbox-actions button,
+    .chip-row button,
+    .gmail-disable,
+    .pending-invitation button,
+    .share-family-mail,
+    .open-file-room,
+    .upload-queue button
+  ) { min-height: 44px !important; }
+  .live-conversation-workspace :is(.inbox-actions button, .card-actions button, .connect-gmail, .family-alias-row button) {
+    height: auto;
+    max-width: 100%;
+    padding: 10px 12px;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .live-conversation-workspace .composer-guidance { overflow: visible; }
+  .live-conversation-workspace .composer-guidance-actions { min-width: 0; flex-wrap: wrap; gap: 4px; }
+  .live-conversation-workspace :is(
+    .session-menu p,
+    .agentmail-id code,
+    .shared-image small,
+    .shared-document strong,
+    .shared-document small,
+    .upload-queue strong,
+    .upload-queue small,
+    .pending-invitation strong,
+    .pending-invitation small,
+    .gmail-account strong,
+    .gmail-account small
+  ) { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 600px) {
+  .live-conversation-workspace .inbox-card { grid-template-columns: 44px minmax(0, 1fr); gap: 12px; padding: 14px; }
+  .live-conversation-workspace .inbox-card .message-avatar { width: 44px; height: 44px; }
+  .live-conversation-workspace .inbox-card > div > h3 { margin-bottom: 8px; }
+  .live-conversation-workspace .inbox-message-card { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .live-conversation-workspace .inbox-message-card .inbox-actions { grid-column: 1; margin-top: 5px; }
 }

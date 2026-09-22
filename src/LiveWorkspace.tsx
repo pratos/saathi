@@ -980,7 +980,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
       <header className="conversation-header live-room-header">
         <button className="mobile-chat-back" onClick={onBack} aria-label="Back to chats"><ArrowLeft /></button>
         <div><div className="title-line"><h2>{room.title}</h2><span className="live-label"><LockKeyhole /> Live</span></div><p>{room.type === 'private' ? 'Only you and Saathi can see this conversation' : `${family.space.name} · private family conversation`}</p></div>
-        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Saathi can help in this conversation">S</span></div></div>
+        <div className="room-header-actions">{onInvite && <button type="button" className="header-invite" onClick={onInvite}><UserPlus /><span>Invite member</span></button>}<div className="participant-stack"><span>YOU</span>{room.type !== 'private' && <span>F</span>}<span className="saathi-participant" title="Saathi can help in this conversation">S</span></div></div>
       </header>
       <div className="conversation-feed live-feed">
         {messages === undefined && <div className="dark-loading"><i /><i /><i /></div>}
@@ -1386,7 +1386,7 @@ function ImagePromptBox({ prompt, style, onPrompt, onStyle, onCancel, onApprove 
       </Select>
     </details>
     <div className="inbox-actions">
-      <Button type="button" size="sm" onClick={onApprove} disabled={!prompt.trim()}>Use this style</Button>
+      <Button type="button" size="sm" onClick={onApprove} disabled={!prompt.trim()}>Add prompt to message</Button>
       <Button type="button" size="sm" variant="secondary" onClick={onCancel}>Cancel</Button>
     </div>
   </Card>
@@ -1667,7 +1667,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
       {items?.map(item => <article className="person-message inbox-card" key={item._id}>
         <span className="message-avatar email"><Mail /></span>
         <div>
-          <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>· {categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
+          <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>{categoryLabel(item.category)} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
           <div className="simple-message inbox-message-card">
             <p className="inbox-sender">{displaySender(item.sender)}</p>
             {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
@@ -1676,27 +1676,24 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
             {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
             {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
-            {item.status === 'processing' && <p>Analyzing the email and its attachments…</p>}
+            {item.status === 'processing' && <p className="inbox-status">DeepSeek Flash is extracting the useful values…</p>}
+            {item.status === 'failed' && <p className="inbox-status">Values are not available yet. Run extraction again below.</p>}
             {item.documentParseStatus === 'parsed' && <p>Attached PDF read successfully.</p>}
             {item.documentParseStatus === 'password' && <p>{item.processingNotes || 'A password-protected PDF needs a hint from the email body.'}</p>}
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
             {(item.suggestedActions ?? []).map(action => <p key={`${item._id}-${action.kind}`}>{action.label}{action.detail ? ` — ${action.detail}` : ''}</p>)}
-            <div className="inbox-actions"><button type="button" className="secondary" onClick={() => setOpenItem(item)}>Open email</button></div>
+            <div className="inbox-actions">
+              <button type="button" className="secondary" onClick={() => setOpenItem(item)}>Open email</button>
+              {canReadGmailPdf(item) && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attached PDF</button>}
+              {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Try reading PDF again</button>}
+              {item.status === 'failed' && item.documentParseStatus !== 'failed' && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Extract values with Flash</button>}
+            </div>
             {item.actionStatus === 'suggested' && <div className="inbox-actions">
-              <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Confirm action</button>
-              <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Not now</button>
-            </div>}
-            {canReadGmailPdf(item) && <div className="inbox-actions">
-              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read Gmail PDF</button>
+              <button type="button" onClick={() => void confirmAction({ inboxItemId: item._id })}>Approve suggested next step</button>
+              <button type="button" className="secondary" onClick={() => void dismissAction({ inboxItemId: item._id })}>Dismiss suggestion</button>
             </div>}
             {item.documentParseStatus === 'failed' && item.documentParseRetryable === false && <small>Retry disabled. Fix the PDF source or provider setup before trying again.</small>}
-            {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <div className="inbox-actions">
-              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Retry PDF reading</button>
-            </div>}
-            {item.status === 'failed' && item.documentParseStatus !== 'failed' && <div className="inbox-actions">
-              <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Retry processing</button>
-            </div>}
-            {item.actionStatus === 'confirmed' && <small>Action confirmed for the family.</small>}
+            {item.actionStatus === 'confirmed' && <small>Suggested next step approved. Nothing was sent or changed.</small>}
           </div>
         </div>
       </article>)}

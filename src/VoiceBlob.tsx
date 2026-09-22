@@ -19,6 +19,7 @@ float field(vec2 p, vec2 c, float r) {
 
 void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
+  uv *= 1.14;
   float t = u_time;
   float energy = mix(0.18, 1.0, clamp(u_level, 0.0, 1.0));
   float breathe = 0.94 + 0.06 * sin(t * 0.7);
@@ -35,9 +36,9 @@ void main() {
 
   float angle = atan(uv.y, uv.x);
   float organic = 0.10 * sin(angle * 3.0 + t * 0.24) + 0.04 * sin(angle * 5.0 - t * 0.18);
-  float body = smoothstep(0.96 + organic, 1.34 + organic, f);
-  float halo = max(smoothstep(0.38, 1.08, f) - body, 0.0);
-  float edge = body * (1.0 - smoothstep(1.18, 1.76, f));
+  float body = step(1.10 + organic, f);
+  float halo = max(smoothstep(0.92, 1.08, f) - body, 0.0);
+  float edge = body * (1.0 - smoothstep(1.13, 1.42, f));
   float depth = smoothstep(1.08, 3.4, f);
   float highlight = exp(-length(uv - vec2(-0.13, 0.17)) * 7.6) * body;
   float drift = 0.5 + 0.5 * sin(uv.x * 3.2 - uv.y * 2.7 + t * 0.34);
@@ -60,8 +61,7 @@ void main() {
     color = mix(color, vec3(0.73, 0.71, 0.82), 0.30);
   }
 
-  float canvasFade = 1.0 - smoothstep(0.40, 0.49, length(uv));
-  float alpha = clamp(body * 0.92 + halo * 0.24, 0.0, 1.0) * canvasFade;
+  float alpha = body;
   gl_FragColor = vec4(color * alpha, alpha);
 }`
 
@@ -104,7 +104,8 @@ export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
     let displayedLevel = 0
 
     const resize = () => {
-      const size = Math.max(1, Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio || 1, 2)))
+      const pixelRatio = 3
+      const size = Math.max(1, Math.round(canvas.clientWidth * pixelRatio))
       if (canvas.width !== size || canvas.height !== size) {
         canvas.width = size
         canvas.height = size
@@ -140,7 +141,6 @@ export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
 
   return (
     <div ref={stageRef} className={`voice-blob ${muted ? 'is-muted' : ''}`} aria-hidden="true">
-      <i className="voice-blob-glow" />
       <canvas ref={canvasRef} />
     </div>
   )

@@ -99,6 +99,9 @@ export default defineSchema({
       kind: v.string(), label: v.string(), detail: v.optional(v.string()), url: v.optional(v.string()),
     }))),
     actionStatus: v.optional(v.union(v.literal("suggested"), v.literal("confirmed"), v.literal("dismissed"))),
+    // A person can review an inbox action after automated extraction. Backfills
+    // must leave records reviewed after they begin untouched.
+    reviewedAt: v.optional(v.number()),
     heartbeatMessageId: v.optional(v.id("messages")),
     jevDecisionId: v.optional(v.id("jevDecisions")),
     sharedAt: v.optional(v.number()), sharedByUserId: v.optional(v.id("users")),
@@ -112,6 +115,25 @@ export default defineSchema({
     spaceId: v.id("spaces"), userId: v.id("users"),
     lastSeenReceivedAt: v.number(), lastSeenCreationTime: v.number(), updatedAt: v.number(),
   }).index("by_space_user", ["spaceId", "userId"]),
+  inboxRecategorizationJobs: defineTable({
+    spaceId: v.id("spaces"),
+    createdBy: v.id("users"),
+    startedAt: v.number(),
+    updatedAt: v.number(),
+    status: v.union(v.literal("queued"), v.literal("running"), v.literal("complete"), v.literal("failed")),
+    workflowId: v.optional(v.string()),
+    scanCursor: v.optional(v.string()),
+    pendingCursor: v.optional(v.string()),
+    currentBatch: v.optional(v.array(v.id("inboxItems"))),
+    currentBatchCompleted: v.optional(v.array(v.id("inboxItems"))),
+    currentBatchIsFinal: v.optional(v.boolean()),
+    discovered: v.number(),
+    recategorized: v.number(),
+    skipped: v.number(),
+    scanComplete: v.boolean(),
+    error: v.optional(v.string()),
+  }).index("by_space_status", ["spaceId", "status"])
+    .index("by_space_started_at", ["spaceId", "startedAt"]),
   messages: defineTable({
     spaceId: v.id("spaces"), roomId: v.id("rooms"), authorUserId: v.optional(v.id("users")),
     actorType: v.union(v.literal("user"), v.literal("assistant"), v.literal("email_guest"), v.literal("voice_transcript")),

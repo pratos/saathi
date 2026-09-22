@@ -23,6 +23,19 @@ npm run dev:backend
 
 Follow [convex/README.md](./convex/README.md) for the server-side variable checklist and to configure email OTP, AgentMail, Firecrawl, optional Composio Gmail ingestion, and static hosting. Provider secrets belong in Convex deployment environment variables, not browser-visible Vite variables.
 
+## Inbox recategorization
+
+An authenticated family **owner** can start a bounded re-extraction of one selected family space; there is intentionally no global or unauthenticated command. Invoke it from an authenticated Convex client:
+
+```ts
+const jobId = await convex.mutation(api.recategorization.startForSpace, { spaceId });
+const progress = useQuery(api.recategorization.status, { jobId });
+```
+
+The durable workflow processes five inbox items per batch, serially (one active job per space), with a 250 ms pause between items. `progress.total` is `null` while discovery is still in progress, then equals the final discovered count. Owners can resume only a failed job with `api.recategorization.resume({ jobId })`.
+
+Recategorization reuses the normal document parsing and extraction actions but changes only machine-extracted taxonomy fields. It never creates another heartbeat, suggested action, usage record, or telemetry decision. Any item with a confirmed/dismissed action, or reviewed after the job started, is skipped and its reviewed fields are retained.
+
 ## Self-hosting
 
 1. Install dependencies and link a Convex deployment.

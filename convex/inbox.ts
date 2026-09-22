@@ -65,7 +65,7 @@ export const confirmAction = mutation({
     const { userId, item } = await requireInboxItemPermission(ctx, inboxItemId, "read");
     if (item.visibility !== "space") throw new ConvexError({ code: "FORBIDDEN", message: "Only shared family inbox items can be confirmed here" });
     if (item.actionStatus === "confirmed") return item._id;
-    await ctx.db.patch(item._id, { actionStatus: "confirmed" });
+    await ctx.db.patch(item._id, { actionStatus: "confirmed", reviewedAt: Date.now() });
     const familyRoom = item.roomId ?? (await ctx.db.query("rooms").withIndex("by_space", q => q.eq("spaceId", item.spaceId))
       .filter(q => q.eq(q.field("type"), "shared")).first())?._id;
     if (familyRoom) {
@@ -121,7 +121,7 @@ export const dismissAction = mutation({
     const { userId, item } = await requireInboxItemPermission(ctx, inboxItemId, "read");
     if (item.visibility !== "space") throw new ConvexError({ code: "FORBIDDEN", message: "Only shared family inbox items can be dismissed here" });
     if (item.actionStatus === "dismissed") return item._id;
-    await ctx.db.patch(item._id, { actionStatus: "dismissed" });
+    await ctx.db.patch(item._id, { actionStatus: "dismissed", reviewedAt: Date.now() });
     await ctx.db.insert("auditEvents", {
       spaceId: item.spaceId, actorUserId: userId, action: "inbox.action_dismissed",
       resourceType: "inboxItem", resourceId: String(item._id), createdAt: Date.now(),

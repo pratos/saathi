@@ -32,6 +32,7 @@ import type * as liveVoice from "../liveVoice.js";
 import type * as voiceBrowser from "../voiceBrowser.js";
 import type * as mentions from "../mentions.js";
 import type * as messages from "../messages.js";
+import type * as recategorization from "../recategorization.js";
 import type * as rooms from "../rooms.js";
 import type * as spaces from "../spaces.js";
 import type * as users from "../users.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   voiceBrowser: typeof voiceBrowser;
   mentions: typeof mentions;
   messages: typeof messages;
+  recategorization: typeof recategorization;
   rooms: typeof rooms;
   spaces: typeof spaces;
   users: typeof users;

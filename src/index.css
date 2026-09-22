@@ -1,12 +1,16 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/geist";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/latin-800.css";
 @import "@fontsource-variable/noto-sans-devanagari";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: "Geist Variable", "Noto Sans Devanagari Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Manrope", "Noto Sans Devanagari Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -47,7 +51,7 @@
 }
 
 :root {
-  font-family: "Geist Variable", "Noto Sans Devanagari Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   color: #17233a;
   background: #eeeae2;
   color-scheme: light;

@@ -1,9 +1,9 @@
 button { border: 0; background: none; color: inherit; }
 .experience-card-button:disabled { opacity: 1; }
-.brand-mark { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px 9px 9px 3px; background: var(--coral); color: #fff; font: 700 17px/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.brand-mark { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px 9px 9px 3px; background: var(--coral); color: #fff; font: 700 17px/1 var(--font-sans); }
 
-.auth-brand { display: flex; gap: 10px; align-items: center; font: 700 22px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-.language-line { display: flex; gap: 14px; color: #c9bbc7; font: 500 13px ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.auth-brand { display: flex; gap: 10px; align-items: center; font: 700 22px/1 var(--font-sans); }
+.language-line { display: flex; gap: 14px; color: #c9bbc7; font: 500 13px var(--font-sans); }
 .primary { display: flex; align-items: center; justify-content: center; gap: 7px; height: 46px; border-radius: 9px; color: #fff; background: var(--coral); font-weight: 700; }
 .primary:hover { background: var(--coral-dark); }
 .text-button { margin-top: 12px; color: #8b6360; font-size: 11px; }
@@ -12,14 +12,14 @@ button { border: 0; background: none; color: inherit; }
 .welcome-page { min-height: 100vh; display: grid; grid-template-columns: minmax(390px, 44%) 1fr; background: var(--paper); }
 .welcome-story { min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 46px clamp(34px, 5vw, 78px); color: #fff; background: radial-gradient(circle at 18% 18%, #62455d 0, transparent 35%), radial-gradient(circle at 82% 82%, #70463f 0, transparent 31%), var(--plum); }
 .welcome-copy { max-width: 600px; }
-.welcome-copy h1 { max-width: 560px; margin: 20px 0; font: 720 clamp(42px, 5vw, 72px)/1.03 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -.045em; }
+.welcome-copy h1 { max-width: 560px; margin: 20px 0; font: 720 clamp(42px, 5vw, 72px)/1.03 var(--font-sans); letter-spacing: -.045em; }
 .welcome-copy > p { max-width: 510px; margin: 0; color: #ddd3dc; font-size: clamp(16px, 1.35vw, 20px); line-height: 1.65; }
 .trust-list { display: grid; gap: 12px; margin-top: 34px; }
 .trust-list span { display: flex; gap: 10px; align-items: center; color: #f1e9ef; font-size: 14px; }
 .trust-list svg { color: #ef9a80; }
 .mode-panel { display: grid; place-items: center; padding: 42px clamp(30px, 6vw, 92px); }
 .mode-picker { width: min(590px, 100%); }
-.mode-picker h2 { margin: 11px 0 10px; color: #2d292c; font: 720 clamp(35px, 4vw, 50px)/1.08 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -.04em; }
+.mode-picker h2 { margin: 11px 0 10px; color: #2d292c; font: 720 clamp(35px, 4vw, 50px)/1.08 var(--font-sans); letter-spacing: -.04em; }
 .mode-intro { max-width: 520px; margin: 0 0 30px; color: #756e72; font-size: 17px; line-height: 1.55; }
 .mode-card { width: 100%; height: auto; min-height: 142px; display: grid; grid-template-columns: 52px minmax(0, 1fr) 24px; gap: 18px; align-items: center; margin: 14px 0; padding: 22px; border: 1px solid #ddd4cc; border-radius: 17px; background: #fff; text-align: left; box-shadow: 0 8px 28px rgba(54, 40, 48, .05); transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
 .mode-card:hover { transform: translateY(-2px); border-color: #cfa899; box-shadow: 0 15px 40px rgba(54, 40, 48, .1); }
@@ -40,7 +40,7 @@ button { border: 0; background: none; color: inherit; }
 .auth-brand.dark { margin-bottom: 36px; color: var(--ink); }
 .mode-badge { width: fit-content; display: flex; gap: 7px; align-items: center; padding: 7px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
 .mode-badge.live { color: #35624f; background: #e9f2ed; }
-.live-auth-card h1, .onboarding-card h1 { margin: 16px 0 10px; color: #2e292d; font: 720 clamp(32px, 5vw, 43px)/1.08 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -.04em; }
+.live-auth-card h1, .onboarding-card h1 { margin: 16px 0 10px; color: #2e292d; font: 720 clamp(32px, 5vw, 43px)/1.08 var(--font-sans); letter-spacing: -.04em; }
 .live-auth-card > p, .onboarding-card > p { margin: 0 0 28px; color: #716a6e; font-size: 16px; line-height: 1.6; }
 .live-auth-card form, .onboarding-card form { display: grid; }
 .live-auth-card label, .onboarding-card label { margin-bottom: 8px; color: #3f393d; font-size: 14px; font-weight: 700; }
@@ -59,7 +59,7 @@ button { border: 0; background: none; color: inherit; }
 .live-auth-card .text-button:disabled { opacity: .6; }
 .status-spinner { width: 34px; height: 34px; margin: 26px auto; border: 3px solid #eadfd8; border-top-color: var(--coral); border-radius: 50%; animation: spin .8s linear infinite; }
 .centered-status { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 13px; padding: 30px; color: #635b60; background: var(--paper); text-align: center; }
-.centered-status h1 { margin: 0; color: #302b2f; font: 720 36px/1.05 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -.04em; }
+.centered-status h1 { margin: 0; color: #302b2f; font: 720 36px/1.05 var(--font-sans); letter-spacing: -.04em; }
 .centered-status p { max-width: 520px; margin: 0; font-size: 16px; line-height: 1.6; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -937,7 +937,7 @@ button, a, summary, input, textarea, [role="button"] { transition: border-color 
 body { color: #17233a; background: #eeeae2; }
 h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .onboarding-card h1, .centered-status h1 {
-  font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-family: var(--font-sans) !important;
   font-weight: 600;
   letter-spacing: -.025em;
 }
@@ -981,7 +981,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .session-menu button:hover { background: #f0ece4; }
 
 .conversation-list { border-right: 1px solid #d8d2c8; background: #f6f2eb; }
-.conversation-list h1 { font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 28px; }
+.conversation-list h1 { font-family: var(--font-sans); font-size: 28px; }
 .family-select-label, .list-heading { color: #596273; }
 .family-switcher button { color: #273246; background: transparent; box-shadow: inset 0 0 0 1px #d8d2c8; }
 .family-switcher button.selected { color: #fffdf8; background: #233f72; }
@@ -1038,7 +1038,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .shared-document small { color: #596273; }
 .dark-empty-state { color: #596273; }
 .dark-empty-state > svg { color: #b85735; }
-.dark-empty-state h2 { color: #17233a; font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 30px; }
+.dark-empty-state h2 { color: #17233a; font-family: var(--font-sans); font-size: 30px; }
 .dark-loading i { background: linear-gradient(90deg, #e9e4db, #f5f2ec, #e9e4db); }
 .starter-prompts button { border-color: #cfc8bc; color: #233f72; background: transparent; }
 .starter-prompts button:hover { border-color: #233f72; background: #edf0f5; }
@@ -1065,7 +1065,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .upload-queue > div { border-color: #d8d2c8; color: #273246; background: #f0ece4; }
 
 .conversation-context { border-left: 1px solid #d8d2c8; color: #17233a; background: #f6f2eb; }
-.context-title h2 { font-family: ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 28px; }
+.context-title h2 { font-family: var(--font-sans); font-size: 28px; }
 .context-title p, .conversation-context section > span { color: #596273; }
 .context-title button { border-color: #c9c2b7; color: #5f6877; }
 .conversation-context section p { color: #273246; }
@@ -1255,11 +1255,11 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   mask-image: linear-gradient(to bottom right, #000, transparent 72%);
 }
 .welcome-story > * { position: relative; }
-.welcome-story .auth-brand { font: 700 17px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: -.02em; }
+.welcome-story .auth-brand { font: 700 17px/1 var(--font-sans); letter-spacing: -.02em; }
 .welcome-story .brand-mark, .auth-brand.dark .brand-mark { border-radius: 7px; color: #092c27; background: #61d6bd; }
 .welcome-copy { margin: auto 0; }
 .welcome-copy::before { display: block; width: fit-content; margin-bottom: 20px; padding: 6px 8px; border: 1px solid #36505e; border-radius: 6px; color: #78dec8; content: 'SAATHI / FAMILY AGENT'; font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .1em; }
-.welcome-copy h1 { max-width: 520px; margin: 0 0 22px; color: #f7fafb; font: 680 clamp(40px, 4.2vw, 58px)/1.02 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.055em; }
+.welcome-copy h1 { max-width: 520px; margin: 0 0 22px; color: #f7fafb; font: 680 clamp(40px, 4.2vw, 58px)/1.02 var(--font-sans) !important; letter-spacing: -.055em; }
 .welcome-copy > p { max-width: 520px; color: #b5c1c8; font-size: clamp(15px, 1.2vw, 18px); line-height: 1.55; }
 .trust-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 34px; overflow: hidden; border: 1px solid #2c3e49; border-radius: 9px; background: #2c3e49; }
 .trust-list span { min-height: 76px; align-items: flex-start; flex-direction: column; padding: 12px; color: #d6dfe3; background: #14232d; font-size: 11px; line-height: 1.35; }
@@ -1269,7 +1269,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .mode-picker { width: min(760px, 100%); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .mode-picker::before { display: block; margin-bottom: 10px; color: #397064; content: 'WORKSPACE ACCESS'; font: 750 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .12em; }
 .mode-picker::before, .mode-picker h2, .mode-picker > p, .mode-picker > .pwa-install-card { grid-column: 1 / -1; }
-.mode-picker h2 { margin: 0 0 8px; color: #14212b; font: 700 clamp(36px, 4vw, 50px)/1.05 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.045em; }
+.mode-picker h2 { margin: 0 0 8px; color: #14212b; font: 700 clamp(36px, 4vw, 50px)/1.05 var(--font-sans) !important; letter-spacing: -.045em; }
 .mode-intro { margin-bottom: 26px; color: #61707a; font-size: 15px; }
 .mode-card, .mode-card.live-card {
   min-height: 174px;
@@ -1310,10 +1310,10 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   background: #fff;
   box-shadow: 0 16px 48px rgba(16,28,37,.1);
 }
-.auth-brand.dark { margin-bottom: 28px; color: #14212b; font: 700 17px/1 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.auth-brand.dark { margin-bottom: 28px; color: #14212b; font: 700 17px/1 var(--font-sans); }
 .mode-badge { border-radius: 5px; }
 .mode-badge.live { color: #176050; background: #e1f4ef; }
-.live-auth-card h1, .onboarding-card h1 { color: #14212b; font: 700 clamp(30px, 4vw, 40px)/1.08 ui-sans-serif, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; letter-spacing: -.04em; }
+.live-auth-card h1, .onboarding-card h1 { color: #14212b; font: 700 clamp(30px, 4vw, 40px)/1.08 var(--font-sans) !important; letter-spacing: -.04em; }
 .live-auth-card > p, .onboarding-card > p { color: #61707a; }
 .field-with-icon, .onboarding-card input { border-color: #cbd3d8; border-radius: 7px; background: #f8fafb; }
 .field-with-icon:focus-within, .onboarding-card input:focus { border-color: #317d70; box-shadow: 0 0 0 3px rgba(49,125,112,.11); }
@@ -1372,7 +1372,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .voice-call-backdrop {
   color: #fff8ee;
   background: rgba(1,12,10,.9);
-  font-family: "Geist Variable", "Noto Sans Devanagari Variable", ui-sans-serif, sans-serif;
+  font-family: var(--font-sans);
 }
 .voice-call-sheet {
   background:
@@ -1487,3 +1487,42 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .voice-call-controls .is-muted { border-color: #f5f5f2; color: #050505; background: #f5f5f2; }
 .voice-call-controls .end-call-control { border-color: #47474c; color: #f5f5f2; background: #242427; }
 .voice-call-controls .end-call-control:hover { background: #313135; }
+
+/* Soft-spectrum voice states stay visible without becoming neon. */
+.voice-call-sheet {
+  background:
+    radial-gradient(circle at 48% 24%, rgba(203,188,255,.16), transparent 29%),
+    radial-gradient(circle at 78% 58%, rgba(185,217,255,.07), transparent 27%),
+    #000;
+}
+.voice-call-status-group {
+  padding: 7px 9px;
+  border: 1px solid #3d3948;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(203,188,255,.1), rgba(185,217,255,.035)), rgba(16,16,18,.9);
+}
+.voice-call-header .voice-call-status { color: #fff; font-weight: 700; }
+.voice-call-status-group > small { color: #e5e5e7; font-weight: 600; }
+.voice-call-status i { background: #a9ead1; box-shadow: 0 0 0 5px rgba(169,234,209,.11); }
+.voice-blob::after { background: radial-gradient(circle at 34% 30%, #fff 0%, #b9d9ff 28%, #cbbcff 57%, #ffc8aa 100%); }
+.voice-blob-glow { background: radial-gradient(circle, rgba(203,188,255,.3), rgba(185,217,255,.12) 48%, transparent 72%); }
+.voice-blob canvas { filter: drop-shadow(0 18px 42px rgba(203,188,255,.22)); }
+.voice-caption.assistant strong { color: #a9ead1; }
+.voice-caption.user strong { color: #ffc8aa; }
+.voice-activity-panel {
+  border-color: #3a3546;
+  background: linear-gradient(145deg, rgba(203,188,255,.065), rgba(185,217,255,.025) 55%), rgba(16,16,18,.94);
+}
+.voice-activity-card { border-color: #393541; background: linear-gradient(135deg, rgba(185,217,255,.045), transparent 62%), #19191c; }
+.voice-activity-card.complete { border-color: #466253; }
+.voice-activity-icon { background: linear-gradient(135deg, #a9ead1, #b9d9ff); }
+.voice-browser-decision { border-color: #454050; background: linear-gradient(135deg, rgba(203,188,255,.08), rgba(185,217,255,.03)), #111113; }
+.voice-browser-decision strong { color: #cbbcff; }
+.voice-computer-handoff > a { background: linear-gradient(135deg, #cbbcff, #b9d9ff); }
+.voice-call-controls .is-muted { border-color: #cbbcff; background: linear-gradient(135deg, #cbbcff, #b9d9ff); }
+.voice-call-controls .end-call-control { border-color: #594840; background: linear-gradient(135deg, rgba(255,200,170,.16), rgba(203,188,255,.07)), #242427; }
+
+@media (max-width: 600px) {
+  .voice-call-status { font-size: 13px; }
+  .voice-call-status-group > small { font-size: 12px; }
+}

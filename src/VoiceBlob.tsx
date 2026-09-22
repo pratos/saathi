@@ -40,8 +40,8 @@ void main() {
   float highlight = exp(-length(uv - vec2(-0.13, 0.17)) * 7.6) * body;
   float drift = 0.5 + 0.5 * sin(uv.x * 3.2 - uv.y * 2.7 + t * 0.34);
 
-  vec3 navy = vec3(0.018, 0.026, 0.095);
-  vec3 indigo = vec3(0.075, 0.075, 0.24);
+  vec3 navy = vec3(0.055, 0.065, 0.16);
+  vec3 indigo = vec3(0.12, 0.11, 0.28);
   vec3 cyan = vec3(0.16, 0.70, 0.78);
   vec3 violet = vec3(0.43, 0.28, 0.78);
   vec3 rose = vec3(0.76, 0.30, 0.52);
@@ -49,17 +49,17 @@ void main() {
   vec3 color = mix(navy, indigo, depth * 0.72 + drift * 0.08 * energy);
   float cyanEdge = rim * smoothstep(-0.36, 0.32, uv.y - uv.x);
   float roseEdge = rim * smoothstep(-0.08, 0.42, -uv.y - uv.x * 0.35);
-  color = mix(color, violet, rim * 0.48);
-  color += cyan * cyanEdge * (0.32 + 0.14 * energy);
-  color += rose * roseEdge * (0.18 + 0.10 * energy);
-  color += vec3(0.48, 0.66, 0.92) * highlight * 0.20;
-  color += mix(violet, cyan, 0.45) * halo * (0.12 + 0.12 * energy);
+  color = mix(color, violet, rim * 0.28);
+  color += cyan * cyanEdge * (0.18 + 0.10 * energy);
+  color += rose * roseEdge * (0.10 + 0.06 * energy);
+  color += vec3(0.48, 0.66, 0.92) * highlight * 0.12;
+  color += mix(violet, cyan, 0.45) * halo * (0.10 + 0.08 * energy);
 
   if (u_muted > 0.5) {
     color = mix(color, vec3(0.18, 0.16, 0.29), 0.34);
   }
 
-  float alpha = clamp(body * 0.98 + halo * 0.34 + rim * 0.14, 0.0, 1.0);
+  float alpha = clamp(body * 0.72 + halo * 0.26 + rim * 0.06, 0.0, 0.78);
   gl_FragColor = vec4(color, alpha);
 }`
 

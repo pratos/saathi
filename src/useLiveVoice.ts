@@ -249,7 +249,7 @@ export function useLiveVoice(roomId: Id<'rooms'>) {
               callId: call.callId,
               url: stringArg(call.arguments, 'url'),
               task: stringArg(call.arguments, 'task'),
-            }), 'The website task could not be completed.', setError, onToolFinished)
+            }), 'Saathi lost the website’s final result. Check the page before trying again.', setError, onToolFinished)
           } else if (call) {
             void fulfillVoiceAction(channel, roomId, call, executeConversationAction, setError, onToolFinished)
           }

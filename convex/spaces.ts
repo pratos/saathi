@@ -54,6 +54,7 @@ export const members = query({
   returns: v.array(v.object({
     userId: v.id("users"),
     name: v.string(),
+    username: v.union(v.string(), v.null()),
     image: v.union(v.string(), v.null()),
     role: v.union(v.literal("owner"), v.literal("member")),
     isCurrentUser: v.boolean(),
@@ -66,10 +67,12 @@ export const members = query({
 
     return Promise.all(memberships.map(async membership => {
       const member = await ctx.db.get(membership.userId);
-      const name = member?.displayName?.trim() || member?.name?.trim() || "Family member";
+      const username = member?.username?.trim() || null;
+      const name = member?.displayName?.trim() || member?.name?.trim() || (username ? `@${username}` : "Family member");
       return {
         userId: membership.userId,
         name,
+        username,
         image: member?.image ?? null,
         role: membership.role,
         isCurrentUser: membership.userId === userId,

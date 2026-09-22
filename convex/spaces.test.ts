@@ -57,7 +57,7 @@ describe("family member summaries", () => {
 
     await t.run(async ctx => {
       await ctx.db.patch(ownerId, { displayName: "Asha Kapoor", image: "https://images.example.test/asha.jpg" });
-      await ctx.db.patch(memberId, { displayName: "Dev Kapoor" });
+      await ctx.db.patch(memberId, { displayName: "Dev Kapoor", username: "dev_kapoor" });
       const revokedMemberId = await ctx.db.insert("users", { displayName: "Former member", email: "former@example.test" });
       const otherFamilyMemberId = await ctx.db.insert("users", { displayName: "Other family member", email: "other@example.test" });
       const additionalMemberIds = await Promise.all([
@@ -77,7 +77,7 @@ describe("family member summaries", () => {
     expect(members).toHaveLength(5);
     expect(members).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "Asha Kapoor", image: "https://images.example.test/asha.jpg", role: "owner", isCurrentUser: true }),
-      expect.objectContaining({ name: "Dev Kapoor", image: null, role: "member", isCurrentUser: false }),
+      expect.objectContaining({ name: "Dev Kapoor", username: "dev_kapoor", image: null, role: "member", isCurrentUser: false }),
       expect.objectContaining({ name: "Family member", image: null, role: "member", isCurrentUser: false }),
     ]));
     expect(members[0]).not.toHaveProperty("email");

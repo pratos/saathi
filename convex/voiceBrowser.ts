@@ -87,9 +87,11 @@ export const runCommand = internalAction({
         });
         return { ok: true, message: result.output.slice(0, 8_000) };
       } finally {
+        // Cleanup must not replace a successful browser result if the voice
+        // session ends while the remote task is finishing.
         await ctx.runMutation(internal.liveVoice.finishComputerTool, {
           roomId: args.roomId, sessionId: args.sessionId, callId: args.callId,
-        });
+        }).catch(() => undefined);
       }
     }
 
@@ -225,9 +227,11 @@ export const runCommand = internalAction({
       }
       return { ok: false, message: "The browser could not complete that step safely." };
     } finally {
+      // The page action may already have completed. A stale/closed voice
+      // session must not turn that successful result into a tool failure.
       await ctx.runMutation(internal.liveVoice.finishComputerTool, {
         roomId: args.roomId, sessionId: args.sessionId, callId: args.callId,
-      });
+      }).catch(() => undefined);
     }
   },
 });

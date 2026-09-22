@@ -149,6 +149,14 @@ export default defineSchema({
     uiActions: v.optional(v.array(conversationUiActionValidator)),
     createdAt: v.number(),
   }).index("by_room_created", ["roomId", "createdAt"]).index("by_room_idempotency", ["roomId", "idempotencyKey"]),
+  mentionNotifications: defineTable({
+    userId: v.id("users"), spaceId: v.id("spaces"), roomId: v.id("rooms"),
+    messageId: v.id("messages"), actorUserId: v.id("users"),
+    status: v.union(v.literal("unread"), v.literal("read")),
+    createdAt: v.number(), readAt: v.optional(v.number()),
+  }).index("by_user_space_status_created", ["userId", "spaceId", "status", "createdAt"])
+    .index("by_user_room_status", ["userId", "roomId", "status"])
+    .index("by_message_user", ["messageId", "userId"]),
   liveVoiceSessions: defineTable({
     sessionId: v.string(), spaceId: v.id("spaces"), roomId: v.id("rooms"), startedBy: v.id("users"),
     billingSource: v.optional(v.union(v.literal("platform"), v.literal("family"))),

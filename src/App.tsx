@@ -76,21 +76,23 @@ function ModeChooser({
           {showShader && <div className="pointer-events-none absolute inset-0 opacity-80"><Suspense fallback={null}><AgentSignalField /></Suspense></div>}
           <div className="entry-grid pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:linear-gradient(to_bottom_right,#000,transparent_76%)]" />
 
-          <m.div className="entry-brand relative flex items-center gap-2.5 text-[17px] font-bold tracking-[-.02em]" initial={initial} animate={enter} transition={{ duration: .42 }}>
-            <span className="grid size-9 place-items-center rounded-[3px] bg-[#61d6bd] text-lg font-extrabold text-[#092c27]">स</span>
-            Saathi
-          </m.div>
+          <div className="entry-story-content relative grid w-full gap-8">
+            <m.div className="entry-brand relative flex items-center gap-2.5 text-[17px] font-bold tracking-[-.02em]" initial={initial} animate={enter} transition={{ duration: .42 }}>
+              <span className="grid size-9 place-items-center rounded-[3px] bg-[#61d6bd] text-lg font-extrabold text-[#092c27]">स</span>
+              Saathi
+            </m.div>
 
-          <m.div className="entry-copy relative mt-10 lg:my-auto lg:mt-0" initial={initial} animate={enter} transition={{ duration: .5, delay: .08 }}>
-            <h1 className="max-w-[500px] text-[clamp(36px,3.6vw,52px)] leading-[1.01] font-[720] tracking-[-.055em] text-[#f7fafb]">Keep the whole family in the loop.</h1>
-            <p className="mt-4 max-w-[470px] text-[15px] leading-[1.5] text-[#b5c1c8]">Bills, school notes, travel plans, and family conversations—understood in the language each person prefers.</p>
-            <div className="mt-6 hidden grid-cols-3 gap-px overflow-hidden rounded-[3px] border border-[#2c3e49] bg-[#2c3e49] lg:grid">
-              {[[ShieldCheck, 'Private family spaces'], [Check, 'You approve anything sent'], [Sparkles, 'Saathi helps when asked']].map(([Icon, label]) => {
-                const TrustIcon = Icon as typeof ShieldCheck
-                return <span className="flex min-h-16 flex-col items-start gap-2 bg-[#10232d]/90 p-2.5 text-[11px] leading-snug text-[#d6dfe3]" key={label as string}><TrustIcon size={18} className="text-[#61d6bd]" />{label as string}</span>
-              })}
-            </div>
-          </m.div>
+            <m.div className="entry-copy relative" initial={initial} animate={enter} transition={{ duration: .5, delay: .08 }}>
+              <h1 className="max-w-[500px] text-[clamp(36px,3.6vw,52px)] leading-[1.01] font-[720] tracking-[-.055em] text-[#f7fafb]">Keep the whole family in the loop.</h1>
+              <p className="mt-4 max-w-[470px] text-[15px] leading-[1.5] text-[#b5c1c8]">Bills, school notes, travel plans, and family conversations—understood in the language each person prefers.</p>
+              <div className="mt-6 hidden grid-cols-3 gap-px overflow-hidden rounded-[3px] border border-[#2c3e49] bg-[#2c3e49] lg:grid">
+                {[[ShieldCheck, 'Private family spaces'], [Check, 'You approve anything sent'], [Sparkles, 'Saathi helps when asked']].map(([Icon, label]) => {
+                  const TrustIcon = Icon as typeof ShieldCheck
+                  return <span className="flex min-h-16 flex-col items-start gap-2 bg-[#10232d]/90 p-2.5 text-[11px] leading-snug text-[#d6dfe3]" key={label as string}><TrustIcon size={18} className="text-[#61d6bd]" />{label as string}</span>
+                })}
+              </div>
+            </m.div>
+          </div>
 
           <m.div className="relative mt-auto hidden gap-2 font-mono text-[10px] tracking-[.06em] text-[#718692] lg:flex" initial={initial} animate={enter} transition={{ duration: .45, delay: .18 }}><span>नमस्ते</span><span>·</span><span>Hello</span><span>·</span><span>नमस्कार</span></m.div>
         </section>

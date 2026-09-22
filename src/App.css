@@ -1527,6 +1527,10 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   background: rgba(255,255,255,.24) !important;
   border-right: 1px solid rgba(255,255,255,.72);
 }
+.saathi-entry .entry-story-content {
+  max-width: 560px;
+  margin: auto 0;
+}
 .saathi-entry .entry-story > div:first-child { opacity: .42 !important; filter: saturate(.58) brightness(1.25); }
 .saathi-entry .entry-grid { opacity: 0 !important; }
 .saathi-entry .entry-brand { color: #2c2736; }
@@ -1565,7 +1569,12 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 }
 .saathi-entry .entry-copy > div > span svg { color: #6f59bd !important; }
 .saathi-entry .entry-story > div:last-child { color: #575260 !important; font-size: 11px !important; }
-.saathi-entry .entry-access { background: rgba(255,255,255,.18); }
+.saathi-entry .entry-access {
+  min-height: 100dvh;
+  justify-content: center;
+  background: rgba(255,255,255,.18);
+}
+.saathi-entry .entry-access-content { margin-block: auto; }
 .saathi-entry .entry-access-content h2 { color: #1c1c24; font-weight: 800; letter-spacing: -.04em; }
 .saathi-entry .entry-access-content > p { color: #646574 !important; font-size: 15px; }
 .saathi-entry .experience-card {
@@ -1661,10 +1670,10 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 }
 
 @media (max-width: 700px) {
-  .saathi-entry .entry-story { min-height: 300px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.76); }
-  .saathi-entry .entry-copy { margin-top: 38px; }
+  .saathi-entry .entry-story { min-height: 100svh; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.76); }
+  .saathi-entry .entry-story-content { margin: auto 0; gap: 28px; }
   .saathi-entry .entry-copy h1 { font-size: clamp(36px, 10vw, 46px); }
-  .saathi-entry .entry-access { padding: 28px 16px 38px; }
+  .saathi-entry .entry-access { min-height: 100svh; padding: 28px 16px 38px; }
   .saathi-entry .experience-card-button { min-height: 126px; }
   .live-auth-card, .onboarding-card { padding: 16px; border-radius: 22px; }
 }

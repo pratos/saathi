@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { Children, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { ThinkingState } from '@aicss/react/thinking-state'
 import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
@@ -347,6 +347,8 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const { signOut } = useAuthActions()
   const user = useQuery(api.users.current)
   const rooms = useQuery(api.rooms.list, { spaceId: family.space._id })
+  const unreadMentions = useQuery(api.mentions.unreadForSpace, { spaceId: family.space._id })
+  const markRoomMentionsRead = useMutation(api.mentions.markRoomRead)
   const ensurePersonalRoom = useMutation(api.rooms.ensurePersonal)
   const inboxItems = useQuery(api.inbox.list, { spaceId: family.space._id, limit: 20 })
   const gmailConnections = useQuery(api.gmailData.mine, { spaceId: family.space._id })
@@ -382,6 +384,11 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const personalRoom = rooms?.find(({ room }) => room?.type === 'private')?.room ?? null
   const selectedRoom = rooms?.flatMap(({ room }) => room ? [room] : []).find(room => room._id === selectedRoomId) ?? sharedRoom
   const initials = initialsFor(user?.displayName ?? user?.name ?? user?.email ?? 'Family member')
+  const mentionCountByRoom = useMemo(() => {
+    const counts = new Map<Id<'rooms'>, number>()
+    for (const mention of unreadMentions ?? []) counts.set(mention.roomId, (counts.get(mention.roomId) ?? 0) + 1)
+    return counts
+  }, [unreadMentions])
 
   useEffect(() => {
     if (rooms === undefined || personalRoom) return
@@ -480,7 +487,14 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
     setSelectedRoomId(roomId)
     setPane('chats')
     setMobileNav('detail')
+    if (mentionCountByRoom.get(roomId)) void markRoomMentionsRead({ roomId })
   }
+
+  useEffect(() => {
+    if (pane !== 'chats' || !selectedRoom || !mentionCountByRoom.get(selectedRoom._id)) return
+    void markRoomMentionsRead({ roomId: selectedRoom._id })
+  }, [markRoomMentionsRead, mentionCountByRoom, pane, selectedRoom])
+
   const openPane = (next: 'updates' | 'files' | 'family') => {
     if (next === 'family') setSettingsSection('hub')
     setPane(next)
@@ -550,11 +564,11 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         </section>
         <span className="list-heading">Private</span>
         {personalRoom
-          ? <button className={`conversation-link personal-chat-link ${personalRoom._id === selectedRoom?._id ? 'selected' : ''}`} onClick={() => openRoom(personalRoom._id)}><Bot /><span>My Saathi<small>Only you</small></span></button>
+          ? <button className={`conversation-link personal-chat-link ${personalRoom._id === selectedRoom?._id ? 'selected' : ''}`} onClick={() => openRoom(personalRoom._id)}><Bot /><span>My Saathi<small>Only you</small></span><MentionNotificationBadge count={mentionCountByRoom.get(personalRoom._id) ?? 0} /></button>
           : <p className="dark-empty-copy">Preparing your private chat…</p>}
         <span className="list-heading section-gap">Family chats</span>
         {(rooms ?? []).flatMap(({ room }) => room && room.type !== 'private' ? [room] : []).map((room) => (
-          <button className={`conversation-link ${room._id === selectedRoom?._id ? 'selected' : ''}`} key={room._id} onClick={() => openRoom(room._id)}><i /><span>{room.title}</span></button>
+          <button className={`conversation-link ${room._id === selectedRoom?._id ? 'selected' : ''}`} key={room._id} onClick={() => openRoom(room._id)}><i /><span>{room.title}</span><MentionNotificationBadge count={mentionCountByRoom.get(room._id) ?? 0} /></button>
         ))}
         {rooms !== undefined && !sharedRoom && <p className="dark-empty-copy">Your shared family conversation will appear here.</p>}
         <span className="list-heading section-gap family-activity-heading">Family activity</span>
@@ -587,7 +601,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
               <SettingsHubRow icon={<UserRound />} title="You" description="Reading language" status={`${user?.displayName ?? user?.email ?? 'Your account'} · ${languageLabel(user?.preferredLanguage ?? 'en')}`} onClick={() => setSettingsSection('you')} />
               <SettingsHubRow icon={<UsersRound />} title="Family" description="Switch families and manage invitations" status={`${family.space.name} · ${family.membership.role}`} onClick={() => setSettingsSection('family')} />
               <SettingsHubRow icon={<Link2 />} title="Connected apps" description="Gmail and private mail imports" status={`${gmailConnections?.length ?? 0} Gmail ${gmailConnections?.length === 1 ? 'account' : 'accounts'}`} onClick={() => setSettingsSection('apps')} />
-              <SettingsHubRow icon={<Bell />} title="Notifications" description="Unread updates for this family" status="In-app updates on" onClick={() => setSettingsSection('notifications')} />
+              <SettingsHubRow icon={<Bell />} title="Notifications" description="Mentions and unread family mail" status={`${unreadMentions?.length ?? 0} unread ${unreadMentions?.length === 1 ? 'mention' : 'mentions'}`} onClick={() => setSettingsSection('notifications')} />
               <SettingsHubRow icon={<ImageIcon />} title="Image preferences" description="Default style for generated images" status={IMAGE_PRESETS.find(preset => preset.id === (user?.preferredImageStyle ?? 'warm_family'))?.label ?? 'Warm household'} onClick={() => setSettingsSection('images')} />
             </div>
             <div className="settings-hub-more"><span>More</span><div className="settings-hub-group">
@@ -640,7 +654,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
             {gmailMessage && <small className="gmail-status" role="status">{gmailMessage}</small>}
           </section>}
 
-          {settingsSection === 'notifications' && <section className="settings-detail-section notification-settings-info"><Bell /><div><span>Unread inbox updates</span><p>Saathi tracks what each person has seen separately in each family. Opening Inbox marks the visible items as seen.</p><strong><Check /> On for {family.space.name}</strong></div></section>}
+          {settingsSection === 'notifications' && <section className="settings-detail-section notification-settings-info"><Bell /><div><span>Mentions and inbox updates</span><p>When a family member tags your username, Saathi adds an unread alert to that conversation. Family inbox items are tracked separately for each person.</p><strong><Check /> In-app alerts on for {family.space.name}</strong></div></section>}
 
           {settingsSection === 'images' && <section className="personal-settings settings-detail-section"><span>Image preferences</span><p>Choose the starting style for images you ask Saathi to create.</p><label htmlFor="preferred-image-style">Default image style</label><Select value={user?.preferredImageStyle ?? 'warm_family'} onValueChange={value => void saveProfile({ preferredImageStyle: value as (typeof IMAGE_PRESETS)[number]['id'] })}><SelectTrigger id="preferred-image-style" aria-label="Default image style"><SelectValue /></SelectTrigger><SelectContent>{IMAGE_PRESET_GROUPS.map(group => <SelectGroup key={group}><SelectLabel>{imagePresetGroupLabel(group)}</SelectLabel>{IMAGE_PRESETS.filter(preset => preset.group === group).map(preset => <SelectItem value={preset.id} key={preset.id}>{preset.label}</SelectItem>)}</SelectGroup>)}</SelectContent></Select></section>}
 
@@ -909,6 +923,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
 }) {
   const messages = useQuery(api.rooms.messages, { roomId: room._id, limit: 40 })
   const mentionCandidates = useQuery(api.mentions.candidates, { roomId: room._id })
+  const mentionHandles = useMemo(() => new Set((mentionCandidates ?? []).map(candidate => candidate.username.toLowerCase())), [mentionCandidates])
   const generatedImages = useQuery(api.images.forRoom, { roomId: room._id, limit: 20 })
   const attachments = useQuery(api.attachments.forRoom, { roomId: room._id, limit: 40 })
   const saathi = useQuery(api.agents.forRoom, { roomId: room._id })
@@ -1180,7 +1195,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
             ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
             : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
                 <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? <Sparkles /> : <Mail />}</span>
-                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} /> : <p>{entry.item.originalText}</p>}{entry.item.actorType === 'assistant' && <ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} />}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
+                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} mentionHandles={mentionHandles} /> : <p>{entry.item.originalText}</p>}{entry.item.actorType === 'assistant' && <ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} />}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
               </article>)}
         {voice.summarizing && (
           <article className="person-message assistant-message saathi-stream" aria-live="polite">
@@ -1208,7 +1223,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
                     <iframe title="Saathi live browser" src={computerViewUrl(activeJob)} allow="clipboard-write" referrerPolicy="no-referrer" />
                   </div>
                 )}
-                <AgentStreamingResponse status={activeJob.status} activity={activeJob.activity} responseText={activeJob.responseText} />
+                <AgentStreamingResponse status={activeJob.status} activity={activeJob.activity} responseText={activeJob.responseText} mentionHandles={mentionHandles} />
               </div>
             </div>
           </article>
@@ -1323,10 +1338,11 @@ function GeneratedImageLightbox({ image, onClose }: {
   </div>
 }
 
-function AgentStreamingResponse({ status, activity, responseText }: {
+function AgentStreamingResponse({ status, activity, responseText, mentionHandles }: {
   status: 'queued' | 'running' | 'complete' | 'failed'
   activity?: 'searching_web' | 'generating_image' | 'using_computer'
   responseText?: string
+  mentionHandles: Set<string>
 }) {
   const activityLabel = status === 'queued'
     ? 'Waiting to start'
@@ -1353,7 +1369,7 @@ function AgentStreamingResponse({ status, activity, responseText }: {
       </div>
       <p>Saathi’s private reasoning is not shown. You can see its actions and sources.</p>
     </details>
-    {responseText && <div className="streaming-markdown"><AssistantText text={responseText} streaming /><i className="response-stream-cursor" aria-hidden="true" /></div>}
+    {responseText && <div className="streaming-markdown"><AssistantText text={responseText} streaming mentionHandles={mentionHandles} /><i className="response-stream-cursor" aria-hidden="true" /></div>}
   </div>
 }
 
@@ -1508,11 +1524,26 @@ function isVoiceCallOpen(status: VoiceStatus) {
   return status === 'requesting' || status === 'connecting' || status === 'live' || status === 'muted' || status === 'ending'
 }
 
-function AssistantText({ text, streaming = false }: { text: string; streaming?: boolean }) {
+function AssistantText({ text, streaming = false, mentionHandles }: { text: string; streaming?: boolean; mentionHandles?: Set<string> }) {
+  const highlightMentions = (children: ReactNode) => Children.map(children, child => {
+    if (typeof child !== 'string' || !mentionHandles?.size) return child
+    return child.split(/(@[a-z][a-z0-9_]*)/gi).map((part, index) => {
+      const username = part.startsWith('@') ? part.slice(1).toLowerCase() : ''
+      return mentionHandles.has(username) ? <mark className="chat-mention" key={`${part}-${index}`}>{part}</mark> : part
+    })
+  })
   return <div className="assistant-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
     a: ({ href, children }) => href?.startsWith('https://')
-      ? <a href={href} target="_blank" rel="noreferrer">{children}</a>
-      : <span>{children}</span>,
+      ? <a href={href} target="_blank" rel="noreferrer">{highlightMentions(children)}</a>
+      : <span>{highlightMentions(children)}</span>,
+    p: ({ children }) => <p>{highlightMentions(children)}</p>,
+    li: ({ children }) => <li>{highlightMentions(children)}</li>,
+    strong: ({ children }) => <strong>{highlightMentions(children)}</strong>,
+    em: ({ children }) => <em>{highlightMentions(children)}</em>,
+    h1: ({ children }) => <h1>{highlightMentions(children)}</h1>,
+    h2: ({ children }) => <h2>{highlightMentions(children)}</h2>,
+    h3: ({ children }) => <h3>{highlightMentions(children)}</h3>,
+    blockquote: ({ children }) => <blockquote>{highlightMentions(children)}</blockquote>,
   }}>{prepareAssistantMarkdown(text, streaming)}</ReactMarkdown></div>
 }
 
@@ -1822,7 +1853,7 @@ function FamilyMemberCluster({ spaceId }: { spaceId: Id<'spaces'> }) {
     {selectedMember && <section className="family-member-profile" role="dialog" aria-labelledby="family-member-profile-name">
       <button type="button" className="family-member-profile-close" onClick={closeProfile} aria-label={`Close ${selectedMember.name}'s profile`} ref={closeButtonRef}><X /></button>
       <span className="family-member-profile-avatar" aria-hidden="true">{selectedMember.image && <img src={selectedMember.image} alt="" referrerPolicy="no-referrer" onError={event => event.currentTarget.remove()} />}{initialsFor(selectedMember.name)}</span>
-      <div><p>{selectedMember.isCurrentUser ? 'You' : 'Family member'}</p><h3 id="family-member-profile-name">{selectedMember.name}</h3><span>{selectedMember.role === 'owner' ? 'Family owner' : 'Family member'}{selectedMember.isCurrentUser ? ' · This is you' : ''}</span></div>
+      <div><p>{selectedMember.role === 'owner' ? 'Family owner' : 'Family member'}</p><h3 id="family-member-profile-name">{selectedMember.name}</h3><span>{selectedMember.username && selectedMember.name !== `@${selectedMember.username}` ? `@${selectedMember.username}` : selectedMember.isCurrentUser ? 'This is you' : 'Member profile'}{selectedMember.isCurrentUser && selectedMember.username && selectedMember.name !== `@${selectedMember.username}` ? ' · This is you' : ''}</span></div>
     </section>}
   </div>
 }
@@ -1873,6 +1904,12 @@ function FamilyUnreadBadge({ spaceId }: { spaceId: Id<'spaces'> }) {
   return <b className="notification-badge" aria-label={label}>{unreadCount > 99 ? '99+' : unreadCount}</b>
 }
 
+function MentionNotificationBadge({ count }: { count: number }) {
+  if (!count) return null
+  const label = `${count} unread ${count === 1 ? 'mention' : 'mentions'}`
+  return <b className="notification-badge mention-notification-badge" aria-label={label}>{count > 99 ? '99+' : count}</b>
+}
+
 function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Doc<'inboxItems'>[] | undefined; onBack: () => void }) {
   const confirmAction = useMutation(api.inbox.confirmAction)
   const dismissAction = useMutation(api.inbox.dismissAction)
@@ -1901,13 +1938,15 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
           <h3><button type="button" className="inbox-subject-button" onClick={() => setOpenItem(item)}>{item.subject}</button> <small>{categoryLabel(item.category)}{item.subcategory ? ` · ${subcategoryLabel(item.subcategory)}` : ''} · {item.direction === 'outgoing' ? 'outgoing' : 'incoming'} · {formatRelativeTime(item.receivedAt)}</small></h3>
           <div className="simple-message inbox-message-card">
             <p className="inbox-sender">{displaySender(item.sender)}</p>
-            {item.subcategory && <p>Type: {subcategoryLabel(item.subcategory)}</p>}
-            {item.extractedMerchant && <p>Merchant: {item.extractedMerchant}</p>}
-            {item.extractedAmountInr && <p>INR: {item.extractedAmountInr}</p>}
-            {item.extractedAmountUsd && <p>USD: {item.extractedAmountUsd}</p>}
-            {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p>Amount: {item.extractedAmount}</p>}
-            {item.extractedPeriod && <p>Period: {item.extractedPeriod}</p>}
-            {item.extractedDueAt && <p>Due: {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</p>}
+            <div className="inbox-facts">
+              {item.subcategory && <p><span>Type</span><strong>{subcategoryLabel(item.subcategory)}</strong></p>}
+              {item.extractedMerchant && <p><span>Merchant</span><strong>{item.extractedMerchant}</strong></p>}
+              {item.extractedAmountInr && <p><span>Amount</span><strong>{item.extractedAmountInr.startsWith('₹') ? item.extractedAmountInr : `₹${item.extractedAmountInr}`}</strong></p>}
+              {item.extractedAmountUsd && <p><span>Amount</span><strong>{item.extractedAmountUsd.startsWith('$') ? item.extractedAmountUsd : `$${item.extractedAmountUsd}`}</strong></p>}
+              {!item.extractedAmountInr && !item.extractedAmountUsd && item.extractedAmount && <p><span>Amount</span><strong>{item.extractedAmount}</strong></p>}
+              {item.extractedPeriod && <p><span>Period</span><strong>{item.extractedPeriod}</strong></p>}
+              {item.extractedDueAt && <p><span>Due</span><strong>{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(item.extractedDueAt)}</strong></p>}
+            </div>
             {item.status === 'processing' && recovery && <p className="inbox-status">{recovery.pending}</p>}
             {item.status === 'failed' && recovery && <p className="inbox-status">{recovery.failed}</p>}
             {item.documentParseStatus === 'parsed' && <p>Attached PDF read successfully.</p>}
@@ -1915,7 +1954,7 @@ function FamilyUpdates({ family, items, onBack }: { family: FamilyRow; items: Do
             {item.processingNotes && item.documentParseStatus !== 'password' && <p>{item.processingNotes}</p>}
             {(item.suggestedActions ?? []).map(action => <p key={`${item._id}-${action.kind}`}>{action.label}{action.detail ? ` — ${action.detail}` : ''}</p>)}
             <div className="inbox-actions">
-              <button type="button" className="secondary icon-action" onClick={() => setOpenItem(item)} aria-label={`Open email: ${item.subject}`} title="Open email"><MailOpen /></button>
+              <button type="button" className="secondary inbox-open-action" onClick={() => setOpenItem(item)} aria-label={`Open email: ${item.subject}`}><MailOpen /> Open email</button>
               {canReadGmailPdf(item) && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}>Read attached PDF</button>}
               {item.status !== 'processing' && item.documentParseStatus === 'failed' && item.documentParseRetryable !== false && <button type="button" className="secondary icon-action" onClick={() => void reprocess({ inboxItemId: item._id })} aria-label="Try reading attached PDF again" title="Try reading PDF again"><RefreshCcw /></button>}
               {item.status === 'failed' && item.documentParseStatus !== 'failed' && recovery && <button type="button" className="secondary" onClick={() => void reprocess({ inboxItemId: item._id })}><Sparkles /> {recovery.action}</button>}

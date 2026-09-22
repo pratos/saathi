@@ -53,11 +53,25 @@ export const post = mutation({
         }
       }
     }
+    const createdAt = Date.now();
     const messageId = await ctx.db.insert("messages", {
       spaceId: room.spaceId, roomId: args.roomId, authorUserId: userId, actorType: "user", origin: "app",
       originalText: text, language: args.language, idempotencyKey: args.clientOperationId,
-      mentions: mentions.length ? mentions : undefined, createdAt: Date.now(),
+      mentions: mentions.length ? mentions : undefined, createdAt,
     });
+    for (const mentionedUserId of new Set(mentions.flatMap(mention =>
+      mention.kind === "person" && mention.userId !== userId ? [mention.userId] : [],
+    ))) {
+      await ctx.db.insert("mentionNotifications", {
+        userId: mentionedUserId,
+        spaceId: room.spaceId,
+        roomId: room._id,
+        messageId,
+        actorUserId: userId,
+        status: "unread",
+        createdAt,
+      });
+    }
 
     const shouldInvokeSaathi = room.assistantMode !== "off";
     if (shouldInvokeSaathi) {

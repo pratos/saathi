@@ -25,6 +25,7 @@ describe("room mentions", () => {
     const { t, roomId, ownerId, memberId } = await seedMentionRooms();
     rateLimiter.register(t);
     const owner = t.withIdentity({ subject: String(ownerId) });
+    const member = t.withIdentity({ subject: String(memberId) });
 
     const personMessageId = await owner.mutation(api.messages.post, {
       roomId,
@@ -35,6 +36,21 @@ describe("room mentions", () => {
     expect(await t.run(ctx => ctx.db.get(personMessageId))).toMatchObject({
       mentions: [{ kind: "person", username: "member_two", userId: memberId }],
     });
+    const personMessage = await t.run(ctx => ctx.db.get(personMessageId));
+    const unread = await member.query(api.mentions.unreadForSpace, { spaceId: personMessage!.spaceId });
+    expect(unread).toEqual([
+      expect.objectContaining({ roomId, messageId: personMessageId, actorLabel: "Owner", roomTitle: "Family" }),
+    ]);
+    expect(await owner.query(api.mentions.unreadForSpace, { spaceId: personMessage!.spaceId })).toEqual([]);
+    expect(await owner.mutation(api.messages.post, {
+      roomId,
+      text: "@MEMBER_TWO can you check this? @outsider_three",
+      language: "en",
+      clientOperationId: "person-mention-001",
+    })).toBe(personMessageId);
+    expect(await t.run(ctx => ctx.db.query("mentionNotifications").collect())).toHaveLength(1);
+    expect(await member.mutation(api.mentions.markRoomRead, { roomId })).toBe(1);
+    expect(await member.query(api.mentions.unreadForSpace, { spaceId: personMessage!.spaceId })).toEqual([]);
     expect((await t.run(ctx => ctx.db.query("agentJobs").order("desc").first()))?.trigger).toBe("ambient");
 
     const assistantMessageId = await owner.mutation(api.messages.post, {

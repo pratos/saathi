@@ -18,6 +18,7 @@ This directory contains the app schema, Convex Auth email OTP, tenant/room autho
    - `TYPESAFE_API_KEY` (required for System One routing and safety when offering administrator-approved managed access; BYOK families use OpenRouter instead)
    - `BYOK_ENCRYPTION_KEY` (required to store family provider keys; generate a random 32-byte secret)
    - `SUPERADMIN_EMAILS` (comma-separated accounts allowed to approve deployment-funded access)
+   - `ADMIN_REVIEW_EMAIL` and `ADMIN_REVIEW_CODE_SHA256` (optional fixed reviewer login; configure only as deployment variables using the email-bound hash procedure in the root README)
    - `COMPOSIO_API_KEY` (optional; enables member-managed Gmail OAuth and ingestion)
    - `COMPOSIO_WEBHOOK_SECRET` (optional until Gmail is enabled; verifies Composio Standard Webhooks)
 4. Register `https://<deployment>.convex.site/agentmail/webhook` in AgentMail. Firecrawl's component webhook is mounted at `/firecrawl/webhook`.
@@ -44,6 +45,7 @@ Provider credentials do not belong in GitHub Actions. Configure these directly o
 - `TYPESAFE_API_KEY` for managed routing and safety; family OpenRouter BYOK never uses this deployment credential.
 - `BYOK_ENCRYPTION_KEY` for encrypting family-owned provider keys.
 - `SUPERADMIN_EMAILS` for the comma-separated access-administrator allowlist.
+- `ADMIN_REVIEW_EMAIL` and `ADMIN_REVIEW_CODE_SHA256` for optional rate-limited reviewer access to `/?mode=live&admin=access`; never store the plaintext access code.
 - `COMPOSIO_API_KEY` and `COMPOSIO_WEBHOOK_SECRET` to enable private Gmail connections.
 - `OPENAI_MODEL_LUNA`, `OPENAI_MODEL_TERRA`, `OPENAI_MODEL_SOL`, and `OPENAI_MODEL_ASTRA` when those optional profiles are enabled.
 

@@ -1608,33 +1608,37 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .saathi-entry .experience-card {
   overflow: hidden;
   border-color: rgba(91,78,129,.13) !important;
-  border-radius: 18px !important;
+  border-radius: 16px !important;
   color: #292531 !important;
-  background: rgba(255,255,255,.92) !important;
-  box-shadow: 0 8px 24px rgba(72,59,106,.06) !important;
+  background: rgba(255,255,255,.94) !important;
+  box-shadow: 0 4px 14px rgba(72,59,106,.045) !important;
 }
 .saathi-entry .experience-card-button {
-  min-height: 168px;
-  grid-template-columns: minmax(0, 1fr) !important;
+  min-height: 142px;
+  display: grid;
   justify-items: center;
   align-content: center;
-  gap: 11px;
-  border-radius: 18px !important;
+  gap: 8px;
+  padding: 20px 28px 18px;
+  border-radius: 16px !important;
   text-align: center;
 }
-.saathi-entry .experience-card-button > span:first-child {
-  width: auto !important;
-  height: auto !important;
-  border-radius: 0 !important;
-  color: #4a3d73 !important;
-  background: transparent !important;
+.saathi-entry .experience-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #4a3d73;
 }
-.saathi-entry .experience-card-button > span:nth-child(2) { justify-items: center; padding-top: 0 !important; }
+.saathi-entry .experience-card-title svg { width: 20px; height: 20px; }
 .saathi-entry .experience-card-button strong { color: #292531 !important; font-size: 16px; }
-.saathi-entry .experience-card-button small { color: #56515f !important; font-size: 13px; }
-.saathi-entry .experience-card-button em { color: #59478f !important; font-family: var(--font-sans) !important; font-size: 11px; }
-.saathi-entry .experience-card-button > svg { margin-top: 0 !important; color: #6f59bd !important; }
+.saathi-entry .experience-card-button small { max-width: 42ch; color: #56515f !important; font-size: 12px; line-height: 1.45; }
+.saathi-entry .experience-card-button em { color: #59478f !important; font-family: var(--font-sans) !important; font-size: 10px; font-style: normal; font-weight: 750; }
 .saathi-entry .entry-access-content > p:last-child { color: #646574 !important; }
+
+.admin-review-auth .live-auth-card form { gap: 8px; }
+.admin-review-auth .live-auth-card form label:not(:first-child) { margin-top: 8px; }
+.admin-review-auth .live-auth-card form > button { margin-top: 8px; }
 
 .live-auth-page,
 .onboarding-page,
@@ -1685,6 +1689,13 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   box-shadow: 0 9px 22px rgba(88,70,164,.2);
 }
 .primary:hover { background: linear-gradient(135deg, #634caf, #7365c0); }
+.primary:disabled,
+.primary:disabled:hover {
+  cursor: not-allowed;
+  color: #7b7485;
+  background: #e3dfea;
+  box-shadow: none;
+}
 .security-note {
   border: 0;
   border-radius: 16px;
@@ -1704,7 +1715,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .status-details summary { color: #3d354d; font-weight: 750; cursor: pointer; }
 
 @media (hover: hover) and (pointer: fine) {
-  .saathi-entry .experience-card:hover { border-color: rgba(111,89,189,.28) !important; box-shadow: 0 12px 30px rgba(72,59,106,.09) !important; }
+  .saathi-entry .experience-card:hover { border-color: rgba(111,89,189,.26) !important; box-shadow: 0 8px 20px rgba(72,59,106,.075) !important; }
 }
 
 @media (max-width: 700px) {
@@ -1712,6 +1723,6 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   .saathi-entry .entry-story-content { margin: auto 0; gap: 28px; }
   .saathi-entry .entry-copy h1 { font-size: clamp(36px, 10vw, 46px); }
   .saathi-entry .entry-access { min-height: 100svh; padding: 28px 16px 38px; }
-  .saathi-entry .experience-card-button { min-height: 126px; }
+  .saathi-entry .experience-card-button { min-height: 132px; padding: 18px 22px 16px; }
   .live-auth-card, .onboarding-card { padding: 16px; border-radius: 22px; }
 }

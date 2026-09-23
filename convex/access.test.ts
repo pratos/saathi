@@ -3,11 +3,15 @@ import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
+import { adminAccessDigest } from "./lib/adminAccess.js";
 import schema from "./schema.js";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("AI access onboarding", () => {
   test("allows family BYOK or approved platform access and lets blocked status override BYOK", async () => {
@@ -105,6 +109,87 @@ describe("AI access onboarding", () => {
     });
   });
 
+  test("grants the configured admin reviewer superadmin access", async () => {
+    vi.stubEnv("ADMIN_REVIEW_EMAIL", " owner@example.test ");
+    vi.stubEnv("ADMIN_REVIEW_CODE_SHA256", "configured-reviewer-digest");
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const seeded = await seedAccessFamily(t);
+    const owner = t.withIdentity({ subject: String(seeded.ownerId) });
+
+    await expect(owner.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: false });
+    await t.run(async ctx => ctx.db.patch(seeded.ownerId, { adminReviewer: true }));
+    await expect(owner.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: true });
+    await owner.mutation(api.users.ensureCurrent, {});
+    await expect(t.run(async ctx => (await ctx.db.get(seeded.ownerId))?.platformRole)).resolves.toBeNull();
+    await expect(owner.query(api.admin.emailOperations, { now: Date.now() })).resolves.toMatchObject({
+      inbox: { sampled: 0 },
+    });
+
+    vi.stubEnv("ADMIN_REVIEW_CODE_SHA256", "");
+    await expect(owner.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: false });
+    await expect(owner.query(api.admin.emailOperations, { now: Date.now() })).rejects.toThrow(/Superadmin/);
+
+    vi.stubEnv("ADMIN_REVIEW_CODE_SHA256", "configured-reviewer-digest");
+    vi.stubEnv("ADMIN_REVIEW_EMAIL", "");
+    await expect(owner.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: false });
+    await expect(owner.query(api.admin.emailOperations, { now: Date.now() })).rejects.toThrow(/Superadmin/);
+  });
+
+  test("creates and reuses the fixed reviewer account with valid credentials", async () => {
+    const email = "reviewer@example.test";
+    const code = "test-only-review-code-with-high-entropy";
+    vi.stubEnv("ADMIN_REVIEW_EMAIL", email);
+    vi.stubEnv("ADMIN_REVIEW_CODE_SHA256", await adminAccessDigest(email, code));
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+
+    // convex-test does not provision Convex Auth's JWT signing key. The
+    // credential provider and account mutations complete before token signing.
+    await expect(t.action(api.auth.signIn, { provider: "saathi-admin", params: { email, code } })).rejects.toThrow(/JWT_PRIVATE_KEY/);
+    await expect(t.action(api.auth.signIn, { provider: "saathi-admin", params: { email, code } })).rejects.toThrow(/JWT_PRIVATE_KEY/);
+    const users = await t.run(async ctx => (await ctx.db.query("users").collect()).filter(user => user.email === email));
+    expect(users).toHaveLength(1);
+    expect(users[0]?.adminReviewer).toBe(true);
+    expect(users[0]?.accessStatus).toBe("pending");
+    await expect(t.run(async ctx => (await ctx.db.query("authAccounts").collect()).filter(account => account.providerAccountId === email))).resolves.toHaveLength(1);
+    const reviewer = t.withIdentity({ subject: String(users[0]!._id) });
+    await expect(reviewer.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: true });
+    vi.stubEnv("ADMIN_REVIEW_CODE_SHA256", "");
+    await expect(reviewer.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: false });
+  });
+
+  test("keeps reviewer-code and ordinary email OTP identities separate in either creation order", async () => {
+    const email = "reviewer-linking@example.test";
+    const code = "test-only-review-code-for-linking-order";
+    vi.stubEnv("ADMIN_REVIEW_EMAIL", email);
+    vi.stubEnv("ADMIN_REVIEW_CODE_SHA256", await adminAccessDigest(email, code));
+    vi.stubEnv("AGENTMAIL_API_KEY", "test-agentmail-key");
+    vi.stubEnv("AGENTMAIL_AUTH_INBOX_ID", "test-auth-inbox");
+    vi.stubEnv("SITE_URL", "https://saathi.example.test");
+
+    for (const reviewerFirst of [true, false]) {
+      const t = convexTest(schema, modules);
+      rateLimiter.register(t);
+      const reviewerSignIn = () => t.action(api.auth.signIn, { provider: "saathi-admin", params: { email, code } });
+      if (reviewerFirst) await expect(reviewerSignIn()).rejects.toThrow(/JWT_PRIVATE_KEY/);
+      await completeEmailOtpSignIn(t, email);
+      if (!reviewerFirst) await expect(reviewerSignIn()).rejects.toThrow(/JWT_PRIVATE_KEY/);
+
+      const accounts = await t.run(async ctx => ctx.db.query("authAccounts").collect());
+      const reviewerAccount = accounts.find(account => account.provider === "saathi-admin");
+      const otpAccount = accounts.find(account => account.provider === "saath-email");
+      expect(reviewerAccount?.userId).toBeDefined();
+      expect(otpAccount?.userId).toBeDefined();
+      expect(reviewerAccount?.userId).not.toBe(otpAccount?.userId);
+
+      const reviewer = t.withIdentity({ subject: String(reviewerAccount!.userId) });
+      const otpUser = t.withIdentity({ subject: String(otpAccount!.userId) });
+      await expect(reviewer.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: true });
+      await expect(otpUser.query(api.admin.currentRole, {})).resolves.toEqual({ isSuperadmin: false });
+    }
+  });
+
   test("reports platform and family-funded costs separately by family and service", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
@@ -184,6 +269,135 @@ describe("AI access onboarding", () => {
     expect(report.totals.trackedCostUsd).toBeCloseTo(2.01);
   });
 
+  test("gives superadmins bounded email operations without exposing message content or OTP values", async () => {
+    vi.stubEnv("AGENTMAIL_API_KEY", "configured-agentmail-key");
+    vi.stubEnv("AGENTMAIL_AUTH_INBOX_ID", "auth-inbox");
+    vi.stubEnv("COMPOSIO_API_KEY", "configured-composio-key");
+    vi.stubEnv("COMPOSIO_WEBHOOK_SECRET", "configured-webhook-secret");
+    const t = convexTest(schema, modules);
+    rateLimiter.register(t);
+    const seeded = await seedAccessFamily(t);
+    const receivedAt = Date.UTC(2026, 8, 22, 12);
+    await t.run(async ctx => {
+      await ctx.db.patch(seeded.spaceId, {
+        agentmailInboxId: "family-inbox",
+        agentmailEmail: "family@example.test",
+        otpSharingEnabled: true,
+      });
+      await ctx.db.insert("spaces", {
+        name: "Default OTP family",
+        createdBy: seeded.ownerId,
+        creationKey: "default-otp-family",
+        createdAt: receivedAt - 10,
+      });
+      await ctx.db.insert("spaces", {
+        name: "Disabled OTP family",
+        createdBy: seeded.ownerId,
+        creationKey: "disabled-otp-family",
+        createdAt: receivedAt - 20,
+        otpSharingEnabled: false,
+      });
+      await ctx.db.insert("gmailConnections", {
+        spaceId: seeded.spaceId,
+        userId: seeded.ownerId,
+        connectedAccountId: "gmail-admin-test",
+        alias: "Private Gmail",
+        email: "owner@example.test",
+        triggerId: "gmail-trigger",
+        status: "active",
+        createdAt: receivedAt,
+      });
+      const privateSourceMessageId = await ctx.db.insert("messages", {
+        spaceId: seeded.spaceId,
+        roomId: seeded.roomId,
+        actorType: "email_guest",
+        origin: "assistant",
+        originalText: "Private Gmail summary",
+        language: "en",
+        idempotencyKey: "private-gmail-summary",
+        createdAt: receivedAt,
+      });
+      await ctx.db.insert("inboxItems", {
+        spaceId: seeded.spaceId,
+        agentmailMessageId: "private-otp",
+        agentmailThreadId: "private-thread",
+        sender: "security@example.test",
+        subject: "Sensitive sign-in subject",
+        originalText: "Sensitive body with code 739201",
+        visibility: "private",
+        privateOwnerId: seeded.ownerId,
+        category: "security",
+        subcategory: "otp",
+        status: "ready",
+        extractedOtpCode: "739201",
+        ephemeralExpiresAt: receivedAt + 300_000,
+        sourceMessageId: privateSourceMessageId,
+        receivedAt,
+      });
+      await ctx.db.insert("inboxItems", {
+        spaceId: seeded.spaceId,
+        agentmailMessageId: "shared-receipt",
+        agentmailThreadId: "shared-thread",
+        sender: "billing@example.test",
+        subject: "Sensitive receipt subject",
+        originalText: "Sensitive receipt body",
+        visibility: "space",
+        category: "subscriptions",
+        subcategory: "subscription_renewal",
+        status: "failed",
+        extractedAmountInr: "₹9,977.07",
+        receivedAt: receivedAt - 1_000,
+      });
+      await ctx.db.insert("inboxItems", {
+        spaceId: seeded.spaceId,
+        agentmailMessageId: "family-forward",
+        agentmailThreadId: "family-forward-thread",
+        sender: "travel@example.test",
+        subject: "Sensitive shared itinerary",
+        originalText: "Sensitive shared travel body",
+        visibility: "space",
+        category: "travel",
+        status: "ready",
+        sharedAt: receivedAt - 1_500,
+        sharedByUserId: seeded.ownerId,
+        receivedAt: receivedAt - 1_500,
+      });
+      await ctx.db.insert("inboxItems", {
+        spaceId: seeded.spaceId,
+        agentmailMessageId: "expired-private-otp",
+        agentmailThreadId: "expired-private-thread",
+        sender: "archive@example.test",
+        subject: "Expired sensitive subject",
+        originalText: "Expired sensitive body with code 114477",
+        visibility: "private",
+        privateOwnerId: seeded.ownerId,
+        category: "security",
+        subcategory: "otp",
+        status: "ready",
+        extractedOtpCode: "114477",
+        ephemeralExpiresAt: receivedAt - 1,
+        receivedAt: receivedAt - 2_000,
+      });
+    });
+
+    const admin = t.withIdentity({ subject: String(seeded.adminId) });
+    const report = await admin.query(api.admin.emailOperations, { now: receivedAt + 60_000 });
+    expect(report.configuration).toEqual({ agentmail: true, authDelivery: true, gmail: true, gmailWebhook: true });
+    expect(report.inbox).toMatchObject({ sampled: 4, ready: 3, failed: 1, private: 2, shared: 2, forwarded: 1, otp: 1, withAmount: 1 });
+    expect(report.gmail).toMatchObject({ active: 1, error: 0, sampled: 1 });
+    expect(report.families).toMatchObject({ sampled: 3, withAgentmail: 1, otpSharingEnabled: 2 });
+    expect(report.recent).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "gmail", sender: "s•••••@example.test", isOtp: true }),
+      expect.objectContaining({ source: "agentmail", sender: "b•••••@example.test", hasAmount: true }),
+      expect.objectContaining({ source: "family_share", sender: "t•••••@example.test" }),
+    ]));
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain("739201");
+    expect(serialized).not.toContain("114477");
+    expect(serialized).not.toContain("Sensitive");
+    expect(serialized).not.toContain("security@example.test");
+  });
+
   test("records requests and restricts access decisions to superadmins", async () => {
     const t = convexTest(schema, modules);
     rateLimiter.register(t);
@@ -250,4 +464,16 @@ async function seedAccessFamily(t: TestConvex<typeof schema>) {
       roomId: Id<"rooms">;
     };
   });
+}
+
+async function completeEmailOtpSignIn(t: TestConvex<typeof schema>, email: string) {
+  let token = "";
+  vi.stubGlobal("fetch", vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+    const payload = JSON.parse(String(init?.body)) as { text?: string };
+    token = payload.text?.match(/code is: (\d{6})/)?.[1] ?? "";
+    return new Response(null, { status: 200 });
+  }));
+  await expect(t.action(api.auth.signIn, { provider: "saath-email", params: { email } })).resolves.toMatchObject({ started: true });
+  expect(token).toMatch(/^\d{6}$/);
+  await expect(t.action(api.auth.signIn, { provider: "saath-email", params: { email, code: token } })).rejects.toThrow(/JWT_PRIVATE_KEY/);
 }

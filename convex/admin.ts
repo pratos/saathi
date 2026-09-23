@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { env, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireUser } from "./lib/authz";
 import { effectiveAccessStatus, isSuperadminUser } from "./lib/platformAccess";
@@ -81,6 +81,137 @@ export const recentRecategorizations = query({
       skipped: job.skipped,
       error: job.error ?? null,
     })));
+  },
+});
+
+const pipelineStatus = v.union(
+  v.literal("received"), v.literal("processing"), v.literal("ready"), v.literal("failed"),
+);
+
+export const emailOperations = query({
+  args: { now: v.number() },
+  returns: v.object({
+    configuration: v.object({
+      agentmail: v.boolean(),
+      authDelivery: v.boolean(),
+      gmail: v.boolean(),
+      gmailWebhook: v.boolean(),
+    }),
+    inbox: v.object({
+      sampled: v.number(),
+      received: v.number(),
+      processing: v.number(),
+      ready: v.number(),
+      failed: v.number(),
+      private: v.number(),
+      shared: v.number(),
+      forwarded: v.number(),
+      otp: v.number(),
+      withAmount: v.number(),
+    }),
+    gmail: v.object({ active: v.number(), error: v.number(), sampled: v.number() }),
+    families: v.object({ sampled: v.number(), withAgentmail: v.number(), otpSharingEnabled: v.number() }),
+    categories: v.array(v.object({ category: v.string(), count: v.number() })),
+    recent: v.array(v.object({
+      itemId: v.id("inboxItems"),
+      familyName: v.string(),
+      source: v.union(v.literal("gmail"), v.literal("agentmail"), v.literal("family_share")),
+      sender: v.string(),
+      status: pipelineStatus,
+      category: v.string(),
+      subcategory: v.union(v.string(), v.null()),
+      receivedAt: v.number(),
+      hasAmount: v.boolean(),
+      hasDueDate: v.boolean(),
+      parseStatus: v.union(v.string(), v.null()),
+      isOtp: v.boolean(),
+      expiresAt: v.union(v.number(), v.null()),
+    })),
+    limits: v.object({ inbox: v.boolean(), gmail: v.boolean(), families: v.boolean() }),
+  }),
+  handler: async (ctx, { now }) => {
+    await requireSuperadmin(ctx);
+    if (!Number.isFinite(now) || now < 0 || now > 8_640_000_000_000_000) {
+      throw new ConvexError({ code: "INVALID_ARGUMENT", message: "Invalid reporting time" });
+    }
+
+    const [inboxPage, gmailPage, spacePage] = await Promise.all([
+      ctx.db.query("inboxItems").order("desc").take(501),
+      ctx.db.query("gmailConnections").order("desc").take(201),
+      ctx.db.query("spaces").order("desc").take(201),
+    ]);
+    const inboxItems = inboxPage.slice(0, 500);
+    const gmailConnections = gmailPage.slice(0, 200);
+    const spaces = spacePage.slice(0, 200);
+    const spacesById = new Map(spaces.map(space => [String(space._id), space]));
+    const statusCounts = { received: 0, processing: 0, ready: 0, failed: 0 };
+    const categoryCounts = new Map<string, number>();
+    let privateCount = 0;
+    let sharedCount = 0;
+    let forwardedCount = 0;
+    let otpCount = 0;
+    let withAmountCount = 0;
+
+    for (const item of inboxItems) {
+      statusCounts[item.status] += 1;
+      categoryCounts.set(item.category, (categoryCounts.get(item.category) ?? 0) + 1);
+      if (item.visibility === "private") privateCount += 1;
+      else sharedCount += 1;
+      if (item.sharedAt !== undefined) forwardedCount += 1;
+      if (item.extractedOtpCode !== undefined && item.ephemeralExpiresAt !== undefined && item.ephemeralExpiresAt > now) otpCount += 1;
+      if (item.extractedAmount || item.extractedAmountInr || item.extractedAmountUsd) withAmountCount += 1;
+    }
+
+    return {
+      configuration: {
+        agentmail: Boolean(env.AGENTMAIL_API_KEY?.trim()),
+        authDelivery: Boolean(env.AGENTMAIL_AUTH_INBOX_ID?.trim()),
+        gmail: Boolean(env.COMPOSIO_API_KEY?.trim()),
+        gmailWebhook: Boolean(env.COMPOSIO_WEBHOOK_SECRET?.trim()),
+      },
+      inbox: {
+        sampled: inboxItems.length,
+        ...statusCounts,
+        private: privateCount,
+        shared: sharedCount,
+        forwarded: forwardedCount,
+        otp: otpCount,
+        withAmount: withAmountCount,
+      },
+      gmail: {
+        active: gmailConnections.filter(connection => connection.status === "active").length,
+        error: gmailConnections.filter(connection => connection.status === "error").length,
+        sampled: gmailConnections.length,
+      },
+      families: {
+        sampled: spaces.length,
+        withAgentmail: spaces.filter(space => Boolean(space.agentmailInboxId)).length,
+        otpSharingEnabled: spaces.filter(space => space.otpSharingEnabled !== false).length,
+      },
+      categories: [...categoryCounts.entries()]
+        .map(([category, count]) => ({ category, count }))
+        .sort((left, right) => right.count - left.count || left.category.localeCompare(right.category)),
+      recent: inboxItems.slice(0, 25).map(item => ({
+        itemId: item._id,
+        familyName: spacesById.get(String(item.spaceId))?.name ?? "Family outside sample",
+        source: item.sharedAt !== undefined ? "family_share" as const : item.visibility === "private" ? "gmail" as const : "agentmail" as const,
+        sender: maskEmail(item.sender),
+        status: item.status,
+        category: item.category,
+        subcategory: item.subcategory ?? null,
+        receivedAt: item.receivedAt,
+        hasAmount: Boolean(item.extractedAmount || item.extractedAmountInr || item.extractedAmountUsd),
+        hasDueDate: item.extractedDueAt !== undefined,
+        parseStatus: item.documentParseStatus ?? null,
+        isOtp: item.extractedOtpCode !== undefined,
+        expiresAt: item.ephemeralExpiresAt ?? null,
+      })),
+      limits: {
+        inbox: inboxPage.length > inboxItems.length,
+        gmail: gmailPage.length > gmailConnections.length,
+        families: spacePage.length > spaces.length,
+      },
+    };
   },
 });
 
@@ -285,6 +416,13 @@ function startOfUtcMonth(now: number) {
 
 function finiteNonnegative(value: number) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function maskEmail(value: string) {
+  const match = value.trim().match(/^([^@\s]+)@([^@\s]+)$/);
+  if (!match) return "Non-email sender";
+  const [, local, domain] = match;
+  return `${local.slice(0, 1)}${"•".repeat(Math.min(5, Math.max(2, local.length - 1)))}@${domain}`;
 }
 
 function usageServiceLabel(costClass: string, model: string | undefined, provider: string) {

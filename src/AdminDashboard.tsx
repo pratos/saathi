@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
-import { Activity, ArrowLeft, Ban, Check, DollarSign, ExternalLink, Mail, RefreshCw, Search, ShieldCheck, UserRoundCheck } from 'lucide-react'
+import { Activity, ArrowLeft, Ban, Check, CircleAlert, DollarSign, ExternalLink, KeyRound, Mail, RefreshCw, Route, Search, ShieldCheck, UserRoundCheck } from 'lucide-react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { Button } from './components/ui/button'
@@ -14,6 +14,7 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   const recategorizations = useQuery(api.admin.recentRecategorizations)
   const [reportNow, setReportNow] = useState(() => Date.now())
   const usage = useQuery(api.admin.usageOverview, { now: reportNow })
+  const emailOperations = useQuery(api.admin.emailOperations, { now: reportNow })
   const setAccessStatus = useMutation(api.admin.setAccessStatus)
   const [filter, setFilter] = useState<AccessStatus | 'all'>('pending')
   const [search, setSearch] = useState('')
@@ -51,8 +52,60 @@ export function AdminDashboard({ onClose }: { onClose: () => void }) {
   return <main className="access-admin-page">
     <header className="access-admin-header">
       <Button variant="outline" type="button" onClick={onClose}><ArrowLeft /> Back to Saathi</Button>
-      <div><span><ShieldCheck /> Superadmin</span><h1>Operations</h1><p>Monitor deployment-funded AI usage by family, then manage account access.</p></div>
+      <div><span><ShieldCheck /> Superadmin</span><h1>Operations</h1><p>Review email delivery and extraction, monitor deployment-funded AI usage, and manage account access.</p></div>
     </header>
+    <section className="usage-admin email-operations" aria-labelledby="email-operations-heading">
+      <div className="usage-admin-heading">
+        <div><span><Mail /> Email operations</span><h2 id="email-operations-heading">From inbox to family</h2><p>Operational metadata only. Message bodies, OTP values, provider credentials, and authentication tokens never appear here.</p></div>
+        <Button variant="outline" type="button" onClick={() => setReportNow(Date.now())}><RefreshCw /> Refresh</Button>
+      </div>
+      {emailOperations === undefined
+        ? <p className="usage-loading">Loading email operations…</p>
+        : <>
+          <div className="email-flow" aria-label="Email processing flow">
+            <span><Mail /><strong>Receive</strong><small>Gmail or AgentMail</small></span>
+            <i aria-hidden="true" />
+            <span><Route /><strong>Parse</strong><small>Classify and extract</small></span>
+            <i aria-hidden="true" />
+            <span><Check /><strong>Deliver</strong><small>Private or family inbox</small></span>
+          </div>
+          <div className="usage-summary-cards email-summary-cards">
+            <Card><Check /><span>Ready</span><strong>{emailOperations.inbox.ready}</strong><small>of {emailOperations.inbox.sampled} recent messages</small></Card>
+            <Card><Activity /><span>Processing</span><strong>{emailOperations.inbox.received + emailOperations.inbox.processing}</strong><small>{emailOperations.inbox.received} queued · {emailOperations.inbox.processing} active</small></Card>
+            <Card><CircleAlert /><span>Failed</span><strong>{emailOperations.inbox.failed}</strong><small>open the source flow before retrying</small></Card>
+            <Card><KeyRound /><span>Expiring OTPs</span><strong>{emailOperations.inbox.otp}</strong><small>codes are never returned to this panel</small></Card>
+          </div>
+          <div className="usage-admin-grid email-health-grid">
+            <section className="usage-panel email-health-panel">
+              <div className="usage-panel-title"><div><h3>Integration health</h3><p>Configuration is reported as present or missing; secret values stay server-side.</p></div></div>
+              <ul className="email-health-list">
+                <HealthRow label="AgentMail inbound" ready={emailOperations.configuration.agentmail} detail={`${emailOperations.families.withAgentmail} family inboxes`} />
+                <HealthRow label="Authentication email" ready={emailOperations.configuration.authDelivery} detail="one-time sign-in codes" />
+                <HealthRow label="Gmail import" ready={emailOperations.configuration.gmail && emailOperations.configuration.gmailWebhook} detail={`${emailOperations.gmail.active} active · ${emailOperations.gmail.error} errors`} />
+                <HealthRow label="OTP family sharing" ready={emailOperations.families.otpSharingEnabled > 0} detail={`${emailOperations.families.otpSharingEnabled} families enabled`} neutral />
+              </ul>
+            </section>
+            <section className="usage-panel email-category-panel">
+              <div className="usage-panel-title"><div><h3>Recent routing</h3><p>How the latest bounded sample was delivered and extracted.</p></div></div>
+              <dl>
+                <div><dt>Private Gmail</dt><dd>{emailOperations.inbox.private}</dd></div>
+                <div><dt>Family inbox</dt><dd>{emailOperations.inbox.shared}</dd></div>
+                <div><dt>Forwarded by family</dt><dd>{emailOperations.inbox.forwarded}</dd></div>
+                <div><dt>Amounts extracted</dt><dd>{emailOperations.inbox.withAmount}</dd></div>
+              </dl>
+              <div className="email-category-chips">{emailOperations.categories.slice(0, 6).map(item => <span key={item.category}>{formatEmailLabel(item.category)} <strong>{item.count}</strong></span>)}</div>
+            </section>
+          </div>
+          <section className="usage-panel email-events-panel">
+            <div className="usage-panel-title"><div><h3>Recent pipeline events</h3><p>Sender addresses are masked. Subjects and message content are intentionally excluded.</p></div></div>
+            <div className="usage-table-wrap"><table><thead><tr><th>Family and source</th><th>Status</th><th>Classification</th><th>Extraction</th><th>Received</th></tr></thead><tbody>
+              {emailOperations.recent.length === 0 && <tr><td colSpan={5}>No email has entered the pipeline yet.</td></tr>}
+              {emailOperations.recent.map(item => <tr key={item.itemId}><td><strong>{item.familyName}</strong><small>{formatEmailLabel(item.source)} · {item.sender}</small></td><td><span className={`access-status recategorization-${item.status === 'ready' ? 'complete' : item.status}`}>{item.status}</span></td><td><strong>{formatEmailLabel(item.category)}</strong><small>{item.subcategory ? formatEmailLabel(item.subcategory) : 'No subtype'}</small></td><td>{item.isOtp ? 'OTP · expires automatically' : [item.hasAmount && 'amount', item.hasDueDate && 'due date', item.parseStatus && `document ${item.parseStatus}`].filter(Boolean).join(' · ') || 'No structured values'}</td><td>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(item.receivedAt)}</td></tr>)}
+            </tbody></table></div>
+          </section>
+          {(emailOperations.limits.inbox || emailOperations.limits.gmail || emailOperations.limits.families) && <p className="usage-caveat">This operational view is bounded to the latest 500 inbox items, 200 Gmail connections, and 200 families.</p>}
+        </>}
+    </section>
     <section className="usage-admin" aria-labelledby="usage-heading">
       <div className="usage-admin-heading">
         <div><span><Activity /> Usage & cost</span><h2 id="usage-heading">Tracked AI cost</h2><p>Estimated provider costs for recorded Saathi activity. GPT-Live session time and delegated Luna work are listed separately.</p></div>
@@ -135,4 +188,12 @@ function formatUsd(value: number) {
 
 function formatQuantity(value: number) {
   return new Intl.NumberFormat(undefined, { notation: value >= 10_000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
+}
+
+function formatEmailLabel(value: string) {
+  return value.replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase())
+}
+
+function HealthRow({ label, ready, detail, neutral = false }: { label: string; ready: boolean; detail: string; neutral?: boolean }) {
+  return <li><span className={ready ? 'ready' : neutral ? 'neutral' : 'missing'}>{ready ? <Check /> : <CircleAlert />}</span><div><strong>{label}</strong><small>{detail}</small></div><b>{ready ? 'Ready' : neutral ? 'Not enabled' : 'Needs setup'}</b></li>
 }

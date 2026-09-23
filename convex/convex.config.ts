@@ -19,6 +19,8 @@ const app = defineApp({
     TYPESAFE_API_KEY: v.optional(v.string()),
     BYOK_ENCRYPTION_KEY: v.optional(v.string()),
     SUPERADMIN_EMAILS: v.optional(v.string()),
+    ADMIN_REVIEW_EMAIL: v.optional(v.string()),
+    ADMIN_REVIEW_CODE_SHA256: v.optional(v.string()),
     JEV_VOICE_BROWSER_ENABLED: v.optional(v.string()),
     COMPOSIO_API_KEY: v.optional(v.string()),
     COMPOSIO_WEBHOOK_SECRET: v.optional(v.string()),

@@ -19,6 +19,7 @@ export default defineSchema({
     displayName: v.optional(v.string()), username: v.optional(v.string()), preferredLanguage: v.optional(language),
     preferredImageStyle: v.optional(imageStyleValidator),
     platformRole: v.optional(v.literal("superadmin")),
+    adminReviewer: v.optional(v.boolean()),
     accessStatus: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("blocked"))),
     accessRequestedAt: v.optional(v.number()),
     accessReviewedAt: v.optional(v.number()),

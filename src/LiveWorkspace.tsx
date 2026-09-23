@@ -1247,11 +1247,10 @@ function LiveRoom({ room, family, families, accessSource, onBack, onNavigate, on
                 ? <article className="person-message assistant-message saved-voice-transcript" key={`message-${entry.item._id}`}><span className="message-avatar assistant"><Bot /></span><div><h3>Saathi <small>· voice transcript · {formatRelativeTime(entry.item.createdAt)}</small></h3><div className="assistant-card"><p>{entry.item.originalText}</p></div></div></article>
                 : <article className="voice-call-summary" key={`message-${entry.item._id}`}><span className="voice-summary-icon"><AudioLines /></span><div><header><h3>Voice call</h3><small>{formatRelativeTime(entry.item.createdAt)}</small></header><p>{entry.item.originalText}</p>{entry.item.voiceSeconds !== undefined && <small className="voice-call-meta"><AudioLines /> {formatVoiceDuration(entry.item.voiceSeconds)}</small>}<ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} /></div></article>
             : entry.item.actorType === 'user'
-            ? <article className="outgoing-message" key={`message-${entry.item._id}`}><span>{entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · {formatRelativeTime(entry.item.createdAt)}</span><p><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></p></article>
-            : <article className={`person-message ${entry.item.actorType === 'assistant' ? 'assistant-message' : ''}`} key={`message-${entry.item._id}`}>
-                <span className={`message-avatar ${entry.item.actorType === 'assistant' ? 'assistant' : 'email'}`}>{entry.item.actorType === 'assistant' ? <Sparkles /> : <Mail />}</span>
-                <div><h3>{entry.item.actorType === 'assistant' ? 'Saathi' : 'Email guest'} <small>· {formatRelativeTime(entry.item.createdAt)}</small></h3><div className={entry.item.actorType === 'assistant' ? 'assistant-card' : 'simple-message'}>{entry.item.actorType === 'assistant' ? <AssistantText text={entry.item.originalText} mentionHandles={mentionHandles} /> : <p>{entry.item.originalText}</p>}{entry.item.actorType === 'assistant' && <ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} />}{room.type === 'private' && entry.item.actorType === 'email_guest' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</div></div>
-              </article>)}
+            ? <OutgoingMessageView key={`message-${entry.item._id}`} meta={`${entry.item.authorUserId === profile?._id ? 'You' : entry.item.authorUsername ? `@${entry.item.authorUsername}` : 'Family member'} · ${formatRelativeTime(entry.item.createdAt)}`}><MentionText text={entry.item.originalText} mentions={entry.item.mentions} /></OutgoingMessageView>
+            : entry.item.actorType === 'assistant'
+              ? <AssistantMessageView key={`message-${entry.item._id}`} meta={formatRelativeTime(entry.item.createdAt)}><AssistantText text={entry.item.originalText} mentionHandles={mentionHandles} /><ConversationUiActions actions={entry.item.uiActions} onAction={useUiAction} /></AssistantMessageView>
+              : <EmailGuestMessageView key={`message-${entry.item._id}`} title="Email guest" meta={formatRelativeTime(entry.item.createdAt)}><p>{entry.item.originalText}</p>{room.type === 'private' && pendingMoney?.some(item => item.agentmailMessageId === entry.item.idempotencyKey) && <ShareFamilyMailButtons item={pendingMoney.find(item => item.agentmailMessageId === entry.item.idempotencyKey)!} family={family} families={families} onShareHere={(inboxItemId) => void shareMoney({ inboxItemId })} onShareThere={(inboxItemId, spaceId) => void shareMoneyWithSpace({ inboxItemId, spaceId })} />}</EmailGuestMessageView>)}
         {voice.summarizing && (
           <article className="person-message assistant-message saathi-stream" aria-live="polite">
             <span className="message-avatar assistant"><Bot /></span>
@@ -1375,6 +1374,24 @@ function ConversationUiActions({ actions, onAction }: {
     <span><Sparkles /> Suggested next steps</span>
     <div>{actions.map(action => <button type="button" key={`${action.kind}-${action.label}`} onClick={() => onAction(action)}>{action.label}</button>)}</div>
   </div>
+}
+
+export function AssistantMessageView({ meta, children, className = '' }: { meta: string; children: ReactNode; className?: string }) {
+  return <article className={`person-message assistant-message ${className}`.trim()}>
+    <span className="message-avatar assistant"><Sparkles /></span>
+    <div><h3>Saathi <small>· {meta}</small></h3><div className="assistant-card">{children}</div></div>
+  </article>
+}
+
+export function EmailGuestMessageView({ title, meta, children }: { title: string; meta: string; children: ReactNode }) {
+  return <article className="person-message email-guest-message">
+    <span className="message-avatar email"><Mail /></span>
+    <div><h3>{title} <small>· {meta}</small></h3><div className="simple-message">{children}</div></div>
+  </article>
+}
+
+export function OutgoingMessageView({ meta, children }: { meta: string; children: ReactNode }) {
+  return <article className="outgoing-message"><span>{meta}</span><p>{children}</p></article>
 }
 
 function GeneratedImageLightbox({ image, onClose }: {

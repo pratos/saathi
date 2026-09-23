@@ -1,14 +1,17 @@
 import { Email } from "@convex-dev/auth/providers/Email";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
-import { convexAuth } from "@convex-dev/auth/server";
+import { convexAuth, createAccount } from "@convex-dev/auth/server";
 import { components, internal } from "./_generated/api";
 import { env, internalMutation } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { adminAccessDigest, constantTimeHexEqual } from "./lib/adminAccess";
 import { buildOtpEmail } from "./lib/otpEmail";
 
 const otpLimits = new RateLimiter(components.rateLimiter, {
   emailOtpV2: { kind: "fixed window", rate: 10, period: HOUR },
+  adminAccessV1: { kind: "fixed window", rate: 5, period: HOUR },
 });
 type EmailVerificationRequest = Parameters<NonNullable<Parameters<typeof Email>[0]["sendVerificationRequest"]>>[0];
 type EmailVerificationSender = NonNullable<Parameters<typeof Email>[0]["sendVerificationRequest"]>;
@@ -62,8 +65,50 @@ export const checkOtpLimit = internalMutation({
   },
 });
 
+export const checkAdminAccessLimit = internalMutation({
+  args: { email: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const limit = await otpLimits.limit(ctx, "adminAccessV1", { key: args.email });
+    if (!limit.ok) {
+      throw new ConvexError({ kind: "AdminAccessRateLimited", retryAfter: limit.retryAfter });
+    }
+    return null;
+  },
+});
+
+const adminAccess = ConvexCredentials({
+  id: "saathi-admin",
+  authorize: async (credentials, ctx) => {
+    const email = typeof credentials.email === "string" ? credentials.email.trim().toLowerCase() : "";
+    const code = typeof credentials.code === "string" ? credentials.code : "";
+    await ctx.runMutation(internal.auth.checkAdminAccessLimit, { email: email || "missing" });
+
+    const configuredEmail = env.ADMIN_REVIEW_EMAIL?.trim().toLowerCase() ?? "";
+    const configuredDigest = env.ADMIN_REVIEW_CODE_SHA256?.trim().toLowerCase() ?? "";
+    const suppliedDigest = await adminAccessDigest(email, code);
+    if (!configuredEmail || !configuredDigest || !constantTimeHexEqual(suppliedDigest, configuredDigest)) {
+      throw new Error("Invalid admin review credentials");
+    }
+
+    const { user } = await createAccount(ctx, {
+      provider: "saathi-admin",
+      account: { id: email },
+      profile: {
+        email,
+        displayName: "Admin reviewer",
+        adminReviewer: true,
+        accessStatus: "pending",
+      },
+      shouldLinkViaEmail: false,
+    });
+    return { userId: user._id };
+  },
+});
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
+    adminAccess,
     Email({
       // Stable provider ID: changing it would break existing authentication sessions.
       id: "saath-email",

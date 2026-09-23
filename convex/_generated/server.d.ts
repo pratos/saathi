@@ -40,6 +40,8 @@ type Env = {
   readonly OPENROUTER_API_KEY: string | undefined;
   readonly BYOK_ENCRYPTION_KEY: string | undefined;
   readonly SUPERADMIN_EMAILS: string | undefined;
+  readonly ADMIN_REVIEW_EMAIL: string | undefined;
+  readonly ADMIN_REVIEW_CODE_SHA256: string | undefined;
   readonly SARVAM_API_KEY: string;
   readonly SITE_URL: string;
   readonly JEV_VOICE_BROWSER_ENABLED: string | undefined;

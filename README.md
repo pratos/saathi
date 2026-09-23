@@ -36,6 +36,23 @@ The durable workflow processes five inbox items per batch, serially (one active 
 
 Recategorization reuses the normal document parsing and extraction actions but changes only machine-extracted taxonomy fields. It never creates another heartbeat, suggested action, usage record, or telemetry decision. Any item with a confirmed/dismissed action, or reviewed after the job started, is skipped and its reviewed fields are retained.
 
+## Secure admin review
+
+The email-operations review route is `/?mode=live&admin=access`. It accepts a fixed reviewer email and access code without Google OAuth, but neither credential is committed or embedded in the frontend. Convex stores only the configured email and a SHA-256 digest in deployment environment variables. Sign-in is limited to five attempts per email per hour.
+
+Generate a long random code and its email-bound digest locally, then set the values directly on the target Convex deployment:
+
+```sh
+ADMIN_EMAIL='admin@example.com'
+read -r -s -p 'Admin review code: ' ADMIN_CODE; echo
+ADMIN_HASH="$(printf '%s' "${ADMIN_EMAIL,,}:$ADMIN_CODE" | sha256sum | cut -d' ' -f1)"
+npx convex env set ADMIN_REVIEW_EMAIL "$ADMIN_EMAIL"
+npx convex env set ADMIN_REVIEW_CODE_SHA256 "$ADMIN_HASH"
+unset ADMIN_CODE ADMIN_HASH
+```
+
+Use `--prod` for the production deployment. Share the email and code through a private password manager, never an issue, commit, chat transcript, screenshot, `VITE_` variable, or URL. Rotate access by generating a new code and replacing only `ADMIN_REVIEW_CODE_SHA256`; disable it by removing either deployment variable. The dashboard exposes bounded operational metadata for AgentMail, Gmail, parsing, extraction, OTP expiry, family forwarding, and recategorization. It intentionally never returns message bodies, subjects, OTP values, OAuth tokens, or provider credentials.
+
 ## Self-hosting
 
 1. Install dependencies and link a Convex deployment.

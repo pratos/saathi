@@ -31,7 +31,7 @@ import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Progress } from './components/ui/progress'
 import { Textarea } from './components/ui/textarea'
-import { VoiceCallOverlay } from './LiveWorkspace'
+import { AssistantMessageView, EmailGuestMessageView, OutgoingMessageView, VoiceCallOverlay } from './LiveWorkspace'
 import './PreviewWorkspace.css'
 
 type PreviewPane = 'chats' | 'updates' | 'files' | 'family'
@@ -236,53 +236,56 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
         <button type="button" className="conversation-link" onClick={() => setPane('chats')}><i /><span>Kapoor family<small>{emailShared ? 'Receipt shared by Asha' : 'Appa and 2 others'}</small></span></button>
       </aside>
 
-      {!isFamilyPanel && <section className="conversation-pane preview-live-pane">
+      {!isFamilyPanel && <section className={`conversation-pane preview-live-pane${pane === 'updates' ? ' inbox-pane' : ''}`}>
         <header className="conversation-header live-room-header">
           <button className="mobile-chat-back" type="button" onClick={() => setPane('chats')} aria-label="Back to conversations"><ArrowLeft /></button>
           <div><div className="title-line"><h2>{pane === 'updates' ? 'Family inbox' : pane === 'files' ? 'Files' : 'My Saathi'}</h2><span className="live-label">Preview</span></div><p>{pane === 'updates' ? 'Mail shared with the Kapoor family' : pane === 'files' ? 'Documents shared with your family' : 'Private conversation · only you'}</p></div>
           <div className="live-room-actions"><Button variant="ghost" size="icon" type="button" aria-label="Search conversation"><Search /></Button>{pane === 'chats' && <Button variant="ghost" size="icon" type="button" onClick={() => goTo(10)} aria-label="Start voice preview"><Mic /></Button>}</div>
         </header>
 
-        <div className="conversation-feed preview-conversation-feed">
+        <div className={`conversation-feed live-feed preview-conversation-feed${pane === 'updates' ? ' inbox-feed' : ''}`}>
           {pane === 'files' && <div className="live-empty-state"><span><Folder /></span><h3>Family files stay with their source</h3><p>Forwarded documents and attachments will appear here after you share them.</p></div>}
 
           {pane === 'updates' && <>
-            <article className="updates-card expanded">
-              <header><span className="update-source-icon"><MailOpen /></span><div><strong>Grok xAI receipt</strong><small>Shared by Asha · today</small></div><Badge variant="accent">Renewal</Badge></header>
-              <p>SuperGrok Plus · paid 15 September 2026</p>
-              <dl className="inbox-facts"><div><dt>Category</dt><dd>Subscriptions</dd></div><div><dt>Type</dt><dd>AI service renewal</dd></div><div><dt>Merchant</dt><dd>Grok xAI</dd></div><div><dt>Amount paid</dt><dd>₹9,977.07</dd></div><div><dt>Billing period</dt><dd>15 Sep–15 Oct 2026</dd></div><div><dt>Payment method</dt><dd>•••• 1003</dd></div></dl>
-              <div className="update-actions"><Button variant="outline" type="button"><FileText /> View original email</Button><Button type="button" onClick={() => goTo(8)}>Ask Saathi <ArrowRight /></Button></div>
+            <article className="person-message inbox-card">
+              <span className="message-avatar email"><Mail /></span>
+              <div><h3><button type="button" className="inbox-subject-button">Grok xAI receipt</button><small>Subscriptions · AI service renewal · today</small></h3>
+                <div className="simple-message inbox-message-card">
+                  <p className="inbox-sender">Grok xAI · shared by Asha</p>
+                  <div className="inbox-facts"><p><span>Merchant</span><strong>Grok xAI</strong></p><p><span>Amount</span><strong>₹9,977.07</strong></p><p><span>Period</span><strong>15 Sep–15 Oct 2026</strong></p><p><span>Payment</span><strong>•••• 1003</strong></p></div>
+                  <div className="inbox-actions"><Button variant="secondary" type="button"><MailOpen /> Open email</Button><Button type="button" onClick={() => goTo(8)}>Ask Saathi <ArrowRight /></Button></div>
+                </div>
+              </div>
             </article>
-            <div className="assistant-card"><Sparkles /><div><strong>Saathi sorted this email</strong><p>The category, merchant, renewal period, and amount came from the original receipt. You can always open the source to verify them.</p></div></div>
+            <AssistantMessageView meta="sorted from the original receipt"><p>The merchant, renewal period, and amount stay linked to the source email so you can verify them.</p></AssistantMessageView>
           </>}
 
           {pane === 'chats' && step <= 6 && <>
-            <div className="assistant-card"><Sparkles /><div><strong>{step === 4 ? 'Gmail is optional' : 'Useful mail arrives privately first'}</strong><p>{step === 4 ? 'Connect Gmail from Settings. Saathi imports only useful mail into My Saathi.' : 'I found a paid Grok xAI renewal in your Gmail. It is visible only to you until you share it.'}</p></div></div>
-            {step >= 5 && <article className="person-message email-guest-message"><span className="message-avatar"><Mail /></span><div><h3>Grok xAI receipt <small>· Imported from Gmail · private</small></h3><div className="simple-message"><p>SuperGrok Plus renewed for ₹9,977.07. Billing period: 15 September–15 October 2026.</p><div className="email-message-actions"><Button variant="outline" type="button"><FileText /> Open source</Button><Button type="button" disabled={emailShared} onClick={() => {
+            <AssistantMessageView meta={step === 4 ? 'Gmail setup' : 'private mail summary'}><p>{step === 4 ? 'Connect Gmail from Settings. Useful mail appears privately in My Saathi first.' : 'I found a paid Grok xAI renewal in your Gmail. Only you can see it until you share it.'}</p></AssistantMessageView>
+            {step >= 5 && <EmailGuestMessageView title="Grok xAI receipt" meta="Imported from Gmail · private"><p>SuperGrok Plus renewed for ₹9,977.07. Billing period: 15 September–15 October 2026.</p><div className="share-family-mail-row"><Button variant="outline" size="lg" type="button"><FileText /> Open source</Button><Button size="lg" className="share-family-mail" type="button" disabled={emailShared} onClick={() => {
               if (step === 5) {
                 goTo(6)
                 return
               }
               setEmailShared(true)
               goTo(7)
-            }}>{emailShared ? <><Check /> Shared with family</> : step === 5 ? <>Review sharing options <ArrowRight /></> : <><UsersRound /> Share with Kapoor family</>}</Button></div></div></div></article>}
-            {step === 6 && <div className="assistant-card"><ShieldCheck /><div><strong>Sharing is explicit</strong><p>The original email and extracted details will move to the Kapoor family inbox only after you choose Share.</p></div></div>}
+            }}>{emailShared ? <><Check /> Shared with family</> : step === 5 ? <>Review sharing options <ArrowRight /></> : <><UsersRound /> Share with Kapoor family</>}</Button></div></EmailGuestMessageView>}
+            {step === 6 && <AssistantMessageView meta="sharing check"><p>Nothing moves to the Kapoor family inbox until you choose Share with Kapoor family.</p></AssistantMessageView>}
           </>}
 
           {pane === 'chats' && step === 8 && <>
-            <article className="outgoing-message"><span>You · just now</span><p>Remember that Appa prefers morning appointments and needs step-free access.</p></article>
-            <div className="assistant-card"><Sparkles /><div><strong>Save this as a family preference?</strong><p>“Appa prefers morning appointments and needs step-free access.” It will stay scoped to the Kapoor family.</p><Button type="button" disabled={memorySaved} onClick={() => setMemorySaved(true)}>{memorySaved ? <><Check /> Memory saved</> : 'Save memory'}</Button></div></div>
-            {memorySaved && <div className="assistant-card success"><Check /><div><strong>Saved for future planning</strong><p>I’ll use this preference when you ask about appointments, travel, or places.</p></div></div>}
+            <OutgoingMessageView meta="You · just now">Remember that Appa prefers morning appointments and needs step-free access.</OutgoingMessageView>
+            <AssistantMessageView meta="memory approval"><p>Save “Appa prefers morning appointments and needs step-free access” for the Kapoor family?</p><Button size="sm" type="button" disabled={memorySaved} onClick={() => setMemorySaved(true)}>{memorySaved ? <><Check /> Memory saved</> : 'Save memory'}</Button></AssistantMessageView>
+            {memorySaved && <AssistantMessageView meta="saved"><p>I’ll use this preference when you ask about appointments, travel, or places.</p></AssistantMessageView>}
           </>}
 
           {pane === 'chats' && step >= 9 && <>
-            <article className="outgoing-message"><span>You · just now</span><p>Find two step-free stays near Mysuru and check whether the road is clear Saturday morning.</p></article>
-            <div className="tool-activity-card"><span className="tool-activity-icon"><Search /></span><div><strong>Checking current sources</strong><small>Browser tool · official traffic advisory</small></div><Badge variant="accent">Complete</Badge></div>
-            <div className="assistant-card"><Sparkles /><div><strong>Two accessible options are available</strong><p>Garden Courtyard lists a step-free entrance and family room. Lakeview House lists a lift and accessible bathroom. The official advisory shows the primary route open, with intermittent restrictions near Mandya.</p><ol><li><strong>Garden Courtyard</strong> — ₹6,800, step-free entrance</li><li><strong>Lakeview House</strong> — ₹7,250, accessible bathroom</li></ol><Button variant="outline" type="button" onClick={() => setAnswerShown(true)}><Link2 /> {answerShown ? 'Official advisory opened' : 'Open official advisory'}</Button></div></div>
+            <OutgoingMessageView meta="You · just now">Find two step-free stays near Mysuru and check whether the road is clear Saturday morning.</OutgoingMessageView>
+            <AssistantMessageView meta="browser check complete"><div className="agent-activity"><Search /><span>Checked the official traffic advisory</span></div><p>Garden Courtyard and Lakeview House both list step-free access. The primary route is open, with intermittent restrictions near Mandya.</p><ol><li><strong>Garden Courtyard</strong> — ₹6,800</li><li><strong>Lakeview House</strong> — ₹7,250</li></ol><Button variant="outline" size="sm" type="button" onClick={() => setAnswerShown(true)}><Link2 /> {answerShown ? 'Official advisory opened' : 'Open official advisory'}</Button></AssistantMessageView>
           </>}
         </div>
 
-        {pane === 'chats' && <footer className="conversation-composer"><form onSubmit={(event) => { event.preventDefault(); if (step === 8) setMemorySaved(true); if (step === 9) setAnswerShown(true) }}><Textarea rows={1} placeholder={step === 8 ? 'Tell Saathi what to remember…' : 'Message Saathi…'} aria-label="Message Saathi" /><Button className="composer-send" size="icon" type="submit" aria-label="Send message"><Send /></Button></form><small>Saathi can make mistakes. Check important details.</small></footer>}
+        {pane === 'chats' && <footer className="conversation-composer"><div className="composer-guidance"><span>Preview conversation · nothing is sent</span></div><form onSubmit={(event) => { event.preventDefault(); if (step === 8) setMemorySaved(true); if (step === 9) setAnswerShown(true) }}><Textarea rows={1} placeholder={step === 8 ? 'Tell Saathi what to remember…' : 'Message Saathi…'} aria-label="Message Saathi" /><Button className="composer-send" type="submit">Send <Send /></Button></form></footer>}
       </section>}
 
       <aside className="conversation-context preview-settings-context">

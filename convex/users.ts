@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/authz";
 import { imageStyleValidator } from "./lib/imageSafety";
-import { effectiveAccessStatus, isConfiguredSuperadmin } from "./lib/platformAccess";
+import { effectiveAccessStatus, isConfiguredPermanentSuperadmin } from "./lib/platformAccess";
 import { validateUsername } from "./lib/usernames";
 
 // Convex Auth creates the row; this provisions Saathi-owned profile defaults.
@@ -16,7 +16,7 @@ export const ensureCurrent = mutation({
     const { userId, user } = await requireUser(ctx);
     const displayName = args.displayName?.trim();
     if (displayName !== undefined && (displayName.length < 1 || displayName.length > 100)) throw new Error("Invalid display name");
-    const shouldBootstrapSuperadmin = isConfiguredSuperadmin(user.email);
+    const shouldBootstrapSuperadmin = isConfiguredPermanentSuperadmin(user.email);
     const patch = {
       displayName: displayName ?? user.displayName ?? user.name,
       preferredLanguage: args.preferredLanguage ?? user.preferredLanguage ?? ("en" as const),

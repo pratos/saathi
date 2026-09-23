@@ -3220,44 +3220,51 @@
 }
 
 /* Calm, information-first family inbox. Mail rows stay flat and actions remain explicit. */
-.live-conversation-workspace .inbox-feed { gap: 10px; }
+.live-conversation-workspace .inbox-feed { width: min(820px, 100%); gap: 10px; }
 .live-conversation-workspace .inbox-card,
 .live-conversation-workspace .inbox-card:hover {
-  padding: 14px 16px;
-  border: 1px solid rgba(91,78,129,.1);
-  border-radius: 18px;
-  background: rgba(255,255,255,.58);
+  padding: 12px 14px;
+  border: 1px solid rgba(91,78,129,.12);
+  border-radius: 12px;
+  background: rgba(255,255,255,.82);
   box-shadow: none;
 }
 .live-conversation-workspace .inbox-card > div > h3 {
-  margin-bottom: 8px;
+  margin-bottom: 7px;
+}
+.live-conversation-workspace .inbox-card > div > h3 small {
+  color: #625c6b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .live-conversation-workspace .inbox-message-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 18px;
-  align-items: end;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: center;
   padding: 0;
   border: 0 !important;
   background: transparent;
   box-shadow: none;
 }
 .live-conversation-workspace .inbox-message-card .inbox-sender {
-  grid-column: 1 / -1;
+  grid-column: auto;
   margin: 0;
   color: #5f5967 !important;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
 }
 .live-conversation-workspace .inbox-facts {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  gap: 6px 18px;
 }
 .live-conversation-workspace .inbox-facts p {
-  min-width: min(128px, 100%);
+  min-width: min(104px, 100%);
   display: grid;
-  gap: 2px;
+  gap: 1px;
   margin: 0;
 }
 .live-conversation-workspace .inbox-facts p > span {
@@ -3269,17 +3276,32 @@
 }
 .live-conversation-workspace .inbox-facts p > strong {
   color: #302a39;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 750;
   line-height: 1.3;
 }
 .live-conversation-workspace .inbox-message-card > .inbox-actions {
-  grid-column: 1 / -1;
+  grid-column: auto;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 2px;
+  margin: 0;
 }
+.live-conversation-workspace .inbox-message-card > .inbox-actions button { min-height: 36px !important; }
+
+.live-conversation-workspace .assistant-message .assistant-card {
+  max-width: 620px;
+  padding: 12px 14px;
+  border-radius: 6px 12px 12px 12px;
+  background: rgba(255,255,255,.78);
+  box-shadow: none;
+}
+.live-conversation-workspace .assistant-message .assistant-card > p,
+.live-conversation-workspace .assistant-message .assistant-markdown { margin: 0; font-size: 13px; line-height: 1.5; }
+.live-conversation-workspace .email-guest-message .simple-message { max-width: 620px; padding: 12px 14px; border-radius: 6px 12px 12px 12px; }
+.live-conversation-workspace .email-guest-message .simple-message > p { margin: 0; font-size: 13px; line-height: 1.5; }
+.live-conversation-workspace .conversation-pane:not(.inbox-pane) .live-feed { display: flex; flex-direction: column; }
+.live-conversation-workspace .conversation-pane:not(.inbox-pane) .live-feed > :first-child { margin-top: auto; }
 .live-conversation-workspace .inbox-open-action {
   min-height: 44px !important;
   display: inline-flex;
@@ -3364,6 +3386,11 @@
   .recategorization-setting > button { width: 100%; justify-self: stretch; }
 }
 
+@media (max-width: 1000px) {
+  .live-conversation-workspace .inbox-message-card { grid-template-columns: minmax(0, 1fr) auto; }
+  .live-conversation-workspace .inbox-message-card .inbox-sender { grid-column: 1 / -1; }
+}
+
 /* Keep the voice presence crisp; its shader provides the only halo. */
 .voice-call-sheet {
   color: #25212d;
@@ -3411,6 +3438,7 @@
   .live-conversation-workspace .inbox-card:hover { padding: 13px 12px; }
   .live-conversation-workspace .inbox-message-card { grid-template-columns: 1fr; }
   .live-conversation-workspace .inbox-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  .live-conversation-workspace .inbox-message-card > .inbox-actions button { min-height: 44px !important; }
   .live-conversation-workspace .inbox-open-action { width: 100%; justify-content: center; }
   .family-member-profile { box-shadow: 0 6px 16px rgba(54,43,87,.07); }
 }

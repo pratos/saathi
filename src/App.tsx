@@ -3,10 +3,11 @@ import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react'
 import { LazyMotion, domAnimation, m, useReducedMotion } from 'motion/react'
 import {
   ArrowLeft,
-  ArrowRight,
   Check,
   Eye,
+  KeyRound,
   LockKeyhole,
+  Mail,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -143,14 +144,10 @@ function ExperienceCard({ icon, title, description, detail, tone, disabled, onCl
   const live = tone === 'live'
   return <m.div whileHover={reduceMotion || disabled ? undefined : { y: -3 }} whileTap={reduceMotion || disabled ? undefined : { scale: .99 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
     <Card className={`experience-card ${live ? 'experience-card-live' : 'experience-card-preview'} h-full overflow-hidden rounded-[4px] border p-0 shadow-none ${live ? 'border-[#152630] bg-[#152630] text-white' : 'border-[#cbd4d9] bg-white text-[#14212b]'}`}>
-      <Button type="button" variant="ghost" disabled={disabled} onClick={onClick} className="experience-card-button group grid h-full min-h-[142px] w-full grid-cols-[42px_minmax(0,1fr)_18px] content-start items-start gap-3 rounded-none p-4 text-left whitespace-normal hover:bg-transparent">
-        <span className={`grid size-[42px] place-items-center rounded-[3px] ${live ? 'bg-[#61d6bd] text-[#092c27]' : 'bg-[#dcecff] text-[#224c79]'}`}>{icon}</span>
-        <span className="grid gap-1.5 pt-0.5">
-          <strong className={`text-[15px] leading-tight font-bold ${live ? 'text-white' : 'text-[#14212b]'}`}>{title}</strong>
-          <small className={`text-xs leading-[1.45] font-normal ${live ? 'text-[#b9c5cb]' : 'text-[#61707a]'}`}>{description}</small>
-          <em className={`mt-1 font-mono text-[9px] font-bold tracking-[.04em] not-italic ${live ? 'text-[#74d9c4]' : 'text-[#397064]'}`}>{detail}</em>
-        </span>
-        <ArrowRight className={`mt-1 size-4 transition-transform group-hover:translate-x-0.5 ${live ? 'text-[#74d9c4]' : 'text-[#397064]'}`} />
+      <Button type="button" variant="ghost" disabled={disabled} onClick={onClick} className="experience-card-button group h-full w-full whitespace-normal hover:bg-transparent">
+        <span className="experience-card-title">{icon}<strong>{title}</strong></span>
+        <small>{description}</small>
+        <em>{detail}</em>
       </Button>
     </Card>
   </m.div>
@@ -174,7 +171,7 @@ function LiveExperience({ onExit, pwaInstall }: { onExit: () => void; pwaInstall
   const { isLoading, isAuthenticated } = useConvexAuth()
 
   if (isLoading) return <FullPageStatus message="Opening Saathi…" />
-  if (!isAuthenticated) return <EmailOtpSignIn onBack={onExit} />
+  if (!isAuthenticated) return adminReviewMode() ? <AdminReviewSignIn onBack={onExit} /> : <EmailOtpSignIn onBack={onExit} />
   return <>
     <Suspense fallback={<FullPageStatus message="Opening your family space…" />}><LiveWorkspace onExit={onExit} /></Suspense>
     <PwaInstallReminder controller={pwaInstall} />
@@ -256,6 +253,51 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
     onUseDifferentEmail={() => { setStep('email'); setCode(''); setError(''); setNotice('') }}
     onBack={onBack}
   />
+}
+
+function AdminReviewSignIn({ onBack }: { onBack: () => void }) {
+  const { signIn } = useAuthActions()
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const result = await signIn('saathi-admin', { email: email.trim().toLowerCase(), code })
+      if (!result.signingIn) throw new Error('Sign-in was not completed')
+    } catch {
+      setCode('')
+      setError('That admin email or access code is not valid. Check the private credentials and try again.')
+      setBusy(false)
+    }
+  }
+
+  return <main className="live-auth-page admin-review-auth">
+    <Button variant="bare" size="content" className="back-link" onClick={onBack}><ArrowLeft size={19} /> Back</Button>
+    <Card className="live-auth-card gap-0">
+      <div className="auth-brand dark"><span className="brand-mark">स</span> Saathi</div>
+      <span className="mode-badge live"><ShieldCheck size={15} /> Admin review</span>
+      <h1>Open email operations</h1>
+      <p>Use the reviewer email and access code shared with you privately. Google sign-in is not required.</p>
+      <form onSubmit={submit}>
+        <label htmlFor="admin-review-email">Admin email</label>
+        <div className="field-with-icon"><Mail size={20} /><input id="admin-review-email" type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} placeholder="admin@example.com" required autoFocus /></div>
+        <label htmlFor="admin-review-code">Access code</label>
+        <div className="field-with-icon"><KeyRound size={20} /><input id="admin-review-code" type="password" autoComplete="current-password" minLength={12} value={code} onChange={event => setCode(event.target.value)} placeholder="Enter the private access code" required /></div>
+        <Button className="primary large" type="submit" disabled={busy || code.length < 12}>{busy ? 'Verifying access…' : 'Open email operations'} <ShieldCheck size={20} /></Button>
+      </form>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="security-note"><LockKeyhole size={18} /><span><strong>Server-side verification</strong>The access code is rate-limited and checked against a deployment-secret hash. It is never embedded in this site or persisted by Saathi.</span></div>
+    </Card>
+  </main>
+}
+
+function adminReviewMode() {
+  return new URLSearchParams(window.location.search).get('admin') === 'access'
 }
 
 function BackendUnavailable({ onBack }: { onBack: () => void }) {

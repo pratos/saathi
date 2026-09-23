@@ -24,10 +24,10 @@ void main() {
   float energy = mix(0.18, 1.0, clamp(u_level, 0.0, 1.0));
   float breathe = 0.94 + 0.06 * sin(t * 0.7);
 
-  vec2 c0 = vec2(0.0, 0.02) + 0.025 * vec2(cos(t * 0.21), sin(t * 0.17));
-  vec2 c1 = vec2(sin(t * 0.55), cos(t * 0.41)) * (0.09 + 0.07 * energy);
-  vec2 c2 = vec2(cos(t * 0.37 + 1.3), sin(t * 0.63 + 0.4)) * (0.11 + 0.05 * energy);
-  vec2 c3 = vec2(sin(t * 0.49 + 2.2), cos(t * 0.33 + 1.1)) * 0.10;
+  vec2 c0 = vec2(-0.025, 0.02) + 0.025 * vec2(cos(t * 0.21), sin(t * 0.17));
+  vec2 c1 = vec2(sin(t * 0.55), cos(t * 0.41)) * (0.14 + 0.09 * energy);
+  vec2 c2 = vec2(cos(t * 0.37 + 1.3), sin(t * 0.63 + 0.4)) * (0.16 + 0.07 * energy);
+  vec2 c3 = vec2(sin(t * 0.49 + 2.2), cos(t * 0.33 + 1.1)) * 0.14;
 
   float f = field(uv, c0, 0.28 * breathe)
     + field(uv, c1, 0.21 + 0.07 * energy)
@@ -35,11 +35,12 @@ void main() {
     + field(uv, c3, 0.16);
 
   float angle = atan(uv.y, uv.x);
-  float organic = 0.10 * sin(angle * 3.0 + t * 0.24) + 0.04 * sin(angle * 5.0 - t * 0.18);
-  float body = step(1.10 + organic, f);
-  float halo = max(smoothstep(0.92, 1.08, f) - body, 0.0);
-  float edge = body * (1.0 - smoothstep(1.13, 1.42, f));
-  float depth = smoothstep(1.08, 3.4, f);
+  float organic = 0.15 * sin(angle * 3.0 + t * 0.24) + 0.07 * sin(angle * 5.0 - t * 0.18);
+  float surface = 1.10 + organic;
+  float pixel = 3.0 / min(u_res.x, u_res.y);
+  float body = smoothstep(surface - pixel, surface + pixel, f);
+  float rim = body * (1.0 - smoothstep(surface + 0.10, surface + 0.78, f));
+  float depth = smoothstep(surface + 0.18, 3.5, f);
   float highlight = exp(-length(uv - vec2(-0.13, 0.17)) * 7.6) * body;
   float drift = 0.5 + 0.5 * sin(uv.x * 3.2 - uv.y * 2.7 + t * 0.34);
 
@@ -48,20 +49,21 @@ void main() {
   vec3 lilac = vec3(0.61, 0.51, 0.91);
   vec3 blush = vec3(0.96, 0.58, 0.71);
 
-  float softCore = clamp(depth * 0.74 + drift * 0.05 * energy, 0.0, 1.0);
-  vec3 color = mix(lilac, pearl, softCore);
-  float cyanEdge = edge * smoothstep(-0.36, 0.32, uv.y - uv.x);
-  float roseEdge = edge * smoothstep(-0.08, 0.42, -uv.y - uv.x * 0.35);
-  color += sky * cyanEdge * (0.16 + 0.07 * energy);
-  color += blush * roseEdge * (0.12 + 0.05 * energy);
-  color += vec3(1.0, 0.98, 1.0) * highlight * 0.22;
-  color += mix(lilac, sky, 0.5) * halo * (0.10 + 0.08 * energy);
+  float softCore = clamp(depth * 0.80 + drift * 0.04 * energy, 0.0, 1.0);
+  vec3 color = mix(pearl, lilac, rim * (0.80 + 0.10 * energy));
+  color = mix(color, pearl, softCore * 0.72);
+  float cyanEdge = rim * smoothstep(-0.36, 0.32, uv.y - uv.x);
+  float roseEdge = rim * smoothstep(-0.08, 0.42, -uv.y - uv.x * 0.35);
+  color += sky * cyanEdge * (0.18 + 0.07 * energy);
+  color += blush * roseEdge * (0.10 + 0.04 * energy);
+  color += vec3(1.0, 0.99, 1.0) * highlight * 0.24;
 
   if (u_muted > 0.5) {
     color = mix(color, vec3(0.73, 0.71, 0.82), 0.30);
   }
 
-  float alpha = body;
+  float canvasEdge = 1.0 - smoothstep(0.51, 0.565, max(abs(uv.x), abs(uv.y)));
+  float alpha = body * canvasEdge;
   gl_FragColor = vec4(color * alpha, alpha);
 }`
 
@@ -79,7 +81,7 @@ export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const gl = canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: true })
+    const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true })
     if (!gl) return
 
     const program = compile(gl)
@@ -104,7 +106,7 @@ export function VoiceBlob({ level, muted }: { level: number; muted: boolean }) {
     let displayedLevel = 0
 
     const resize = () => {
-      const pixelRatio = 3
+      const pixelRatio = Math.min(4, Math.max(2, window.devicePixelRatio * 2))
       const size = Math.max(1, Math.round(canvas.clientWidth * pixelRatio))
       if (canvas.width !== size || canvas.height !== size) {
         canvas.width = size

@@ -2077,7 +2077,7 @@
 .voice-call-body:not(.has-activity) { align-content: center; }
 .voice-call-presence { align-content: center; grid-template-rows: minmax(190px, 38vh) minmax(104px, auto); }
 .voice-orb-stage { min-height: 0; overflow: hidden; }
-.voice-orb-stage .voice-blob { width: min(36vw, 300px); max-height: 100%; filter: none; }
+.voice-orb-stage .voice-blob { width: min(44vw, 420px, 36vh); max-height: 100%; filter: none; }
 .voice-blob::after {
   background: radial-gradient(circle at 38% 30%, #18235a 0%, #11133e 45%, #070b27 72%, transparent 76%);
   filter: blur(5px);
@@ -2104,6 +2104,8 @@
 .voice-call-body.has-activity { align-items: center; }
 .voice-call-body.has-activity .voice-call-presence,
 .voice-activity-panel { height: min(66vh, 640px); }
+.voice-call-body.has-activity .voice-call-presence { grid-template-rows: minmax(220px, 32vh) minmax(0, 1fr); }
+.voice-call-body.has-activity .voice-orb-stage .voice-blob { width: min(30vw, 320px, 30vh); }
 .voice-activity-panel {
   border-color: rgba(91,78,129,.14);
   background: rgba(255,255,255,.4);
@@ -2131,13 +2133,13 @@
   .voice-call-sheet { grid-template-rows: auto minmax(0, 1fr) auto; }
   .voice-call-body { align-content: center; }
   .voice-call-presence { grid-template-rows: minmax(150px, 30vh) minmax(96px, auto); }
-  .voice-orb-stage .voice-blob { width: min(58vw, 240px); }
+  .voice-orb-stage .voice-blob { width: min(68vw, 280px); }
   .voice-live-transcript { min-height: 96px; max-height: 31vh; padding: 14px; background: rgba(255,255,255,.42); }
   .voice-call-body.has-activity { grid-template-rows: auto auto; align-content: start; overflow-y: auto; }
   .voice-call-body.has-activity .voice-call-presence { height: auto; grid-template-rows: 120px minmax(88px, auto); }
   .voice-call-body.has-activity .voice-orb-stage .voice-blob { width: min(28vw, 108px); }
   .voice-call-body.has-activity .voice-live-transcript { min-height: 88px; max-height: 24vh; overflow-y: auto; }
-  .voice-call-body.has-activity .voice-activity-panel { height: auto; min-height: 220px; max-height: calc(46vh - 54px); margin: 0 0 20px; }
+  .voice-call-body.has-activity .voice-activity-panel { height: auto; min-height: 220px; max-height: calc(42vh - 70px); margin: 0 0 20px; }
   .voice-activity-panel { background: rgba(255,255,255,.44); }
   .voice-activity-card { background: rgba(255,255,255,.58); }
   .voice-call-controls { flex: 0 0 auto; box-shadow: 0 -1px 0 rgba(91,78,129,.08); }

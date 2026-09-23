@@ -1607,23 +1607,33 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .saathi-entry .entry-access-content > p { color: #646574 !important; font-size: 15px; }
 .saathi-entry .experience-card {
   overflow: hidden;
-  border-color: transparent !important;
-  border-radius: 22px !important;
+  border-color: rgba(91,78,129,.13) !important;
+  border-radius: 18px !important;
   color: #292531 !important;
-  background: rgba(255,255,255,.72) !important;
-  box-shadow: 0 16px 42px rgba(72,59,106,.1) !important;
-  backdrop-filter: blur(18px) saturate(125%);
+  background: rgba(255,255,255,.92) !important;
+  box-shadow: 0 8px 24px rgba(72,59,106,.06) !important;
 }
-.saathi-entry .experience-card-button { min-height: 168px; border-radius: 22px !important; }
+.saathi-entry .experience-card-button {
+  min-height: 168px;
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-items: center;
+  align-content: center;
+  gap: 11px;
+  border-radius: 18px !important;
+  text-align: center;
+}
 .saathi-entry .experience-card-button > span:first-child {
-  border-radius: 14px !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
   color: #4a3d73 !important;
-  background: linear-gradient(135deg, #ffe1e6, #ddd5ff 58%, #d9edff) !important;
+  background: transparent !important;
 }
+.saathi-entry .experience-card-button > span:nth-child(2) { justify-items: center; padding-top: 0 !important; }
 .saathi-entry .experience-card-button strong { color: #292531 !important; font-size: 16px; }
 .saathi-entry .experience-card-button small { color: #56515f !important; font-size: 13px; }
 .saathi-entry .experience-card-button em { color: #59478f !important; font-family: var(--font-sans) !important; font-size: 11px; }
-.saathi-entry .experience-card-button > svg { color: #6f59bd !important; }
+.saathi-entry .experience-card-button > svg { margin-top: 0 !important; color: #6f59bd !important; }
 .saathi-entry .entry-access-content > p:last-child { color: #646574 !important; }
 
 .live-auth-page,
@@ -1694,7 +1704,7 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 .status-details summary { color: #3d354d; font-weight: 750; cursor: pointer; }
 
 @media (hover: hover) and (pointer: fine) {
-  .saathi-entry .experience-card:hover { box-shadow: 0 20px 54px rgba(72,59,106,.15) !important; }
+  .saathi-entry .experience-card:hover { border-color: rgba(111,89,189,.28) !important; box-shadow: 0 12px 30px rgba(72,59,106,.09) !important; }
 }
 
 @media (max-width: 700px) {

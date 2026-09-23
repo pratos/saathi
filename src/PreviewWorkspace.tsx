@@ -6,11 +6,9 @@ import {
   Bot,
   Check,
   Copy,
-  Eye,
   FileText,
   Folder,
   House,
-  KeyRound,
   Link2,
   LockKeyhole,
   Mail,
@@ -27,6 +25,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
+import { AiAccessSetupView, EmailOtpSignInView, UsernameSetupView } from './AuthFlowViews'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
@@ -73,7 +72,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
   const [authStage, setAuthStage] = useState<'email' | 'code'>('email')
   const [email, setEmail] = useState('asha@example.com')
   const [code, setCode] = useState('')
-  const [username, setUsername] = useState('asha-kapoor')
+  const [username, setUsername] = useState('asha_kapoor')
   const [familyEmail, setFamilyEmail] = useState('appa@example.com')
   const [invited, setInvited] = useState(false)
   const [apiKey, setApiKey] = useState('')
@@ -109,6 +108,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
     event.preventDefault()
     if (authStage === 'email') {
       setAuthStage('code')
+      setCode('123456')
       return
     }
     goTo(1)
@@ -116,22 +116,16 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
 
   const renderGmailDialog = () => gmailPromptOpen && !gmailConnected ? (
     <div className="family-dialog-backdrop" role="presentation" onMouseDown={closeGmailPrompt}>
-      <section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-gmail-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="family-dialog-header">
-          <div>
-            <span className="family-dialog-icon"><Mail /></span>
-            <span><strong id="preview-gmail-title">Connect Gmail to find useful mail</strong><small>Optional · private by default</small></span>
-          </div>
-          <Button variant="ghost" size="icon" type="button" onClick={closeGmailPrompt} aria-label="Close Gmail setup" autoFocus><X /></Button>
-        </div>
+      <section className="family-dialog gmail-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-gmail-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header><div><span>Connected apps</span><h2 id="preview-gmail-title">Connect Gmail to find useful mail</h2></div><button type="button" onClick={closeGmailPrompt} aria-label="Close Gmail setup" autoFocus><X /></button></header>
         <p>Saathi can import useful receipts, renewals, and travel mail into your private My Saathi conversation. Nothing reaches your family inbox unless you share it.</p>
-        <div className="family-dialog-actions">
-          <Button variant="outline" type="button" onClick={closeGmailPrompt}>Not now</Button>
-          <Button type="button" onClick={() => {
+        <div className="status-actions">
+          <Button type="button" size="lg" onClick={() => {
             setGmailConnected(true)
             setGmailPromptOpen(false)
             goTo(5)
-          }}><Link2 /> Connect Gmail</Button>
+          }}><Mail /> Connect Gmail</Button>
+          <Button type="button" size="lg" variant="secondary" onClick={closeGmailPrompt}>Not now</Button>
         </div>
       </section>
     </div>
@@ -140,7 +134,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
   const tourBar = (
     <header className="preview-tour-bar">
       <div className="preview-tour-heading">
-        <Badge variant="accent"><Eye /> Guided preview</Badge>
+        <span className="preview-mode-label">Guided preview</span>
         <span><strong>{walkthroughSteps[step].title}</strong><small>{walkthroughSteps[step].detail}</small></span>
       </div>
       <div className="preview-tour-progress">
@@ -157,61 +151,59 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
   )
 
   if (step === 0) {
-    return <main className="preview-walkthrough-shell">
+    return <div className="preview-walkthrough-shell">
       {tourBar}
-      <section className="live-auth-page">
-        <div className="live-auth-brand"><span className="live-auth-mark">स</span><strong>Saathi</strong></div>
-        <div className="live-auth-card">
-          <div className="live-auth-heading"><span className="live-auth-icon"><Mail /></span><span><h1>{authStage === 'email' ? 'Welcome to Saathi' : 'Check your email'}</h1><p>{authStage === 'email' ? 'Sign in to open your private family workspace.' : `Enter the six-digit code sent to ${email}.`}</p></span></div>
-          <form className="live-auth-form" onSubmit={handleAuth}>
-            {authStage === 'email'
-              ? <label><span>Email address</span><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>
-              : <label><span>One-time code</span><Input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" /></label>}
-            <Button type="submit">{authStage === 'email' ? 'Continue with email' : 'Verify and continue'} <ArrowRight /></Button>
-            {authStage === 'code' && <Button variant="ghost" type="button" onClick={() => setAuthStage('email')}>Use a different email</Button>}
-          </form>
-          <small className="preview-sample-note"><Eye /> This guided preview uses sample information and sends no email.</small>
-        </div>
-      </section>
-    </main>
+      <EmailOtpSignInView
+        step={authStage}
+        email={email}
+        code={code}
+        busy={false}
+        resending={false}
+        onEmailChange={setEmail}
+        onCodeChange={setCode}
+        onRequestCode={handleAuth}
+        onVerifyCode={handleAuth}
+        onResendCode={() => setCode('123456')}
+        onUseDifferentEmail={() => { setAuthStage('email'); setCode('') }}
+        onBack={onExit}
+        previewNote={<p className="preview-sample-note">Preview only: no sign-in email is sent.</p>}
+      />
+    </div>
   }
 
   if (step === 1) {
-    return <main className="preview-walkthrough-shell">
+    return <div className="preview-walkthrough-shell">
       {tourBar}
-      <section className="live-onboarding-page">
-        <div className="live-onboarding-card">
-          <span className="live-onboarding-icon"><UserRound /></span>
-          <Badge variant="accent">Your profile</Badge>
-          <h1>What should your family call you?</h1>
-          <p>Choose a username that family members will recognize in conversations and mentions.</p>
-          <form className="live-onboarding-form" onSubmit={(event) => { event.preventDefault(); goTo(2) }}>
-            <label><span>Username</span><Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" /></label>
-            <div className="onboarding-preview"><span>AK</span><div><strong>@{username || 'your-name'}</strong><small>Shown in the Kapoor family</small></div></div>
-            <Button type="submit">Save and continue <ArrowRight /></Button>
-          </form>
-        </div>
-      </section>
-    </main>
+      <UsernameSetupView
+        username={username}
+        busy={false}
+        onUsernameChange={setUsername}
+        onSubmit={event => { event.preventDefault(); goTo(2) }}
+        onExit={onExit}
+        previewNote={<p className="preview-sample-note">Preview only: this sample username is not saved.</p>}
+      />
+    </div>
   }
 
   if (step === 3) {
-    return <main className="preview-walkthrough-shell">
+    return <div className="preview-walkthrough-shell">
       {tourBar}
-      <section className="live-onboarding-page">
-        <div className="live-onboarding-card access-onboarding-card">
-          <span className="live-onboarding-icon"><KeyRound /></span>
-          <Badge variant="accent">AI access</Badge>
-          <h1>Choose how Saathi thinks</h1>
-          <p>Use managed Saathi access, or connect your family’s OpenRouter key for text conversations.</p>
-          <div className="access-choice-grid">
-            <button type="button" className="access-choice-card selected" onClick={() => goTo(4)}><Sparkles /><span><strong>Managed by Saathi</strong><small>Text, voice, and tools are ready.</small></span><Check /></button>
-            <div className="access-choice-card byok-card"><KeyRound /><span><strong>Use your own key</strong><small>OpenRouter text access for this family.</small></span><Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-…" aria-label="OpenRouter API key" /><Button variant="outline" type="button" onClick={() => goTo(4)} disabled={!apiKey.trim()}>Save family key</Button></div>
-          </div>
-          <small className="preview-sample-note"><LockKeyhole /> This preview stores no key. BYOK voice is temporarily unavailable.</small>
-        </div>
-      </section>
-    </main>
+      <AiAccessSetupView
+        familyName="Kapoor family"
+        accountEmail={email}
+        owner
+        openRouterKey={apiKey}
+        busy={false}
+        switchingAccount={false}
+        requested={false}
+        onOpenRouterKeyChange={setApiKey}
+        onSaveKey={event => { event.preventDefault(); goTo(4) }}
+        onRequestAccess={() => goTo(4)}
+        onSwitchAccount={() => goTo(0)}
+        onExit={onExit}
+        previewNote={<p className="preview-sample-note"><LockKeyhole /> Preview only: no key is stored. BYOK voice is temporarily unavailable.</p>}
+      />
+    </div>
   }
 
   const isFamilyPanel = pane === 'family'
@@ -247,7 +239,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
       {!isFamilyPanel && <section className="conversation-pane preview-live-pane">
         <header className="conversation-header live-room-header">
           <button className="mobile-chat-back" type="button" onClick={() => setPane('chats')} aria-label="Back to conversations"><ArrowLeft /></button>
-          <div><div className="title-line"><h2>{pane === 'updates' ? 'Family inbox' : pane === 'files' ? 'Files' : 'My Saathi'}</h2><span className="live-label"><Eye /> Preview</span></div><p>{pane === 'updates' ? 'Mail shared with the Kapoor family' : pane === 'files' ? 'Documents shared with your family' : 'Private conversation · only you'}</p></div>
+          <div><div className="title-line"><h2>{pane === 'updates' ? 'Family inbox' : pane === 'files' ? 'Files' : 'My Saathi'}</h2><span className="live-label">Preview</span></div><p>{pane === 'updates' ? 'Mail shared with the Kapoor family' : pane === 'files' ? 'Documents shared with your family' : 'Private conversation · only you'}</p></div>
           <div className="live-room-actions"><Button variant="ghost" size="icon" type="button" aria-label="Search conversation"><Search /></Button>{pane === 'chats' && <Button variant="ghost" size="icon" type="button" onClick={() => goTo(10)} aria-label="Start voice preview"><Mic /></Button>}</div>
         </header>
 
@@ -294,7 +286,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
       </section>}
 
       <aside className="conversation-context preview-settings-context">
-        <header className="conversation-header live-room-header mobile-family-header"><button className="mobile-chat-back" type="button" onClick={() => setPane('chats')} aria-label="Back to conversations"><ArrowLeft /></button><div><div className="title-line"><h2>Settings</h2><span className="live-label"><Eye /> Preview</span></div><p>Kapoor family</p></div></header>
+        <header className="conversation-header live-room-header mobile-family-header"><button className="mobile-chat-back" type="button" onClick={() => setPane('chats')} aria-label="Back to conversations"><ArrowLeft /></button><div><div className="title-line"><h2>Settings</h2><span className="live-label">Preview</span></div><p>Kapoor family</p></div></header>
         <div className="context-title"><div><h2>{step === 2 ? 'Family members' : step === 4 ? 'Connected apps' : 'Settings'}</h2><p>{step === 2 ? 'Invite people to this family.' : step === 4 ? 'Choose which inboxes Saathi can help with.' : 'Manage your profile, family, and integrations.'}</p></div></div>
         <div className="settings-scroll settings-page">
           {step === 2 && <>

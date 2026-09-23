@@ -6,19 +6,15 @@ import {
   ArrowRight,
   Check,
   Eye,
-  KeyRound,
   LockKeyhole,
-  Mail,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
+import { EmailOtpSignInView, type EmailOtpStep } from './AuthFlowViews'
 import { PwaInstallCard, PwaInstallReminder } from './PwaInstallPrompt'
 import { usePwaInstall, type PwaInstallController } from './usePwaInstall'
-import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
-import { Input } from './components/ui/input'
-import { Label } from './components/ui/label'
 import { Spinner } from './components/ui/spinner'
 import './App.css'
 
@@ -187,7 +183,7 @@ function LiveExperience({ onExit, pwaInstall }: { onExit: () => void; pwaInstall
 
 function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
   const { signIn } = useAuthActions()
-  const [step, setStep] = useState<'email' | 'code' | 'verifying'>('email')
+  const [step, setStep] = useState<EmailOtpStep>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -244,44 +240,22 @@ function EmailOtpSignIn({ onBack }: { onBack: () => void }) {
     }
   }
 
-  return (
-    <main className="live-auth-page">
-      <Button variant="bare" size="content" className="back-link" onClick={onBack}><ArrowLeft size={19} /> Back</Button>
-      <Card className="live-auth-card gap-0">
-        <div className="auth-brand dark"><span className="brand-mark">स</span> Saathi</div>
-        <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
-        <h1>{step === 'email' ? 'Sign in with your email' : step === 'code' ? 'Enter your six-digit code' : 'Opening your family space'}</h1>
-        <p>{step === 'email'
-          ? 'We’ll email you a one-time code. There is no password to remember.'
-          : step === 'code'
-            ? `We sent a sign-in code to ${email}.`
-            : 'Your code is verified. This may take a moment.'}</p>
-
-        {step === 'email' && (
-          <form onSubmit={requestCode}>
-            <Label htmlFor="live-email">Email address</Label>
-            <div className="field-with-icon"><Mail size={20} /><Input className="h-full border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" id="live-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required autoFocus /></div>
-            <Button className="primary large" type="submit" disabled={busy}>{busy ? 'Sending your code…' : 'Email me a code'} <ArrowRight size={20} /></Button>
-          </form>
-        )}
-
-        {step === 'code' && (
-          <form onSubmit={verifyCode}>
-            <Label htmlFor="live-code">One-time code</Label>
-            <div className="field-with-icon"><KeyRound size={20} /><Input id="live-code" className="otp-input h-full border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} placeholder="000000" required autoFocus /></div>
-            <Button className="primary large" type="submit" disabled={busy || resending || code.length !== 6}>{busy ? 'Checking code…' : 'Verify and continue'} <ArrowRight size={20} /></Button>
-            <Button variant="link" className="text-button" type="button" onClick={() => void resendCode()} disabled={busy || resending}>{resending ? 'Sending a new code…' : 'Request a new code'}</Button>
-            <Button variant="link" className="text-button" type="button" onClick={() => { setStep('email'); setCode(''); setError(''); setNotice('') }} disabled={busy || resending}>Use a different email</Button>
-          </form>
-        )}
-
-        {step === 'verifying' && <Spinner className="mx-auto my-7 size-8 text-primary" aria-label="Signing in" />}
-        {notice && !error && <p className="form-notice" role="status">{notice}</p>}
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <div className="security-note"><ShieldCheck size={18} /><span><strong>Private by design</strong>Your code expires after 10 minutes and can only be used once.</span></div>
-      </Card>
-    </main>
-  )
+  return <EmailOtpSignInView
+    step={step}
+    email={email}
+    code={code}
+    busy={busy}
+    resending={resending}
+    error={error}
+    notice={notice}
+    onEmailChange={setEmail}
+    onCodeChange={setCode}
+    onRequestCode={requestCode}
+    onVerifyCode={verifyCode}
+    onResendCode={() => void resendCode()}
+    onUseDifferentEmail={() => { setStep('email'); setCode(''); setError(''); setNotice('') }}
+    onBack={onBack}
+  />
 }
 
 function BackendUnavailable({ onBack }: { onBack: () => void }) {

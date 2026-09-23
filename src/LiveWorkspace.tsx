@@ -22,7 +22,6 @@ import {
   Folder,
   House,
   Image as ImageIcon,
-  KeyRound,
   Link2,
   LockKeyhole,
   LogOut,
@@ -53,6 +52,7 @@ import {
 import { api } from '../convex/_generated/api'
 import type { Doc, Id } from '../convex/_generated/dataModel'
 import { IMAGE_PRESET_GROUPS, IMAGE_PRESETS } from '../convex/lib/imageSafety'
+import { AiAccessSetupView, UsernameSetupView } from './AuthFlowViews'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
@@ -239,35 +239,22 @@ function AiAccessSetup({ family, access, accountEmail, onExit }: {
     <Button className="secondary large" onClick={onExit} disabled={switchingAccount}><ArrowLeft /> Leave live mode</Button>
   </section></main>
 
-  return <main className="onboarding-page access-onboarding">
-    <Button variant="bare" size="content" className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
-    <section className="onboarding-card access-setup-card">
-      <Badge className="mode-badge live"><KeyRound size={15} /> Choose your AI access</Badge>
-      <h1>Set up Saathi access</h1>
-      <p>Add an OpenRouter API key for <strong>{family.space.name}</strong>, or ask the Saathi administrator for access.</p>
-      {accountControl}
-      {family.membership.role === 'owner' ? <form onSubmit={saveKeys} className="onboarding-key-form">
-        <label htmlFor="onboarding-openrouter">OpenRouter API key <small>required for this option</small></label>
-        <Input id="onboarding-openrouter" type="password" autoComplete="off" value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-…" disabled={switchingAccount} required />
-        <Button className="primary large" type="submit" disabled={busy || switchingAccount || openRouterKey.trim().length < 20}>{busy ? 'Saving securely…' : 'Save key and start'} <ArrowRight /></Button>
-      </form> : <p className="form-notice">Ask a family owner to add an OpenRouter key, or request access below.</p>}
-      <div className="access-divider"><span>or</span></div>
-      <Button className="secondary large" onClick={() => void request()} disabled={busy || switchingAccount || access.requestedAt !== null}>{access.requestedAt ? 'Access requested' : 'Request access'}</Button>
-      {feedback && <p className="form-notice" role="status">{feedback}</p>}
-      <ModelCatalog />
-      <div className="security-note"><ShieldCheck /><span><strong>Encrypted and private</strong>Keys are encrypted at rest, never returned to the browser, and shared only inside this family.</span></div>
-    </section>
-  </main>
-}
-
-function ModelCatalog() {
-  return <details className="onboarding-models"><summary>Models used by this build</summary><ul>
-    <li><strong>Chat:</strong> DeepSeek V4.1 Flash, GPT-5.6 Luna, Grok 4.6, or GPT-5.6 Sol through OpenRouter</li>
-    <li><strong>Images:</strong> Meta Muse Image through OpenRouter</li>
-    <li><strong>Voice:</strong> GPT Live 1 with GPT-5 mini delegation through OpenAI</li>
-    <li><strong>Email and photo extraction:</strong> GPT-5 mini through OpenAI</li>
-    <li><strong>Routing and safety:</strong> your selected OpenRouter model for BYOK, or TypeSafe System One for managed access</li>
-  </ul></details>
+  return <AiAccessSetupView
+    familyName={family.space.name}
+    accountEmail={accountEmail}
+    owner={family.membership.role === 'owner'}
+    openRouterKey={openRouterKey}
+    busy={busy}
+    switchingAccount={switchingAccount}
+    requested={access.requestedAt !== null}
+    feedback={feedback}
+    switchAccountError={switchAccountError}
+    onOpenRouterKeyChange={setOpenRouterKey}
+    onSaveKey={saveKeys}
+    onRequestAccess={() => void request()}
+    onSwitchAccount={() => void switchAccount()}
+    onExit={onExit}
+  />
 }
 
 function UsernameSetup({ onExit }: { onExit: () => void }) {
@@ -293,22 +280,14 @@ function UsernameSetup({ onExit }: { onExit: () => void }) {
     }
   }
 
-  return <main className="onboarding-page username-onboarding">
-    <Button variant="bare" size="content" className="back-link" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
-    <section className="onboarding-card">
-      <Badge className="mode-badge live"><MessageSquareText size={15} /> Your username</Badge>
-      <h1>Choose your username</h1>
-      <p>Choose a short username for family chats. People can type it after @ when they want your attention.</p>
-      <form onSubmit={submit}>
-        <label htmlFor="username">Your username</label>
-        <div className="username-field"><span aria-hidden="true">@</span><Input id="username" value={username} onChange={event => setUsernameDraft(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} placeholder="priya_shah" minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" autoComplete="username" required autoFocus /></div>
-        <small className="username-help">Use 3–24 letters, numbers, or underscores. Start with a letter.</small>
-        <Button className="primary large" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Continue'} <ArrowRight /></Button>
-      </form>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="security-note"><ShieldCheck /><span><strong>Visible only where you belong</strong>Your username appears to people in your shared family chats.</span></div>
-    </section>
-  </main>
+  return <UsernameSetupView
+    username={username}
+    busy={busy}
+    error={error}
+    onUsernameChange={setUsernameDraft}
+    onSubmit={submit}
+    onExit={onExit}
+  />
 }
 
 function CreateFirstFamily({ onExit, isSuperadmin = false }: { onExit: () => void; isSuperadmin?: boolean }) {

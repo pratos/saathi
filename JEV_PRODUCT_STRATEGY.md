@@ -1,5 +1,9 @@
 # Jev product strategy
 
+> This focused decision-layer strategy supports Saathi's broader [product thesis
+> and hackathon build record](./hackathon.md). The application architecture and
+> provider boundaries are documented in [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 ## Decision
 
 Use Jev as a cheap semantic triage layer, not as an authorization authority and

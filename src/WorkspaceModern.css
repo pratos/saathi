@@ -1563,6 +1563,22 @@
     box-shadow: 0 5px 16px rgba(72,62,100,.06);
   }
   .live-conversation-workspace .composer-guidance .voice-start { color: #54409b; }
+  .live-conversation-workspace .voice-unavailable { display: inline-flex; border-radius: 21px; }
+  .live-conversation-workspace .voice-unavailable .voice-start:disabled {
+    color: #777083;
+    background: rgba(246,244,250,.78);
+    opacity: 1;
+  }
+  .live-conversation-workspace .voice-unavailable-tip {
+    border-color: rgba(82,68,117,.12);
+    color: #342f40;
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 12px 28px rgba(67,55,100,.12);
+    backdrop-filter: blur(18px) saturate(130%);
+  }
+  .live-conversation-workspace .voice-unavailable-tip strong { color: #3f316d; }
+  .live-conversation-workspace .voice-unavailable-tip span { color: #696274; }
+  .live-conversation-workspace .voice-unavailable:focus-visible { outline-color: #6d56b4; }
   .live-conversation-workspace .conversation-composer form {
     min-height: 66px;
     padding: 7px;

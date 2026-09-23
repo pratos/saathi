@@ -1,8 +1,8 @@
 # Saathi application flow
 
-> Descriptive map of the running React + Convex application. Product intent lives in [PRODUCT.md](./PRODUCT.md). This document traces how a request actually moves through the UI, Convex functions, and external providers.
+> Descriptive map of the running React + Convex application. Product intent and the hackathon build record live in [hackathon.md](./hackathon.md). This document traces how a request actually moves through the UI, Convex functions, and external providers.
 
-**Stack:** React 19 + Vite SPA · Convex (system of record, authz, realtime) · Convex Auth email OTP · AgentMail · OpenRouter · OpenAI · Firecrawl · Composio Gmail
+**Stack:** React 19 + Vite SPA · Convex (system of record, authz, realtime) · Convex Auth email OTP · AgentMail · OpenRouter · OpenAI · Firecrawl · Composio Gmail · TypeSafe/Jev
 
 Convex is the authorization boundary and durable truth. Provider responses are normalized into Convex records; provider state is never canonical. Families are isolated tenants: membership, rooms, inbox, usage, and model context never cross a space.
 
@@ -166,6 +166,7 @@ Connected accounts are per-member. Other family members cannot see another perso
 ```
 LiveRoom mic
   → liveVoice.startSession (WebRTC SDP ↔ OpenAI GPT-Live)
+  → managed Saathi access only while BYOK voice is temporarily disabled
   → liveVoiceSessions row
   → tools: web search, use_computer, generate_image, conversation actions
   → optional voiceBrowserSessions (Firecrawl computer-use, live view,
@@ -182,14 +183,14 @@ Owner `invitations.createAndSend` emails a token. Invitee signs in with that add
 
 ## 6. External edges
 
-| Provider | Role | Env |
+| Provider | Product features and boundary | Env |
 | --- | --- | --- |
-| AgentMail | OTP delivery + family inbox + inbound webhook | `AGENTMAIL_API_KEY`, `AGENTMAIL_AUTH_INBOX_ID` |
+| AgentMail | OTP and invitation delivery; family inbox creation; signed inbound mail and attachments; threaded, confirmed outbound mail; provider IDs support deduplication | `AGENTMAIL_API_KEY`, `AGENTMAIL_AUTH_INBOX_ID` |
 | OpenRouter | Saathi chat (DeepSeek / Luna / Grok / Sol by tier) | `OPENROUTER_API_KEY` or space BYOK |
-| OpenAI | Inbox extraction, GPT-Live voice | `OPENAI_API_KEY` or space BYOK |
-| Firecrawl | Web search, document parse, computer-use browser | `FIRECRAWL_API_KEY` |
-| Composio | Gmail OAuth, triggers, message fetch | `COMPOSIO_API_KEY`, `COMPOSIO_WEBHOOK_SECRET` |
-| TypeSafe (managed access) | Jev turn / bundle / memory / email decisions | `TYPESAFE_API_KEY` |
+| OpenAI | Inbox extraction and managed-access `gpt-live-1` voice | `OPENAI_API_KEY` |
+| Firecrawl | Cited public search; linked-document and attachment parsing; explicit Interact/code browser sessions with live handoff and persistent profiles | `FIRECRAWL_API_KEY` |
+| Composio | Session-based multi-account Gmail OAuth; backfill and new-message triggers; signed webhook; message and attachment hydration | `COMPOSIO_API_KEY`, `COMPOSIO_WEBHOOK_SECRET` |
+| TypeSafe / Jev (managed access) | Typed `choice`, `noul`, and `score` decisions for turn, bundle, memory, email, and bounded browser classification; never authorization or direct execution | `TYPESAFE_API_KEY` |
 
 Convex components: `@convex-dev/auth`, `@convex-dev/rate-limiter`, `@convex-dev/workflow`, `@convex-dev/static-hosting`, `@agentmail/convex`, `@firecrawl/firecrawl-convex`.
 

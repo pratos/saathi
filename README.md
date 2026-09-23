@@ -2,7 +2,7 @@
 
 Saathi is a multilingual family operations inbox and shared messenger. It brings household email, conversations, translations, decisions, and follow-ups into one authorized realtime workspace with Saathi as an AI participant.
 
-The canonical product direction, MVP boundary, security model, and acceptance criteria live in [PRODUCT.md](./PRODUCT.md).
+The product thesis, provider feature map, architecture summary, and chronological build record live in [hackathon.md](./hackathon.md). The request and trust-boundary map lives in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Development
 

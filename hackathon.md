@@ -12,7 +12,71 @@
 - **Auth:** Convex Auth
 - **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-23T04:21:57Z
+- **Last updated:** 2026-09-23T04:53:33Z
+
+## Product thesis
+
+Family operations are scattered across personal inboxes, chat threads,
+attachments, languages, and the memory of whichever person usually keeps track.
+Saathi turns that fragmented work into one multilingual, source-linked family
+inbox. A household can receive or forward an important email, understand the
+amount, date, renewal, or decision inside it, discuss it in each member's
+preferred language, and take a reviewed next step without losing the original
+evidence.
+
+The product is deliberately a companion, not an autonomous operator. Saathi can
+classify, translate, summarize, research, extract facts, and draft. People still
+confirm sending, unsubscribing, deleting, purchasing, changing access, or any
+other externally visible action. Private mail remains private until its owner
+shares it with a family, and every server operation rechecks family and room
+authorization rather than trusting a client-provided identifier.
+
+### The core loop
+
+1. **Capture:** AgentMail receives family mail, or a member privately connects
+   Gmail through Composio.
+2. **Understand:** durable Convex workflows parse documents, classify the item,
+   and extract bounded fields while retaining the original source.
+3. **Coordinate:** authorized family members see the update in realtime, discuss
+   it in English, Hindi, or Marathi, and tag Saathi when they need help.
+4. **Ground:** Firecrawl supplies current public sources, document text, or an
+   explicitly requested live browser; TypeSafe/Jev makes narrow typed decisions
+   where a cheap semantic decision is preferable to generative prose.
+5. **Decide:** Saathi proposes a next step, but a person reviews and confirms any
+   consequential action.
+
+### Product principles
+
+- **Keep the source visible.** Original mail, messages, attachments, sender, and
+  timestamps stay beside translations and extracted facts.
+- **Language belongs to the reader.** The canonical record does not change when
+  each family member chooses a display language.
+- **One household, deliberate visibility.** Families are isolated tenants and
+  private items never enter shared queries, summaries, or model context.
+- **AI assists; people decide.** Suggestions and drafts are useful; silent
+  external action is not.
+- **Convex owns durable truth.** Provider responses become authorized Convex
+  records; no provider's transient state is the system of record.
+
+### Provider features used
+
+| Provider | Features used in Saathi |
+| --- | --- |
+| **Firecrawl** | Component-backed public web search with source URLs; Parse/scrape for linked PDFs and email attachments; Interact browser sessions with a live user handoff, persistent per-user profiles, and explicit blocks on payment and credential handling. |
+| **AgentMail** | Convex component and signed inbound webhook; email-OTP delivery; creation and availability checks for family inbox aliases; inbound family mail and attachments; invitation and confirmed outbound email; stable message/thread IDs for deduplication and continuity. |
+| **TypeSafe / Jev** | Managed-access System One decisions using typed `choice`, `noul`, and `score` outputs for turn classification, large-catalog bundle routing, memory intent and sensitive-data screening, inbox classification telemetry, and bounded browser-decision experiments. Deterministic application code still owns authorization and execution. |
+| **Composio** | Session-based Gmail OAuth with multiple connected accounts; `GMAIL_FETCH_EMAILS` backfill and `GMAIL_NEW_GMAIL_MESSAGE` triggers; signed webhook ingestion; message and attachment retrieval. Gmail data lands privately in My Saathi and reaches a family only after an explicit share. |
+
+### Scope and success
+
+The live product includes email OTP, isolated multi-family workspaces, private
+and shared rooms, a categorized family inbox, Gmail imports, source-preserving
+extraction, current web research, generated images, voice notes, direct voice
+for managed access, and a durable room-scoped agent runtime. Full autonomous
+purchases, payments, destructive actions, and credential handling are explicit
+non-goals. The product succeeds when a household can turn a real incoming item
+into an understood, assigned, source-backed next step without relying on one
+person to translate or remember everything.
 
 ## Architecture
 
@@ -71,21 +135,21 @@ flowchart LR
 ### 2026-09-10 - b92bca9
 Established Saathi as a multilingual family operations inbox and documented the
 product boundary, source-linked translations, human confirmation gates, and the
-initial responsive React interface (`PRODUCT.md`, `src/App.tsx`).
+initial responsive React interface (product thesis above, `src/App.tsx`).
 
 ### 2026-09-10 - 4f803ad
 Defined isolated family spaces so one account can participate in multiple
 families without sharing inboxes, permissions, usage, or model context. Selected
-the initial Convex component and provider stack (`PRODUCT.md`).
+the initial Convex component and provider stack.
 
 ### 2026-09-10 - fc2462e
 Specified deny-by-default authorization, room-level grants, model profiles, and
 server-side provider routing for the default family model and higher-effort
-OpenAI options (`PRODUCT.md`).
+OpenAI options.
 
 ### 2026-09-10 - 338b47b
 Narrowed MVP authentication to email OTP through Convex Auth, delivered by
-AgentMail, and deferred OAuth and mobile OTP (`PRODUCT.md`).
+AgentMail, and deferred OAuth and mobile OTP.
 
 ### 2026-09-10 - 616cd58
 Implemented the responsive family inbox preview, email OTP screens,
@@ -361,4 +425,10 @@ suggested actions (`convex/recategorization.ts`, `convex/schema.ts`,
 
 ### 2026-09-23 - working tree
 Added a concise public architecture note, component responsibility guide, and
-system-flow diagram for reviewers (`hackathon.md`).
+system-flow diagram for reviewers. Consolidated the product thesis and provider
+feature map into this submission record and refreshed `ARCHITECTURE.md`.
+Temporarily disabled direct
+`gpt-live-1` voice calls for OpenRouter BYOK families in the product UI; managed
+Saathi access continues to provide voice while family-key chat remains available.
+The model inventory above reflects the current routed tiers and specialist media,
+voice, utility, and transcription models.

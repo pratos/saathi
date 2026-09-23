@@ -528,6 +528,34 @@ button { border: 0; background: none; color: inherit; }
 .composer-guidance .voice-start { color: #f6d68d; }
 .composer-guidance .voice-muted, .composer-guidance .voice-end { color: #ffc1b1; }
 .composer-guidance button:disabled { cursor: wait; opacity: .65; }
+.voice-unavailable { position: relative; display: inline-flex; border-radius: 10px; outline: none; }
+.voice-unavailable .voice-start:disabled { cursor: not-allowed; opacity: .58; }
+.voice-unavailable-tip {
+  position: absolute;
+  z-index: 50;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: min(290px, calc(100vw - 32px));
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 12px;
+  color: #d7e4de;
+  background: #101713;
+  box-shadow: 0 10px 26px rgba(0,0,0,.22);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+}
+.voice-unavailable-tip strong { color: #fff3d4; font-size: 13px; line-height: 1.35; }
+.voice-unavailable-tip span { color: #aebcb4; font-size: 12px; font-weight: 500; line-height: 1.45; }
+.voice-unavailable:hover .voice-unavailable-tip,
+.voice-unavailable:focus-visible .voice-unavailable-tip,
+.voice-unavailable:focus-within .voice-unavailable-tip { opacity: 1; visibility: visible; transform: translateY(0); }
+.voice-unavailable:focus-visible { outline: 2px solid var(--aqua); outline-offset: 2px; }
 .composer-guidance svg, .composer-mention svg, .composer-attachment svg { width: 18px; }
 .composer-mention, .composer-attachment { width: 48px; min-height: 48px !important; display: grid; place-items: center; border-radius: 14px; color: var(--aqua-soft); }
 .composer-attachment:hover { background: #344139; }
@@ -753,7 +781,7 @@ button { border: 0; background: none; color: inherit; }
   .live-conversation-workspace.is-family-open,
   .live-conversation-workspace.is-family-open.is-mobile-family { grid-template-columns: 1fr; }
   .saathi-workspace.live-conversation-workspace { inset: 0; border-radius: 0; }
-  .composer-guidance span { display: none; }
+  .composer-guidance > span { display: none; }
   .composer-guidance { justify-content: flex-start; padding-left: 2px; }
   .live-room-header { min-height: 94px; }
   .live-conversation-workspace .conversation-list { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }

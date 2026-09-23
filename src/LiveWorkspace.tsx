@@ -615,7 +615,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
           ) : pane === 'files' ? (
             <FamilyFiles family={family} files={spaceFiles} onBack={openHome} onOpenRoom={openRoom} />
           ) : selectedRoom ? (
-            <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} onBack={openHome} onNavigate={openPane} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
+            <LiveRoom key={selectedRoom._id} room={selectedRoom} family={family} families={families} accessSource={accessSource} onBack={openHome} onNavigate={openPane} onInvite={selectedRoom.type !== 'private' && family.membership.role === 'owner' ? () => setMembersOpen(true) : undefined} />
           ) : (
             <section className="conversation-pane"><header className="conversation-header"><div><h2>{family.space.name}</h2><p>Live · private family data</p></div></header><div className="dark-empty-state"><MessageSquareText /><h2>Your family conversation is getting ready</h2><p>Reload in a moment. New family spaces automatically receive a shared room.</p></div></section>
           )}
@@ -972,10 +972,11 @@ function jevExecutionSummary(
   return { tone: 'warning', label: 'Finished without a reply', detail: 'Pi completed the run but produced no visible answer.' }
 }
 
-function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
+function LiveRoom({ room, family, families, accessSource, onBack, onNavigate, onInvite }: {
   room: Doc<'rooms'>
   family: FamilyRow
   families: FamilyRow[]
+  accessSource: 'byok' | 'platform' | 'none'
   onBack: () => void
   onNavigate: (pane: 'updates' | 'files' | 'family') => void
   onInvite?: () => void
@@ -1019,6 +1020,7 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
   const failedJob = saathi?.jobs[0]?.status === 'failed' ? saathi.jobs[0] : null
   const attachmentMessageIds = useMemo(() => new Set((attachments ?? []).map((item) => item.messageId)), [attachments])
   const voice = useLiveVoice(room._id)
+  const voiceUnavailableForByok = accessSource === 'byok'
   const filteredMentions = useMemo(() => {
     if (!mentionMatch || !mentionCandidates) return []
     return mentionCandidates.filter(candidate =>
@@ -1042,6 +1044,10 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
       return
     }
     if (action.kind === 'start_voice') {
+      if (voiceUnavailableForByok) {
+        setError('Voice calls are temporarily unavailable with family-key access. Chat still uses your family key.')
+        return
+      }
       void voice.start()
       return
     }
@@ -1299,7 +1305,17 @@ function LiveRoom({ room, family, families, onBack, onNavigate, onInvite }: {
         {uploads.length > 0 && <div className="upload-queue" aria-live="polite">{uploads.map((upload) => <div className={upload.status} key={upload.id}>{upload.status === 'uploading' ? <span className="upload-spinner" /> : <FileText />}<span><strong>{upload.name}</strong><small>{upload.status === 'uploading' ? 'Uploading…' : upload.message}</small></span>{upload.status === 'error' && <button type="button" onClick={() => setUploads((current) => current.filter((item) => item.id !== upload.id))} aria-label={`Dismiss ${upload.name}`}><X /></button>}</div>)}</div>}
         <div className="composer-guidance">
           <div className="composer-guidance-actions">
-            <Button type="button" variant="ghost" size="sm" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</Button>
+            {voiceUnavailableForByok ? (
+              <span className="voice-unavailable" tabIndex={0} role="group" aria-label="Voice unavailable" aria-describedby="byok-voice-explanation">
+                <Button type="button" variant="ghost" size="sm" className="voice-start" disabled><Mic /> Voice unavailable</Button>
+                <span className="voice-unavailable-tip" id="byok-voice-explanation" role="tooltip">
+                  <strong>Voice is coming back soon</strong>
+                  <span>For now, voice calls are available with managed Saathi access. Chat still uses your family key.</span>
+                </span>
+              </span>
+            ) : (
+              <Button type="button" variant="ghost" size="sm" className="voice-start" onClick={() => void voice.start()} disabled={!['idle', 'ended', 'error'].includes(voice.status)}><Mic /> {['idle', 'ended', 'error'].includes(voice.status) ? 'Talk to Saathi' : 'Voice call open'}</Button>
+            )}
             <Button type="button" variant="ghost" size="sm" className={imageOpen ? 'is-active' : ''} onClick={() => setImageOpen(current => !current)}><ImageIcon /> Create image</Button>
             <details className="composer-more">
               <summary><Plus /> Add</summary>

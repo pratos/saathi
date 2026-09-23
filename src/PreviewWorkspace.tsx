@@ -1,316 +1,360 @@
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
-  AudioLines,
-  Brain,
+  Bell,
+  Bot,
   Check,
-  CircleStop,
-  ExternalLink,
+  Copy,
   Eye,
   FileText,
-  Globe2,
-  Inbox,
-  Languages,
+  Folder,
+  House,
+  KeyRound,
+  Link2,
   LockKeyhole,
   Mail,
-  MemoryStick,
+  MailOpen,
+  MessageSquareText,
   Mic,
-  Monitor,
-  RefreshCcw,
   Search,
   Send,
+  Settings2,
   ShieldCheck,
   Sparkles,
-  WandSparkles,
+  UserPlus,
+  UserRound,
+  UsersRound,
+  X,
 } from 'lucide-react'
 import { Badge } from './components/ui/badge'
 import { Button } from './components/ui/button'
-import { Checkbox } from './components/ui/checkbox'
-import { Label } from './components/ui/label'
+import { Input } from './components/ui/input'
 import { Progress } from './components/ui/progress'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select'
+import { Textarea } from './components/ui/textarea'
+import { VoiceCallOverlay } from './LiveWorkspace'
 import './PreviewWorkspace.css'
 
-type StepId = 'inbox' | 'language' | 'memory' | 'research' | 'handoff' | 'approval' | 'privacy'
-type Step = {
-  id: StepId
-  label: string
-  task: string
-  guide: string
-  icon: ComponentType<{ size?: number; strokeWidth?: number }>
-  route: string
-  providers: string[]
-}
+type PreviewPane = 'chats' | 'updates' | 'files' | 'family'
 
-const steps: Step[] = [
-  { id: 'inbox', label: 'Review a family email', task: 'Find the amount and due date', guide: 'Review the source, then ask Saathi to find the amount and due date.', icon: Inbox, route: 'agentmail.inbound → inbox.extract', providers: ['AgentMail', 'OpenAI', 'Convex'] },
-  { id: 'language', label: 'Translate the conversation', task: 'Let everyone read in their language', guide: 'Choose how Asha should read Appa’s original message.', icon: Languages, route: 'message.original → translation.cache', providers: ['OpenRouter', 'Convex'] },
-  { id: 'memory', label: 'Save a family preference', task: 'Save one useful family preference', guide: 'Review what Saathi understood, then choose whether to remember it.', icon: Brain, route: 'jev.route → agent.memory', providers: ['TypeSafe Jev', 'Pi', 'Convex'] },
-  { id: 'research', label: 'Review sample travel updates', task: 'Review sample search results', guide: 'Try a sample web search, then choose a source.', icon: Globe2, route: 'query.sanitize → firecrawl.search', providers: ['Firecrawl', 'Pi', 'OpenRouter'] },
-  { id: 'handoff', label: 'Continue by voice or browser', task: 'Choose how to continue', guide: 'Choose how to continue. You always handle sign-in and payment.', icon: AudioLines, route: 'voice.intent → jev.browser → handoff', providers: ['OpenAI Live', 'Jev', 'Firecrawl'] },
-  { id: 'approval', label: 'Review a draft reply', task: 'Review the recipient and reply', guide: 'Check the recipient and final message before confirming the sample reply.', icon: ShieldCheck, route: 'draft.create → permission.check → confirm', providers: ['AgentMail', 'Convex'] },
-  { id: 'privacy', label: 'Switch family workspaces', task: 'Switch spaces without carrying data over', guide: 'Move to the Rao family and confirm that the Kapoor trip is no longer visible.', icon: LockKeyhole, route: 'space.switch → subscription.replace', providers: ['Convex Auth', 'Convex'] },
-]
-
-const boundaries: Record<StepId, string> = {
-  inbox: 'Original email stays beside every extracted field.',
-  language: 'Translation changes the reader view, never the canonical message.',
-  memory: 'Only explicit facts are retained, scoped to this room and family.',
-  research: 'Only the sanitized public question reaches web research.',
-  handoff: 'Passwords, OTPs, payments, and confirmation stay with the person.',
-  approval: 'Drafting and execution are separate, freshly authorized operations.',
-  privacy: 'Family scope changes at the authorization boundary, not with a UI filter.',
-}
-
-export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; onOpenLive: () => void }) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const [completed, setCompleted] = useState<StepId[]>([])
-  const [runState, setRunState] = useState<'waiting' | 'running' | 'complete'>('waiting')
-  const [restartGeneration, setRestartGeneration] = useState(0)
-  const active = steps[activeIndex]
-  const isComplete = completed.includes(active.id)
-  const journeyComplete = completed.length === steps.length
-  const showCompletion = journeyComplete && activeIndex === steps.length - 1 && isComplete
-
-  const completeStep = () => {
-    setCompleted((current) => current.includes(active.id) ? current : [...current, active.id])
-    setRunState('complete')
-  }
-
-  const goTo = (index: number) => {
-    if (index > completed.length || index < 0 || index >= steps.length) return
-    setActiveIndex(index)
-    setRunState(completed.includes(steps[index].id) ? 'complete' : 'waiting')
-  }
-
-  const restart = () => {
-    setActiveIndex(0)
-    setCompleted([])
-    setRunState('waiting')
-    setRestartGeneration((current) => current + 1)
-  }
-
-  return (
-    <main className={`onboarding-shell ${showCompletion ? 'journey-complete' : ''}`}>
-      <header className="onboarding-topbar">
-        <Button variant="bare" size="content" className="topbar-exit" type="button" onClick={onExit} aria-label="Exit preview"><ArrowLeft /><span>Exit preview</span></Button>
-        <div className="topbar-title"><span>Saathi preview</span><b>Kapoor family example</b></div>
-        <Badge variant="accent" className="simulation-badge"><Eye /> SIMULATION · SAMPLE DATA</Badge>
-        <div className="topbar-progress" aria-label={`${completed.length} of ${steps.length} steps complete`}>
-          <span>{String(Math.min(activeIndex + 1, steps.length)).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</span>
-          <Progress value={(completed.length / steps.length) * 100} />
-        </div>
-      </header>
-
-      <div className="onboarding-grid">
-        <aside className="journey-rail" aria-label="Onboarding steps">
-          <div className="rail-brand"><span>स</span><div><strong>Learn by doing</strong><small>One connected family task</small></div></div>
-          <nav>
-            {steps.map((step, index) => {
-              const Icon = step.icon
-              const done = completed.includes(step.id)
-              const locked = index > completed.length
-              return <Button
-                type="button"
-                variant="bare"
-                size="content"
-                key={step.id}
-                className={`${index === activeIndex ? 'active' : ''} ${done ? 'done' : ''}`}
-                disabled={locked}
-                aria-current={index === activeIndex ? 'step' : undefined}
-                onClick={() => goTo(index)}
-              >
-                <span className="rail-index">{done ? <Check /> : locked ? <LockKeyhole /> : index + 1}</span>
-                <span><strong>{step.label}</strong><small>{done ? 'Complete' : locked ? 'Finish previous step' : 'Ready for you'}</small></span>
-                <Icon />
-              </Button>
-            })}
-          </nav>
-          <div className="rail-safety"><ShieldCheck /><span><strong>Safe preview</strong>No account needed. No personal data is used, and nothing is sent to external services.</span></div>
-        </aside>
-
-        <section className="task-column" aria-live="polite">
-          {showCompletion
-            ? <Completion onOpenLive={onOpenLive} onRestart={restart} />
-            : <>
-              <header className="task-heading">
-                <div><span>STEP {String(activeIndex + 1).padStart(2, '0')} · KAPOOR FAMILY / MYSURU TRIP</span><h1>{active.task}</h1><p>{active.guide}</p></div>
-                <RunState state={runState} />
-              </header>
-              <div className="mobile-step-select">
-                <label htmlFor="mobile-journey-step">Journey step</label>
-                <Select value={String(activeIndex)} onValueChange={(value) => goTo(Number(value))}><SelectTrigger id="mobile-journey-step" className="mobile-step-trigger"><SelectValue /></SelectTrigger><SelectContent>{steps.map((step, index) => <SelectItem key={step.id} value={String(index)} disabled={index > completed.length}>{index + 1}. {step.label}{index > completed.length ? ' · locked' : ''}</SelectItem>)}</SelectContent></Select>
-              </div>
-              <div className="task-stage" key={`${active.id}-${restartGeneration}`}>
-                {active.id === 'inbox' && <InboxTask done={isComplete} setRunning={() => setRunState('running')} onComplete={completeStep} />}
-                {active.id === 'language' && <LanguageTask done={isComplete} onComplete={completeStep} />}
-                {active.id === 'memory' && <MemoryTask done={isComplete} onComplete={completeStep} />}
-                {active.id === 'research' && <ResearchTask done={isComplete} setRunning={() => setRunState('running')} onComplete={completeStep} />}
-                {active.id === 'handoff' && <HandoffTask done={isComplete} onComplete={completeStep} />}
-                {active.id === 'approval' && <ApprovalTask done={isComplete} onComplete={completeStep} />}
-                {active.id === 'privacy' && <PrivacyTask done={isComplete} onComplete={completeStep} />}
-              </div>
-            </>}
-        </section>
-
-        <aside className="evidence-panel" aria-label="Agent run evidence">
-          <header><span>RUN TELEMETRY</span><h2>{runState === 'complete' ? 'Step verified' : runState === 'running' ? 'Agent working' : 'Waiting for you'}</h2></header>
-          <div className="telemetry-cells">
-            <span><small>STATE</small><strong className={runState}>{runState.toUpperCase()}</strong></span>
-            <span><small>RUN</small><strong>SIM-{activeIndex + 1}04</strong></span>
-          </div>
-          <ol className="run-trace">
-            <Trace done title="Context scoped" detail="Kapoor family · trip room" />
-            <Trace done={runState !== 'waiting'} active={runState === 'running'} title={active.label} detail={active.route} />
-            <Trace done={runState === 'complete'} held={runState !== 'complete'} title={runState === 'complete' ? 'Result verified' : 'Awaiting interaction'} detail={runState === 'complete' ? 'Ready for next step' : 'Nothing advances without you'} />
-          </ol>
-          <section className="provider-block"><span>ROUTE</span><code>{active.route}</code><div>{active.providers.map((provider) => <b key={provider}>{provider}</b>)}</div></section>
-          <section className="boundary-block"><ShieldCheck /><div><strong>Boundary in this step</strong><p>{boundaries[active.id]}</p></div></section>
-          <footer><Check /><span><strong>Implemented capability</strong>Interactions here are simulated; architecture claims reflect the repository.</span></footer>
-        </aside>
-      </div>
-
-      {!showCompletion && <footer className="onboarding-controls">
-          <Button variant="bare" size="content" className="restart-button" type="button" onClick={restart}><RefreshCcw /> Restart</Button>
-          <span id="next-step-hint">{isComplete ? 'Task complete. Continue when ready.' : 'Complete this task to continue.'}</span>
-          <div>
-            <Button variant="outline" type="button" onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}><ArrowLeft /> Back</Button>
-            <Button className="next-button" type="button" onClick={() => goTo(activeIndex + 1)} disabled={!isComplete || activeIndex === steps.length - 1} aria-describedby="next-step-hint">Next step <ArrowRight /></Button>
-          </div>
-        </footer>}
-    </main>
-  )
-}
-
-function RunState({ state }: { state: 'waiting' | 'running' | 'complete' }) {
-  return <span className={`run-state ${state}`} role="status"><i /> {state === 'complete' ? 'COMPLETE' : state === 'running' ? 'RUNNING' : 'WAITING'}</span>
-}
-
-function Trace({ done, active, held, title, detail }: { done?: boolean; active?: boolean; held?: boolean; title: string; detail: string }) {
-  return <li className={done ? 'done' : active ? 'active' : held ? 'held' : ''}><span>{done ? <Check /> : held ? <CircleStop /> : <i />}</span><div><strong>{title}</strong><small>{detail}</small></div></li>
-}
-
-function ActionButton({ done, busy = false, onClick, children }: { done: boolean; busy?: boolean; onClick: () => void; children: ReactNode }) {
-  return <Button type="button" className={`task-action ${done ? 'done' : ''}`} onClick={onClick} disabled={done || busy}>{done ? <><Check /> Task complete</> : children}</Button>
-}
-
-function InboxTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
-  const [processing, setProcessing] = useState(false)
-  const timer = useRef<number | null>(null)
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current)
-  }, [])
-  const process = () => {
-    if (processing) return
-    setProcessing(true)
-    setRunning()
-    timer.current = window.setTimeout(() => { setProcessing(false); onComplete() }, 650)
-  }
-  return <div className="task-two-up">
-    <article className="task-card source-card">
-      <CardLabel icon={<Mail />} label="ORIGINAL EMAIL" />
-      <h2>Mysuru field trip — payment due</h2><small>Greenwood School · Today, 9:14 AM</small>
-      <div className="email-body"><p>Dear parents,</p><p>Please complete the field-trip payment of <b>₹18,500</b> by <b>24 September</b>. The bus leaves school at 6:30&nbsp;AM.</p><p>Regards,<br />Trip coordinator</p></div>
-      <span className="source-proof"><FileText /> Source preserved in the family inbox</span>
-    </article>
-    <article className="task-card result-card">
-      <CardLabel icon={<Sparkles />} label="EMAIL DETAILS" />
-      <h2>{processing ? 'Reading the email…' : done ? 'Details ready to review' : 'Ready to read the email'}</h2>
-      {done ? <dl className="data-grid"><div><dt>Category</dt><dd>School & family</dd></div><div><dt>Type</dt><dd>Field-trip fee</dd></div><div><dt>Amount</dt><dd>₹18,500</dd></div><div><dt>Due date</dt><dd>24 September</dd></div><div><dt>Next step</dt><dd>Review payment</dd></div></dl> : <div className={`empty-result ${processing ? 'processing' : ''}`}><Inbox /><span>{processing ? 'Finding email details…' : 'No details yet'}</span></div>}
-      <ActionButton done={done} busy={processing} onClick={process}><Sparkles />{processing ? ' Finding amount and due date…' : ' Find amount and due date'}</ActionButton>
-    </article>
-  </div>
-}
-
-const translations = {
-  en: { label: 'English', text: 'The school trip payment is due by 24 September.' },
-  hi: { label: 'हिन्दी', text: 'स्कूल यात्रा का भुगतान 24 सितंबर तक करना है।' },
-  mr: { label: 'मराठी', text: 'शाळेच्या सहलीचे पैसे २४ सप्टेंबरपर्यंत भरायचे आहेत.' },
-}
-
-function LanguageTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
-  const [language, setLanguage] = useState<keyof typeof translations | null>(done ? 'en' : null)
-  const choose = (next: keyof typeof translations) => { setLanguage(next); onComplete() }
-  return <div className="language-task">
-    <article className="task-card original-message"><CardLabel icon={<Languages />} label="ORIGINAL · HINDI" /><div className="message-head"><span>AP</span><div><strong>Appa</strong><small>10:44 · same family conversation</small></div></div><p lang="hi">स्कूल ट्रिप का भुगतान चौबीस सितंबर तक करना है।</p></article>
-    <div className="choice-panel"><span>READ THIS AS</span><h2>Choose Asha’s view</h2><div>{(Object.keys(translations) as Array<keyof typeof translations>).map((id) => <Button variant="outline" type="button" className={language === id ? 'selected' : ''} key={id} aria-pressed={language === id} onClick={() => choose(id)}><span aria-hidden="true">{language === id ? <Check /> : null}</span>{translations[id].label}</Button>)}</div><small>Names, dates, amounts, and source links stay unchanged.</small></div>
-    <article className={`task-card translated-message ${language ? 'visible' : ''}`}><CardLabel icon={<Sparkles />} label="SAATHI · READER VIEW" /><div className="message-head"><span className="saathi-avatar">स</span><div><strong>Saathi</strong><small>{language ? `Translated to ${translations[language].label}` : 'Waiting for your choice'}</small></div></div><p>{language ? translations[language].text : 'Choose a reading language to create this view.'}</p></article>
-  </div>
-}
-
-function MemoryTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
-  return <div className="task-two-up">
-    <article className="task-card memory-request"><CardLabel icon={<WandSparkles />} label="MESSAGE TO SAATHI" /><div className="user-prompt">Remember that Appa prefers morning appointments and needs step-free access.</div><div className="jev-route"><header><span>PREFERENCE TO SAVE</span><b>Ready to save</b></header><div><i /></div><small>Save the preference you asked Saathi to remember.</small></div><ActionButton done={done} onClick={onComplete}><MemoryStick /> Save family preference</ActionButton></article>
-    <article className="task-card memory-vault"><CardLabel icon={<Brain />} label="SAVED IN THIS CHAT" /><h2>Saved family preferences</h2><div className={`memory-record ${done ? 'new' : ''}`}><span>PREFERENCE</span><p>{done ? 'Appa prefers morning appointments and needs step-free access.' : 'Family prefers vegetarian restaurants.'}</p><small>{done ? 'Added just now · Kapoor family / trip room' : 'Updated 8 days ago · Kapoor family / trip room'}</small></div><div className="memory-record"><span>IF A PREFERENCE CHANGES</span><p>What you say now takes priority over an outdated preference.</p></div></article>
-  </div>
-}
-
-const citations = [
-  { id: 'traffic', title: 'Karnataka traffic advisory', kind: 'Official source', provenance: 'Karnataka State Police · sample source', excerpt: 'Weekend traffic is expected to remain lighter before 8 AM, with intermittent restrictions near Mandya.' },
-  { id: 'weather', title: 'IMD weather outlook', kind: 'Official source', provenance: 'India Meteorological Department · sample source', excerpt: 'Mysuru district is forecast to have a dry morning with isolated light showers possible after midday.' },
-  { id: 'route', title: 'Route conditions', kind: 'Sample map data', provenance: 'Public route data · sample source', excerpt: 'The primary Bengaluru–Mysuru route is open; construction activity is marked near the Mandya bypass.' },
+const walkthroughSteps = [
+  { title: 'Sign in', detail: 'Email OTP' },
+  { title: 'Meet your Saathi', detail: 'Your username' },
+  { title: 'Add your family', detail: 'Invite a member' },
+  { title: 'Choose AI access', detail: 'Managed or BYOK' },
+  { title: 'Connect Gmail', detail: 'Private import' },
+  { title: 'Receive useful mail', detail: 'My Saathi DM' },
+  { title: 'Share with family', detail: 'Explicit sharing' },
+  { title: 'Review extraction', detail: 'Category and amount' },
+  { title: 'Add a memory', detail: 'Text mode' },
+  { title: 'Ask a question', detail: 'Grounded answer' },
+  { title: 'Use voice and tools', detail: 'Browser check' },
+  { title: 'Review settings', detail: 'AgentMail and controls' },
 ] as const
 
-function ResearchTask({ done, setRunning, onComplete }: { done: boolean; setRunning: () => void; onComplete: () => void }) {
-  const [searched, setSearched] = useState(done)
-  const [searching, setSearching] = useState(false)
-  const [selectedCitation, setSelectedCitation] = useState<string | null>(done ? citations[0].id : null)
-  const timer = useRef<number | null>(null)
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current)
-  }, [])
-  const run = () => {
-    if (searching) return
-    setSearching(true)
-    setRunning()
-    timer.current = window.setTimeout(() => { setSearching(false); setSearched(true) }, 600)
+const defaultPane: PreviewPane[] = [
+  'chats',
+  'chats',
+  'family',
+  'chats',
+  'family',
+  'chats',
+  'chats',
+  'updates',
+  'chats',
+  'chats',
+  'chats',
+  'family',
+]
+
+export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; onOpenLive: () => void }) {
+  const [step, setStep] = useState(0)
+  const [pane, setPane] = useState<PreviewPane>('chats')
+  const [authStage, setAuthStage] = useState<'email' | 'code'>('email')
+  const [email, setEmail] = useState('asha@example.com')
+  const [code, setCode] = useState('')
+  const [username, setUsername] = useState('asha-kapoor')
+  const [familyEmail, setFamilyEmail] = useState('appa@example.com')
+  const [invited, setInvited] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [gmailConnected, setGmailConnected] = useState(false)
+  const [gmailPromptOpen, setGmailPromptOpen] = useState(false)
+  const [emailShared, setEmailShared] = useState(false)
+  const [memorySaved, setMemorySaved] = useState(false)
+  const [answerShown, setAnswerShown] = useState(false)
+  const [voiceMuted, setVoiceMuted] = useState(false)
+
+  const closeGmailPrompt = () => {
+    setGmailPromptOpen(false)
+    requestAnimationFrame(() => document.getElementById('preview-gmail-trigger')?.focus())
   }
-  const inspect = (id: string) => { setSelectedCitation(id); onComplete() }
-  const selected = citations.find((citation) => citation.id === selectedCitation)
-  return <div className="research-task">
-    <div className="query-strip"><Search /><div><small>SAMPLE SEARCH QUESTION</small><strong>Current Mysuru road conditions for Saturday morning</strong></div><span>Private names removed</span></div>
-    {!searched ? <section className="research-empty"><Globe2 /><h2>{searching ? 'Checking sample sources…' : 'Try a sample web search'}</h2><p>No private family message or memory will be included.</p><Button type="button" onClick={run} disabled={searching}><Search />{searching ? ' Showing sample updates…' : ' Show sample travel updates'}</Button></section> : <div className="research-results"><article className="task-card"><CardLabel icon={<Sparkles />} label="SAMPLE ANSWER" /><h2>This sample suggests an early start.</h2><p>In this example, leaving Bengaluru around 6:30 AM avoids the heavier traffic shown after 8 AM. The sample also marks construction near the Mandya bypass.</p><span className="source-proof"><Check /> 3 sample sources</span>{selected && <div className="citation-detail" role="status"><span>SELECTED SOURCE</span><strong>{selected.title}</strong><p>{selected.excerpt}</p><small>{selected.provenance}</small></div>}</article><section className="citation-list"><span>SOURCES · CHOOSE ONE TO READ</span>{citations.map((citation) => <Button variant="outline" type="button" key={citation.id} className={selectedCitation === citation.id ? 'selected' : ''} onClick={() => inspect(citation.id)}><ExternalLink /><span><strong>{citation.title}</strong><small>{citation.kind} · sample source</small></span>{selectedCitation === citation.id ? <Check /> : <ArrowRight />}</Button>)}</section></div>}
-  </div>
-}
 
-function HandoffTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
-  const [choice, setChoice] = useState<'voice' | 'browser' | null>(done ? 'browser' : null)
-  const choose = (next: 'voice' | 'browser') => { setChoice(next); onComplete() }
-  return <div className="handoff-task">
-    <section className="handoff-brief"><CardLabel icon={<AudioLines />} label="ACTIVE GOAL" /><h2>“Find an accessible Mysuru hotel, but let me sign in.”</h2><p>Review two sample hotels, then choose how to continue.</p></section>
-    <div className="handoff-options"><Button variant="outline" type="button" className={choice === 'voice' ? 'selected' : ''} onClick={() => choose('voice')}><Mic /><span><strong>Preview voice option</strong><small>Example: discuss hotels with Saathi</small></span>{choice === 'voice' && <Check />}</Button><Button variant="outline" type="button" className={choice === 'browser' ? 'selected' : ''} onClick={() => choose('browser')}><Monitor /><span><strong>Preview browser option</strong><small>Example: sign in or pay yourself</small></span>{choice === 'browser' && <Check />}</Button></div>
-    <section className="browser-preview"><header><Monitor /><span><strong>stay.example / mysuru</strong><small>{choice ? 'HANDOFF READY' : 'READ-ONLY OBSERVATION'}</small></span></header><div className="hotel-result"><i /><span><strong>Garden Courtyard</strong><small>Step-free entrance · family room</small></span><b>₹6,800</b></div><div className="hotel-result"><i /><span><strong>Lakeview House</strong><small>Lift · accessible bathroom</small></span><b>₹7,250</b></div><footer><ShieldCheck /> Saathi stores site cookies, never your password.</footer></section>
-  </div>
-}
+  useEffect(() => {
+    if (!gmailPromptOpen) return
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') closeGmailPrompt()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [gmailPromptOpen])
 
-function ApprovalTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
-  const [reviewed, setReviewed] = useState(done)
-  return <div className="task-two-up approval-task">
-    <article className="task-card draft-card"><CardLabel icon={<Mail />} label="DRAFT REPLY · NOT SENT" /><dl className="draft-meta"><div><dt>TO</dt><dd>trips@greenwood-school.example</dd></div><div><dt>SUBJECT</dt><dd>Re: Mysuru field trip</dd></div></dl><div className="draft-body">Hello,<br /><br />Thank you. We have noted the 24 September deadline and will review the ₹18,500 payment tonight.<br /><br />Regards,<br />Asha Kapoor</div><Label className="draft-review" htmlFor="review-sample-send"><Checkbox id="review-sample-send" checked={reviewed} disabled={done} onCheckedChange={(checked) => setReviewed(checked === true)} /><span>I checked the recipient and final message</span></Label></article>
-    <article className={`task-card confirmation-gate ${done ? 'confirmed' : ''}`}><ShieldCheck /><span>{done ? 'SIMULATED CONFIRMATION RECORDED' : 'EXTERNAL ACTION PAUSED'}</span><h2>{done ? 'Sample reply confirmed' : 'Review before confirming'}</h2><p>{done ? 'Live mode would save delivery details in this email thread.' : 'Sending requires another permission check and your confirmation of the exact recipient and message.'}</p><Button type="button" onClick={onComplete} disabled={!reviewed || done}>{done ? <><Check /> Confirmed in preview</> : <><Send /> Confirm sample reply</>}</Button><small>Simulation only · no email will be sent</small></article>
-  </div>
-}
+  const goTo = (next: number) => {
+    const bounded = Math.max(0, Math.min(walkthroughSteps.length - 1, next))
+    setStep(bounded)
+    setPane(defaultPane[bounded])
+    if (bounded === 4 && !gmailConnected) setGmailPromptOpen(true)
+  }
 
-function PrivacyTask({ done, onComplete }: { done: boolean; onComplete: () => void }) {
-  const [family, setFamily] = useState<'kapoor' | 'rao'>(done ? 'rao' : 'kapoor')
-  const switchFamily = () => setFamily('rao')
-  return <div className="privacy-task">
-    <section className="preview-family-switcher"><span>ACTIVE FAMILY SPACE</span><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><Button variant="outline" type="button" onClick={switchFamily} disabled={family === 'rao'}>{family === 'kapoor' ? <><i className="rao" /> Switch to Rao family <ArrowRight /></> : <><Check /> Viewing Rao family</>}</Button><small>One account. Separate access and information for each family.</small></section>
-    <section className="scope-view"><header><div><span>{family === 'kapoor' ? 'KF' : 'RF'}</span><div><strong>{family === 'kapoor' ? 'Kapoor family' : 'Rao family'}</strong><small>Sample family space</small></div></div><b>{family === 'kapoor' ? '3 ROOMS · 1 INBOX' : '2 ROOMS · 0 INBOX'}</b></header>{family === 'kapoor' ? <div className="scope-content"><Inbox /><span><strong>Mysuru school trip</strong><small>₹18,500 · 24 September · Greenwood School</small></span></div> : <div className="scope-empty"><LockKeyhole /><h2>The Kapoor trip is not shown here</h2><p>You’re viewing the Rao family example.</p></div>}</section>
-    <section className="boundary-check"><ShieldCheck /><div><strong>{family === 'rao' ? 'Check that the Kapoor trip is hidden' : 'Switch to the Rao family first'}</strong><p>In live mode, access is checked separately for each family.</p></div><Button type="button" disabled={family !== 'rao' || done} onClick={onComplete}>{done ? <><Check /> Preview check complete</> : 'Confirm trip is hidden'}</Button></section>
-  </div>
-}
+  const handleAuth = (event: FormEvent) => {
+    event.preventDefault()
+    if (authStage === 'email') {
+      setAuthStage('code')
+      return
+    }
+    goTo(1)
+  }
 
-function CardLabel({ icon, label }: { icon: ReactNode; label: string }) {
-  return <div className="card-label">{icon}<span>{label}</span></div>
-}
+  const renderGmailDialog = () => gmailPromptOpen && !gmailConnected ? (
+    <div className="family-dialog-backdrop" role="presentation" onMouseDown={closeGmailPrompt}>
+      <section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-gmail-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="family-dialog-header">
+          <div>
+            <span className="family-dialog-icon"><Mail /></span>
+            <span><strong id="preview-gmail-title">Connect Gmail to find useful mail</strong><small>Optional · private by default</small></span>
+          </div>
+          <Button variant="ghost" size="icon" type="button" onClick={closeGmailPrompt} aria-label="Close Gmail setup" autoFocus><X /></Button>
+        </div>
+        <p>Saathi can import useful receipts, renewals, and travel mail into your private My Saathi conversation. Nothing reaches your family inbox unless you share it.</p>
+        <div className="family-dialog-actions">
+          <Button variant="outline" type="button" onClick={closeGmailPrompt}>Not now</Button>
+          <Button type="button" onClick={() => {
+            setGmailConnected(true)
+            setGmailPromptOpen(false)
+            goTo(5)
+          }}><Link2 /> Connect Gmail</Button>
+        </div>
+      </section>
+    </div>
+  ) : null
 
-function Completion({ onOpenLive, onRestart }: { onOpenLive: () => void; onRestart: () => void }) {
-  return <section className="completion-state">
-    <span className="completion-mark"><Check /></span><span>PREVIEW COMPLETE · 7 / 7</span><h1>You’ve finished the preview.</h1><p>Sign in to open your family space. The sample information stays in this preview.</p>
-    <div className="completion-grid">{steps.map((step) => { const Icon = step.icon; return <span key={step.id}><Icon /><Check />{step.label}</span> })}</div>
-    <div className="completion-actions"><Button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></Button><Button variant="outline" type="button" onClick={onRestart}><RefreshCcw /> Restart preview</Button></div>
-    <small><ShieldCheck /> Live mode requires sign-in and uses only your authorized family data. Preview data never carries over.</small>
-  </section>
+  const tourBar = (
+    <header className="preview-tour-bar">
+      <div className="preview-tour-heading">
+        <Badge variant="accent"><Eye /> Guided preview</Badge>
+        <span><strong>{walkthroughSteps[step].title}</strong><small>{walkthroughSteps[step].detail}</small></span>
+      </div>
+      <div className="preview-tour-progress">
+        <span>Step {step + 1} of {walkthroughSteps.length}</span>
+        <Progress value={((step + 1) / walkthroughSteps.length) * 100} />
+      </div>
+      <div className="preview-tour-actions">
+        <Button variant="outline" size="icon" type="button" onClick={() => goTo(step - 1)} disabled={step === 0} aria-label="Previous walkthrough step"><ArrowLeft /></Button>
+        {step === walkthroughSteps.length - 1
+          ? <Button type="button" onClick={onOpenLive}>Open live workspace <ArrowRight /></Button>
+          : <Button type="button" onClick={() => goTo(step + 1)}>Next <ArrowRight /></Button>}
+      </div>
+    </header>
+  )
+
+  if (step === 0) {
+    return <main className="preview-walkthrough-shell">
+      {tourBar}
+      <section className="live-auth-page">
+        <div className="live-auth-brand"><span className="live-auth-mark">स</span><strong>Saathi</strong></div>
+        <div className="live-auth-card">
+          <div className="live-auth-heading"><span className="live-auth-icon"><Mail /></span><span><h1>{authStage === 'email' ? 'Welcome to Saathi' : 'Check your email'}</h1><p>{authStage === 'email' ? 'Sign in to open your private family workspace.' : `Enter the six-digit code sent to ${email}.`}</p></span></div>
+          <form className="live-auth-form" onSubmit={handleAuth}>
+            {authStage === 'email'
+              ? <label><span>Email address</span><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>
+              : <label><span>One-time code</span><Input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" /></label>}
+            <Button type="submit">{authStage === 'email' ? 'Continue with email' : 'Verify and continue'} <ArrowRight /></Button>
+            {authStage === 'code' && <Button variant="ghost" type="button" onClick={() => setAuthStage('email')}>Use a different email</Button>}
+          </form>
+          <small className="preview-sample-note"><Eye /> This guided preview uses sample information and sends no email.</small>
+        </div>
+      </section>
+    </main>
+  }
+
+  if (step === 1) {
+    return <main className="preview-walkthrough-shell">
+      {tourBar}
+      <section className="live-onboarding-page">
+        <div className="live-onboarding-card">
+          <span className="live-onboarding-icon"><UserRound /></span>
+          <Badge variant="accent">Your profile</Badge>
+          <h1>What should your family call you?</h1>
+          <p>Choose a username that family members will recognize in conversations and mentions.</p>
+          <form className="live-onboarding-form" onSubmit={(event) => { event.preventDefault(); goTo(2) }}>
+            <label><span>Username</span><Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" /></label>
+            <div className="onboarding-preview"><span>AK</span><div><strong>@{username || 'your-name'}</strong><small>Shown in the Kapoor family</small></div></div>
+            <Button type="submit">Save and continue <ArrowRight /></Button>
+          </form>
+        </div>
+      </section>
+    </main>
+  }
+
+  if (step === 3) {
+    return <main className="preview-walkthrough-shell">
+      {tourBar}
+      <section className="live-onboarding-page">
+        <div className="live-onboarding-card access-onboarding-card">
+          <span className="live-onboarding-icon"><KeyRound /></span>
+          <Badge variant="accent">AI access</Badge>
+          <h1>Choose how Saathi thinks</h1>
+          <p>Use managed Saathi access, or connect your family’s OpenRouter key for text conversations.</p>
+          <div className="access-choice-grid">
+            <button type="button" className="access-choice-card selected" onClick={() => goTo(4)}><Sparkles /><span><strong>Managed by Saathi</strong><small>Text, voice, and tools are ready.</small></span><Check /></button>
+            <div className="access-choice-card byok-card"><KeyRound /><span><strong>Use your own key</strong><small>OpenRouter text access for this family.</small></span><Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-…" aria-label="OpenRouter API key" /><Button variant="outline" type="button" onClick={() => goTo(4)} disabled={!apiKey.trim()}>Save family key</Button></div>
+          </div>
+          <small className="preview-sample-note"><LockKeyhole /> This preview stores no key. BYOK voice is temporarily unavailable.</small>
+        </div>
+      </section>
+    </main>
+  }
+
+  const isFamilyPanel = pane === 'family'
+  const isSettingsOverview = step === 11
+
+  return <main className="preview-walkthrough-shell">
+    {tourBar}
+    <div className={`saathi-workspace live-conversation-workspace is-mobile-${isFamilyPanel ? 'family' : 'detail'}${isFamilyPanel ? ' is-family-open' : ''}`}>
+      <aside className="workspace-rail" aria-label="Preview workspace navigation">
+        <div className="workspace-logo">स</div>
+        <button type="button" className={`rail-action ${pane === 'chats' ? 'active' : ''}`} onClick={() => setPane('chats')}><MessageSquareText /><span>Home</span></button>
+        <button type="button" className={`rail-action ${pane === 'updates' ? 'active' : ''}`} onClick={() => setPane('updates')}><Bell /><span>Inbox</span></button>
+        <button type="button" className={`rail-action ${pane === 'files' ? 'active' : ''}`} onClick={() => setPane('files')}><Folder /><span>Files</span></button>
+        <button type="button" className={`rail-action ${pane === 'family' ? 'active' : ''}`} onClick={() => setPane('family')}><Settings2 /><span>Settings</span></button>
+        <button type="button" className="rail-action" onClick={onExit}><ArrowLeft /><span>Exit</span></button>
+        <div className="rail-session"><span className="rail-profile" aria-label="Asha Kapoor">AK</span></div>
+      </aside>
+
+      <aside className="conversation-list live-conversation-list">
+        <div className="mobile-home-header"><div><span>KAPOOR FAMILY</span><h1>Welcome, Asha</h1><p>Your private and family conversations</p></div><span className="preview-mobile-avatar">AK</span></div>
+        <span className="family-select-label">Current family</span>
+        <div className="family-switcher"><button type="button" className="selected">Kapoor family</button></div>
+        <section className="mobile-family-overview" aria-label="Family overview">
+          <button type="button" onClick={() => setPane('updates')}><span><Bell /><strong>Inbox</strong></span><small>{emailShared ? '1 shared receipt' : 'No shared mail yet'}</small><ArrowRight /></button>
+          <button type="button" onClick={() => setPane('files')}><span><Folder /><strong>Files</strong></span><small>Family documents</small><ArrowRight /></button>
+        </section>
+        <span className="list-heading">Private</span>
+        <button type="button" className={`conversation-link personal-chat-link ${pane === 'chats' ? 'selected' : ''}`} onClick={() => setPane('chats')}><Bot /><span>My Saathi<small>Only you</small></span>{step === 5 && <b className="preview-unread">1</b>}</button>
+        <span className="list-heading section-gap">Family chats</span>
+        <button type="button" className="conversation-link" onClick={() => setPane('chats')}><i /><span>Kapoor family<small>{emailShared ? 'Receipt shared by Asha' : 'Appa and 2 others'}</small></span></button>
+      </aside>
+
+      {!isFamilyPanel && <section className="conversation-pane preview-live-pane">
+        <header className="conversation-header live-room-header">
+          <button className="mobile-chat-back" type="button" onClick={() => setPane('chats')} aria-label="Back to conversations"><ArrowLeft /></button>
+          <div><div className="title-line"><h2>{pane === 'updates' ? 'Family inbox' : pane === 'files' ? 'Files' : 'My Saathi'}</h2><span className="live-label"><Eye /> Preview</span></div><p>{pane === 'updates' ? 'Mail shared with the Kapoor family' : pane === 'files' ? 'Documents shared with your family' : 'Private conversation · only you'}</p></div>
+          <div className="live-room-actions"><Button variant="ghost" size="icon" type="button" aria-label="Search conversation"><Search /></Button>{pane === 'chats' && <Button variant="ghost" size="icon" type="button" onClick={() => goTo(10)} aria-label="Start voice preview"><Mic /></Button>}</div>
+        </header>
+
+        <div className="conversation-feed preview-conversation-feed">
+          {pane === 'files' && <div className="live-empty-state"><span><Folder /></span><h3>Family files stay with their source</h3><p>Forwarded documents and attachments will appear here after you share them.</p></div>}
+
+          {pane === 'updates' && <>
+            <article className="updates-card expanded">
+              <header><span className="update-source-icon"><MailOpen /></span><div><strong>Grok xAI receipt</strong><small>Shared by Asha · today</small></div><Badge variant="accent">Renewal</Badge></header>
+              <p>SuperGrok Plus · paid 15 September 2026</p>
+              <dl className="inbox-facts"><div><dt>Category</dt><dd>Subscriptions</dd></div><div><dt>Type</dt><dd>AI service renewal</dd></div><div><dt>Merchant</dt><dd>Grok xAI</dd></div><div><dt>Amount paid</dt><dd>₹9,977.07</dd></div><div><dt>Billing period</dt><dd>15 Sep–15 Oct 2026</dd></div><div><dt>Payment method</dt><dd>•••• 1003</dd></div></dl>
+              <div className="update-actions"><Button variant="outline" type="button"><FileText /> View original email</Button><Button type="button" onClick={() => goTo(8)}>Ask Saathi <ArrowRight /></Button></div>
+            </article>
+            <div className="assistant-card"><Sparkles /><div><strong>Saathi sorted this email</strong><p>The category, merchant, renewal period, and amount came from the original receipt. You can always open the source to verify them.</p></div></div>
+          </>}
+
+          {pane === 'chats' && step <= 6 && <>
+            <div className="assistant-card"><Sparkles /><div><strong>{step === 4 ? 'Gmail is optional' : 'Useful mail arrives privately first'}</strong><p>{step === 4 ? 'Connect Gmail from Settings. Saathi imports only useful mail into My Saathi.' : 'I found a paid Grok xAI renewal in your Gmail. It is visible only to you until you share it.'}</p></div></div>
+            {step >= 5 && <article className="person-message email-guest-message"><span className="message-avatar"><Mail /></span><div><h3>Grok xAI receipt <small>· Imported from Gmail · private</small></h3><div className="simple-message"><p>SuperGrok Plus renewed for ₹9,977.07. Billing period: 15 September–15 October 2026.</p><div className="email-message-actions"><Button variant="outline" type="button"><FileText /> Open source</Button><Button type="button" disabled={emailShared} onClick={() => {
+              if (step === 5) {
+                goTo(6)
+                return
+              }
+              setEmailShared(true)
+              goTo(7)
+            }}>{emailShared ? <><Check /> Shared with family</> : step === 5 ? <>Review sharing options <ArrowRight /></> : <><UsersRound /> Share with Kapoor family</>}</Button></div></div></div></article>}
+            {step === 6 && <div className="assistant-card"><ShieldCheck /><div><strong>Sharing is explicit</strong><p>The original email and extracted details will move to the Kapoor family inbox only after you choose Share.</p></div></div>}
+          </>}
+
+          {pane === 'chats' && step === 8 && <>
+            <article className="outgoing-message"><span>You · just now</span><p>Remember that Appa prefers morning appointments and needs step-free access.</p></article>
+            <div className="assistant-card"><Sparkles /><div><strong>Save this as a family preference?</strong><p>“Appa prefers morning appointments and needs step-free access.” It will stay scoped to the Kapoor family.</p><Button type="button" disabled={memorySaved} onClick={() => setMemorySaved(true)}>{memorySaved ? <><Check /> Memory saved</> : 'Save memory'}</Button></div></div>
+            {memorySaved && <div className="assistant-card success"><Check /><div><strong>Saved for future planning</strong><p>I’ll use this preference when you ask about appointments, travel, or places.</p></div></div>}
+          </>}
+
+          {pane === 'chats' && step >= 9 && <>
+            <article className="outgoing-message"><span>You · just now</span><p>Find two step-free stays near Mysuru and check whether the road is clear Saturday morning.</p></article>
+            <div className="tool-activity-card"><span className="tool-activity-icon"><Search /></span><div><strong>Checking current sources</strong><small>Browser tool · official traffic advisory</small></div><Badge variant="accent">Complete</Badge></div>
+            <div className="assistant-card"><Sparkles /><div><strong>Two accessible options are available</strong><p>Garden Courtyard lists a step-free entrance and family room. Lakeview House lists a lift and accessible bathroom. The official advisory shows the primary route open, with intermittent restrictions near Mandya.</p><ol><li><strong>Garden Courtyard</strong> — ₹6,800, step-free entrance</li><li><strong>Lakeview House</strong> — ₹7,250, accessible bathroom</li></ol><Button variant="outline" type="button" onClick={() => setAnswerShown(true)}><Link2 /> {answerShown ? 'Official advisory opened' : 'Open official advisory'}</Button></div></div>
+          </>}
+        </div>
+
+        {pane === 'chats' && <footer className="conversation-composer"><form onSubmit={(event) => { event.preventDefault(); if (step === 8) setMemorySaved(true); if (step === 9) setAnswerShown(true) }}><Textarea rows={1} placeholder={step === 8 ? 'Tell Saathi what to remember…' : 'Message Saathi…'} aria-label="Message Saathi" /><Button className="composer-send" size="icon" type="submit" aria-label="Send message"><Send /></Button></form><small>Saathi can make mistakes. Check important details.</small></footer>}
+      </section>}
+
+      <aside className="conversation-context preview-settings-context">
+        <header className="conversation-header live-room-header mobile-family-header"><button className="mobile-chat-back" type="button" onClick={() => setPane('chats')} aria-label="Back to conversations"><ArrowLeft /></button><div><div className="title-line"><h2>Settings</h2><span className="live-label"><Eye /> Preview</span></div><p>Kapoor family</p></div></header>
+        <div className="context-title"><div><h2>{step === 2 ? 'Family members' : step === 4 ? 'Connected apps' : 'Settings'}</h2><p>{step === 2 ? 'Invite people to this family.' : step === 4 ? 'Choose which inboxes Saathi can help with.' : 'Manage your profile, family, and integrations.'}</p></div></div>
+        <div className="settings-scroll settings-page">
+          {step === 2 && <>
+            <section className="settings-card"><div className="settings-card-heading"><div><span className="settings-card-icon"><UsersRound /></span><div><h3>Kapoor family</h3><p>2 active members</p></div></div></div><div className="family-member-row"><span className="member-avatar">AK</span><div><strong>Asha Kapoor</strong><small>@{username} · Owner · You</small></div></div><div className="family-member-row"><span className="member-avatar muted">AP</span><div><strong>Appa Kapoor</strong><small>Member</small></div></div></section>
+            <section className="settings-card"><div className="settings-card-heading"><div><span className="settings-card-icon"><UserPlus /></span><div><h3>Invite a family member</h3><p>They will receive a secure email invitation.</p></div></div></div><form className="settings-inline-form" onSubmit={(event) => { event.preventDefault(); setInvited(true) }}><Input type="email" value={familyEmail} onChange={(event) => setFamilyEmail(event.target.value)} aria-label="Family member email" /><Button type="submit" disabled={invited}>{invited ? <><Check /> Invitation sent</> : <><Send /> Send invitation</>}</Button></form></section>
+          </>}
+
+          {step === 4 && <>
+            <section className="settings-card"><div className="settings-card-heading"><div><span className="settings-card-icon"><Mail /></span><div><h3>Gmail</h3><p>Bring useful mail into your private My Saathi conversation.</p></div></div><Badge variant={gmailConnected ? 'accent' : 'secondary'}>{gmailConnected ? 'Connected' : 'Not connected'}</Badge></div><p className="settings-card-copy">Receipts, renewals, travel, and family logistics stay private until you explicitly share them.</p><Button id="preview-gmail-trigger" type="button" disabled={gmailConnected} onClick={() => setGmailPromptOpen(true)}>{gmailConnected ? <><Check /> Gmail connected</> : <><Link2 /> Connect Gmail</>}</Button></section>
+            <section className="settings-card"><div className="settings-card-heading"><div><span className="settings-card-icon"><MailOpen /></span><div><h3>Family email</h3><p>Forward mail here when everyone should see it.</p></div></div></div><div className="copy-value"><code>kapoor-family@agentmail.to</code><Button variant="outline" size="icon" type="button" aria-label="Copy family email address"><Copy /></Button></div></section>
+          </>}
+
+          {isSettingsOverview && <>
+            <section className="settings-card"><div className="settings-card-heading"><div><span className="settings-card-icon"><MailOpen /></span><div><h3>Family email</h3><p>Forward mail directly into the Kapoor family inbox.</p></div></div><Badge variant="accent">Active</Badge></div><div className="copy-value"><code>kapoor-family@agentmail.to</code><Button variant="outline" size="icon" type="button" aria-label="Copy family email address"><Copy /></Button></div><small className="settings-footnote">Sample AgentMail address for this walkthrough.</small></section>
+            <section className="settings-card settings-link-list">
+              <button type="button"><UserRound /><span><strong>You</strong><small>Profile, language, and appearance</small></span><ArrowRight /></button>
+              <button type="button"><UsersRound /><span><strong>Family</strong><small>Members, invitations, and roles</small></span><ArrowRight /></button>
+              <button type="button"><Link2 /><span><strong>Connected apps</strong><small>Gmail and family email</small></span><Badge variant="accent">Gmail connected</Badge></button>
+              <button type="button"><Bell /><span><strong>Notifications</strong><small>Mentions, new mail, and OTP sharing</small></span><ArrowRight /></button>
+              <button type="button"><Sparkles /><span><strong>AI access</strong><small>Managed access or family BYOK</small></span><ArrowRight /></button>
+              <button type="button"><ShieldCheck /><span><strong>Privacy and safety</strong><small>Memories, approvals, and account controls</small></span><ArrowRight /></button>
+            </section>
+          </>}
+        </div>
+      </aside>
+
+      <nav className="mobile-workspace-nav" aria-label="Preview workspace">
+        <button type="button" className={pane === 'chats' ? 'active' : ''} onClick={() => setPane('chats')}><span className="mobile-nav-icon"><House /></span><span>Home</span></button>
+        <button type="button" className={pane === 'updates' ? 'active' : ''} onClick={() => setPane('updates')}><span className="mobile-nav-icon"><Bell /></span><span>Inbox</span></button>
+        <button type="button" className={pane === 'files' ? 'active' : ''} onClick={() => setPane('files')}><span className="mobile-nav-icon"><Folder /></span><span>Files</span></button>
+        <button type="button" className={pane === 'family' ? 'active' : ''} onClick={() => setPane('family')}><span className="mobile-nav-icon"><Settings2 /></span><span>Settings</span></button>
+      </nav>
+
+      {renderGmailDialog()}
+      {step === 10 && <VoiceCallOverlay
+        status={voiceMuted ? 'muted' : 'live'}
+        turns={[
+          { role: 'user', text: 'Find two step-free stays near Mysuru and check the road for Saturday morning.', startMs: 0 },
+          { role: 'assistant', text: 'I found two options. I’m checking the official traffic advisory now.', startMs: 5_000 },
+        ]}
+        activities={[{
+          id: 'preview-browser-check',
+          name: 'use_computer',
+          title: 'Checking the official traffic advisory',
+          detail: 'Opening a public source and reading the latest route status.',
+          status: 'complete',
+          result: '**Stays:** Garden Courtyard and Lakeview House both list step-free access.\n\n**Route status:** Open Saturday morning. Intermittent restrictions are listed near Mandya.',
+        }]}
+        computerTool={{
+          callId: 'preview-browser-check',
+          task: 'Check the official traffic advisory for Saturday morning.',
+          controller: 'jev',
+          phase: 'voice_handover',
+          selectedActionLabel: 'Open official traffic advisory',
+        }}
+        voiceLevel={0.36}
+        voiceSeconds={38}
+        onMute={() => setVoiceMuted((current) => !current)}
+        onEnd={() => goTo(11)}
+      />}
+    </div>
+  </main>
 }

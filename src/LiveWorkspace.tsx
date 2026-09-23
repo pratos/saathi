@@ -392,10 +392,20 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
   const [selectedRoomId, setSelectedRoomId] = useState<Id<'rooms'> | null>(null)
   const [gmailBusy, setGmailBusy] = useState(false)
   const [gmailMessage, setGmailMessage] = useState('')
+  const [gmailPromptDismissed, setGmailPromptDismissed] = useState(false)
   const [gmailRemovalId, setGmailRemovalId] = useState<string | null>(null)
   const [otpSettingBusy, setOtpSettingBusy] = useState(false)
   const [recategorizationBusy, setRecategorizationBusy] = useState(false)
   const [recategorizationMessage, setRecategorizationMessage] = useState('')
+
+  useEffect(() => {
+    if (gmailConnections === undefined || gmailConnections.length > 0 || gmailPromptDismissed) return
+    const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setGmailPromptDismissed(true)
+    }
+    window.addEventListener('keydown', dismissOnEscape)
+    return () => window.removeEventListener('keydown', dismissOnEscape)
+  }, [gmailConnections, gmailPromptDismissed])
   const [pane, setPane] = useState<'chats' | 'updates' | 'files' | 'family'>('chats')
   const [mobileNav, setMobileNav] = useState<'home' | 'detail'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('hub')
@@ -747,6 +757,7 @@ function LiveFamilyShell({ families, family, onSelectFamily, onExit, isSuperadmi
         </m.div>}
       </AnimatePresence>
       {membersOpen && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setMembersOpen(false)}><section className="family-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Family access</span><h2 id="invite-dialog-title">Invite someone to {family.space.name}</h2></div><button type="button" onClick={() => setMembersOpen(false)} aria-label="Close invitations" autoFocus><X /></button></header><p>They must sign in using the same email address. Invitations expire after seven days.</p><InviteMember spaceId={family.space._id} /></section></div>}
+      {gmailConnections !== undefined && gmailConnections.length === 0 && !gmailPromptDismissed && <div className="family-dialog-backdrop" role="presentation" onMouseDown={() => setGmailPromptDismissed(true)}><section className="family-dialog gmail-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="gmail-setup-title" onMouseDown={event => event.stopPropagation()}><header><div><span>Connected apps</span><h2 id="gmail-setup-title">Connect Gmail to find useful mail</h2></div><button type="button" onClick={() => setGmailPromptDismissed(true)} aria-label="Close Gmail setup" autoFocus><X /></button></header><p>Bills, receipts, school notices, and travel updates arrive privately in My Saathi. Nothing enters the family inbox until you share it.</p><div className="status-actions"><Button type="button" size="lg" onClick={() => void connectGmail()} disabled={gmailBusy}><Mail />{gmailBusy ? 'Opening Google sign-in…' : 'Connect Gmail'}</Button><Button type="button" size="lg" variant="secondary" onClick={() => setGmailPromptDismissed(true)} disabled={gmailBusy}>Not now</Button></div></section></div>}
       {createFamilyOpen && <CreateFamilyDialog ownedCount={ownedFamilyCount} onClose={() => setCreateFamilyOpen(false)} onCreated={(spaceId) => { setCreateFamilyOpen(false); switchFamily(spaceId) }} createSpace={createSpace} />}
       {jevOpen && isSuperadmin && <JevLabDrawer spaceId={family.space._id} onClose={() => setJevOpen(false)} />}
     </main>
@@ -1448,7 +1459,7 @@ function AgentStreamingResponse({ status, activity, responseText, mentionHandles
   </div>
 }
 
-function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, voiceSeconds, onMute, onEnd }: {
+export function VoiceCallOverlay({ status, turns, activities, computerTool, voiceLevel, voiceSeconds, onMute, onEnd }: {
   status: VoiceStatus
   turns: VoiceTurn[]
   activities: VoiceToolActivity[]

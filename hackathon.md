@@ -422,13 +422,3 @@ persists progress for status and failed-job resume, and skips confirmed,
 dismissed, or newly reviewed records without duplicating chat heartbeats or
 suggested actions (`convex/recategorization.ts`, `convex/schema.ts`,
 `convex/recategorization.test.ts`).
-
-### 2026-09-23 - working tree
-Added a concise public architecture note, component responsibility guide, and
-system-flow diagram for reviewers. Consolidated the product thesis and provider
-feature map into this submission record and refreshed `ARCHITECTURE.md`.
-Temporarily disabled direct
-`gpt-live-1` voice calls for OpenRouter BYOK families in the product UI; managed
-Saathi access continues to provide voice while family-key chat remains available.
-The model inventory above reflects the current routed tiers and specialist media,
-voice, utility, and transcription models.

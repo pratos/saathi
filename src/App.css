@@ -1719,10 +1719,11 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
 }
 
 @media (max-width: 700px) {
-  .saathi-entry .entry-story { min-height: 100svh; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.76); }
-  .saathi-entry .entry-story-content { margin: auto 0; gap: 28px; }
+  .saathi-entry .entry-story { min-height: 0; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.76); }
+  .saathi-entry .entry-story-content { margin: 0; gap: 20px; }
   .saathi-entry .entry-copy h1 { font-size: clamp(36px, 10vw, 46px); }
-  .saathi-entry .entry-access { min-height: 100svh; padding: 28px 16px 38px; }
+  .saathi-entry .entry-access { min-height: 0; padding: 24px 16px 38px; }
+  .saathi-entry .entry-access-content { margin-block: 0; }
   .saathi-entry .experience-card-button { min-height: 132px; padding: 18px 22px 16px; }
   .live-auth-card, .onboarding-card { padding: 16px; border-radius: 22px; }
 

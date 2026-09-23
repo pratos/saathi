@@ -6,6 +6,7 @@ import {
   Bot,
   Check,
   Copy,
+  Eye,
   FileText,
   Folder,
   House,
@@ -134,7 +135,7 @@ export function PreviewWorkspace({ onExit, onOpenLive }: { onExit: () => void; o
   const tourBar = (
     <header className="preview-tour-bar">
       <div className="preview-tour-heading">
-        <span className="preview-mode-label">Guided preview</span>
+        <span className="preview-mode-label" role="img" aria-label="Guided preview"><Eye aria-hidden="true" /><span>Guided preview</span></span>
         <span><strong>{walkthroughSteps[step].title}</strong><small>{walkthroughSteps[step].detail}</small></span>
       </div>
       <div className="preview-tour-progress">

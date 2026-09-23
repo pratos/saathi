@@ -1439,8 +1439,8 @@ function AgentStreamingResponse({ status, activity, responseText, mentionHandles
 
   return <div className={`agent-stream-response ${hasText ? 'has-text' : ''}`}>
     <details className="agent-reasoning-trace" open={!hasText}>
-      <summary aria-label={`${activityLabel}. ${hasText ? 'Reply is appearing' : 'In progress'}`}>
-        <span className="agent-stream-pulse"><ThinkingState /></span>
+      <summary>
+        <span className="agent-stream-pulse" aria-hidden="true" />
         <span className="agent-trace-copy"><strong>{activityLabel}</strong><small>{hasText ? 'Reply appearing' : 'In progress'}</small></span>
         <span className="agent-trace-action"><span className="when-closed">Show activity</span><span className="when-open">Hide activity</span><ChevronDown /></span>
       </summary>
@@ -1449,7 +1449,7 @@ function AgentStreamingResponse({ status, activity, responseText, mentionHandles
         <span className={hasText ? 'done' : 'active'}>{hasText ? <Check /> : <i />} {activityLabel}</span>
         <span className={hasText ? 'active' : ''}><i /> Writing response</span>
       </div>
-      <p>Saathi’s private reasoning is not shown. You can see its actions and sources.</p>
+      <p>Actions and sources are visible. Private reasoning stays private.</p>
     </details>
     {responseText && <div className="streaming-markdown"><AssistantText text={responseText} streaming mentionHandles={mentionHandles} /><i className="response-stream-cursor" aria-hidden="true" /></div>}
   </div>

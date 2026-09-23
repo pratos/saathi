@@ -1,6 +1,14 @@
 .access-onboarding { align-items: start; overflow-y: auto; }
 .access-setup-card { width: min(700px, 100%); }
 .access-setup-card > p strong { color: #17233a; }
+.access-account { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -10px 0 18px; padding: 12px 14px; border-radius: 14px; color: #332e3a; background: rgba(241,237,250,.72); }
+.access-account > span { min-width: 0; display: grid; gap: 2px; }
+.access-account small { color: #6a6472; font-size: 11px; font-weight: 650; }
+.access-account strong { overflow-wrap: anywhere; font-size: 14px; line-height: 1.35; }
+.access-account button { min-height: 44px; flex: 0 0 auto; gap: 7px; padding-inline: 12px; border-color: rgba(111,89,189,.2); border-radius: 12px; color: #59478f; background: rgba(255,255,255,.7); box-shadow: none; font-size: 13px; font-weight: 750; }
+.access-account button:hover:not(:disabled) { background: rgba(221,213,255,.72); }
+.access-account button:focus-visible { outline: 3px solid rgba(111,89,189,.34); outline-offset: 2px; }
+.access-account button svg { width: 17px; height: 17px; }
 .onboarding-key-form { gap: 8px; }
 .onboarding-key-form label { display: flex; justify-content: space-between; margin-top: 7px; }
 .onboarding-key-form label small { color: #596273; font-weight: 500; }
@@ -98,6 +106,11 @@
   .recategorization-admin { margin-inline: 16px; }
   .access-user-row { grid-template-columns: 1fr; }
   .access-user-actions { justify-content: flex-start; }
+}
+
+@media (max-width: 520px) {
+  .access-account { align-items: stretch; flex-direction: column; gap: 8px; margin-top: -6px; }
+  .access-account button { width: 100%; justify-content: center; }
 }
 
 /* Luminous admin and access surfaces. */

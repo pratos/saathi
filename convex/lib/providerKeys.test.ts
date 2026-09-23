@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Id } from "../_generated/dataModel.js";
-import { resolveDecisionCredential, resolveOptionalDecisionCredential } from "./providerKeys.js";
+import { resolveDecisionCredential, resolveOpenAiCredential, resolveOptionalDecisionCredential } from "./providerKeys.js";
 
 const spaceId = "space" as Id<"spaces">;
 const userId = "user" as Id<"users">;
@@ -56,6 +56,32 @@ describe("decision credential routing", () => {
   });
 });
 
+describe("OpenAI credential routing", () => {
+  test("uses deployment OpenAI for OpenRouter BYOK families that need OpenAI-only voice", async () => {
+    vi.stubEnv("OPENAI_API_KEY", " deployment-openai-key ");
+    const ctx = providerContext({
+      openai: { ownedSecret: null, platformAllowed: false, blocked: false },
+      codex: { ownedSecret: null, platformAllowed: false, blocked: false },
+      openrouter: { ownedSecret: "sk-or-family-key", platformAllowed: false, blocked: false },
+    });
+
+    await expect(resolveOpenAiCredential(ctx, spaceId, userId)).resolves.toEqual({
+      apiKey: "deployment-openai-key",
+      billingSource: "platform",
+    });
+  });
+
+  test("does not unlock deployment OpenAI without family BYOK or managed access", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "deployment-openai-key");
+    const unavailable = { ownedSecret: null, platformAllowed: false, blocked: false };
+    await expect(resolveOpenAiCredential(providerContext({
+      openai: unavailable,
+      codex: unavailable,
+      openrouter: unavailable,
+    }), spaceId, userId)).rejects.toThrow("Add a OpenAI key or request access");
+  });
+});
+
 function context(result: {
   ownedOpenRouterSecret: string | null;
   openRouterModel: string;
@@ -63,4 +89,14 @@ function context(result: {
   blocked: boolean;
 }) {
   return { runQuery: vi.fn(async () => result) } as never;
+}
+
+function providerContext(results: Record<"openai" | "openrouter" | "codex", {
+  ownedSecret: string | null;
+  platformAllowed: boolean;
+  blocked: boolean;
+}>) {
+  return {
+    runQuery: vi.fn(async (_reference, args: { provider: "openai" | "openrouter" | "codex" }) => results[args.provider]),
+  } as never;
 }

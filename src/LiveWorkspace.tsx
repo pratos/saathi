@@ -152,34 +152,50 @@ export function LiveWorkspace({ onExit }: { onExit: () => void }) {
   const pendingFamily = families.find(({ space }) => space._id === pendingSpaceId)
 
   return <>
-    <FamilyAccessEntry families={families} family={family} onSelectFamily={(spaceId) => void selectFamily(spaceId)} onExit={onExit} />
+    <FamilyAccessEntry families={families} family={family} accountEmail={currentUser.email ?? null} onSelectFamily={(spaceId) => void selectFamily(spaceId)} onExit={onExit} />
     {pendingFamily && <div className="family-switch-progress" role="status"><span className="upload-spinner" /><strong>Opening {pendingFamily.space.name}</strong></div>}
     {familySwitchError && <div className="family-switch-progress error" role="alert"><strong>{familySwitchError}</strong><button type="button" onClick={() => setFamilySwitchError('')} aria-label="Dismiss family switch error"><X /></button></div>}
   </>
 }
 
-function FamilyAccessEntry({ families, family, onSelectFamily, onExit }: {
+function FamilyAccessEntry({ families, family, accountEmail, onSelectFamily, onExit }: {
   families: FamilyRow[]
   family: FamilyRow
+  accountEmail: string | null
   onSelectFamily: (spaceId: Id<'spaces'>) => void
   onExit: () => void
 }) {
   const access = useQuery(api.spaces.aiAccess, { spaceId: family.space._id })
   if (access === undefined) return <LiveStatus message="Opening your family space…" />
-  if (!access.ready) return <AiAccessSetup family={family} access={access} onExit={onExit} />
+  if (!access.ready) return <AiAccessSetup family={family} access={access} accountEmail={accountEmail} onExit={onExit} />
   return <LiveFamilyShell families={families} family={family} onSelectFamily={onSelectFamily} onExit={onExit} isSuperadmin={access.isSuperadmin} accessSource={access.source} />
 }
 
-function AiAccessSetup({ family, access, onExit }: {
+function AiAccessSetup({ family, access, accountEmail, onExit }: {
   family: FamilyRow
   access: FunctionReturnType<typeof api.spaces.aiAccess>
+  accountEmail: string | null
   onExit: () => void
 }) {
+  const { signOut } = useAuthActions()
   const saveKey = useMutation(api.spaces.saveProviderKey)
   const requestAccess = useMutation(api.users.requestAccess)
   const [openRouterKey, setOpenRouterKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [switchingAccount, setSwitchingAccount] = useState(false)
+  const [switchAccountError, setSwitchAccountError] = useState('')
+
+  const switchAccount = async () => {
+    setSwitchingAccount(true)
+    setSwitchAccountError('')
+    try {
+      await signOut()
+    } catch {
+      setSwitchAccountError('We could not switch accounts. Please try again.')
+      setSwitchingAccount(false)
+    }
+  }
 
   const saveKeys = async (event: FormEvent) => {
     event.preventDefault()
@@ -207,11 +223,20 @@ function AiAccessSetup({ family, access, onExit }: {
     }
   }
 
+  const accountControl = <>
+    <div className="access-account">
+      <span><small>Signed in as</small><strong>{accountEmail ?? 'Current account'}</strong></span>
+      <Button variant="outline" type="button" onClick={() => void switchAccount()} disabled={busy || switchingAccount}><LogOut /> {switchingAccount ? 'Signing out…' : 'Use a different email'}</Button>
+    </div>
+    {switchAccountError && <p className="form-error" role="alert">{switchAccountError}</p>}
+  </>
+
   if (access.status === 'blocked') return <main className="onboarding-page"><section className="onboarding-card access-setup-card">
     <Badge className="mode-badge live"><ShieldCheck size={15} /> Account access</Badge>
     <h1>This account is not enabled</h1>
     <p>Contact the Saathi administrator if you think this is a mistake.</p>
-    <Button className="secondary large" onClick={onExit}><ArrowLeft /> Leave live mode</Button>
+    {accountControl}
+    <Button className="secondary large" onClick={onExit} disabled={switchingAccount}><ArrowLeft /> Leave live mode</Button>
   </section></main>
 
   return <main className="onboarding-page access-onboarding">
@@ -220,13 +245,14 @@ function AiAccessSetup({ family, access, onExit }: {
       <Badge className="mode-badge live"><KeyRound size={15} /> Choose your AI access</Badge>
       <h1>Set up Saathi access</h1>
       <p>Add an OpenRouter API key for <strong>{family.space.name}</strong>, or ask the Saathi administrator for access.</p>
+      {accountControl}
       {family.membership.role === 'owner' ? <form onSubmit={saveKeys} className="onboarding-key-form">
         <label htmlFor="onboarding-openrouter">OpenRouter API key <small>required for this option</small></label>
-        <Input id="onboarding-openrouter" type="password" autoComplete="off" value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-…" required />
-        <Button className="primary large" type="submit" disabled={busy || openRouterKey.trim().length < 20}>{busy ? 'Saving securely…' : 'Save key and start'} <ArrowRight /></Button>
+        <Input id="onboarding-openrouter" type="password" autoComplete="off" value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-…" disabled={switchingAccount} required />
+        <Button className="primary large" type="submit" disabled={busy || switchingAccount || openRouterKey.trim().length < 20}>{busy ? 'Saving securely…' : 'Save key and start'} <ArrowRight /></Button>
       </form> : <p className="form-notice">Ask a family owner to add an OpenRouter key, or request access below.</p>}
       <div className="access-divider"><span>or</span></div>
-      <Button className="secondary large" onClick={() => void request()} disabled={busy || access.requestedAt !== null}>{access.requestedAt ? 'Access requested' : 'Request access'}</Button>
+      <Button className="secondary large" onClick={() => void request()} disabled={busy || switchingAccount || access.requestedAt !== null}>{access.requestedAt ? 'Access requested' : 'Request access'}</Button>
       {feedback && <p className="form-notice" role="status">{feedback}</p>}
       <ModelCatalog />
       <div className="security-note"><ShieldCheck /><span><strong>Encrypted and private</strong>Keys are encrypted at rest, never returned to the browser, and shared only inside this family.</span></div>

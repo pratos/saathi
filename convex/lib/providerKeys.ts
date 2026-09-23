@@ -20,6 +20,7 @@ async function resolveCredential(
   providers: readonly ByokProvider[],
   deploymentSecret: string | undefined,
   label: string,
+  deploymentUnlockProviders: readonly ByokProvider[] = [],
 ): Promise<ResolvedProviderCredential> {
   let platformAllowed = false;
   for (const provider of providers) {
@@ -32,6 +33,14 @@ async function resolveCredential(
     }
     platformAllowed ||= access.platformAllowed;
   }
+  for (const provider of deploymentUnlockProviders) {
+    if (platformAllowed) break;
+    const access = await ctx.runQuery(internal.spaces.resolveProviderCredential, { spaceId, userId, provider });
+    if (access.blocked) {
+      throw new ConvexError({ code: "ACCESS_BLOCKED", message: "AI access is blocked for this account" });
+    }
+    platformAllowed ||= Boolean(access.ownedSecret?.trim()) || access.platformAllowed;
+  }
   if (!platformAllowed) {
     throw new ConvexError({ code: "AI_ACCESS_REQUIRED", message: `Add a ${label} key or request access` });
   }
@@ -43,7 +52,7 @@ async function resolveCredential(
 }
 
 export function resolveOpenAiCredential(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {
-  return resolveCredential(ctx, spaceId, userId, ["openai", "codex"], env.OPENAI_API_KEY, "OpenAI");
+  return resolveCredential(ctx, spaceId, userId, ["openai", "codex"], env.OPENAI_API_KEY, "OpenAI", ["openrouter"]);
 }
 
 export async function resolveOpenAiKey(ctx: ActionCtx, spaceId: Id<"spaces">, userId: Id<"users">) {

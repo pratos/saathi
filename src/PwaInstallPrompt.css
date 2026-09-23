@@ -35,7 +35,12 @@
   .pwa-install-card-manual { grid-template-columns: 48px minmax(0, 1fr); }
   .pwa-install-icon { width: 48px; height: 48px; }
   .pwa-install-card strong { font-size: 16px; }
-  .pwa-install-reminder { right: 12px; bottom: calc(86px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
+  .pwa-install-reminder {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+    width: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

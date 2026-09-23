@@ -60,7 +60,6 @@ export default defineConfig(({ mode }) => {
               background_color: '#f4f0e8',
               display: 'standalone',
               display_override: ['standalone', 'minimal-ui'],
-              orientation: 'portrait-primary',
               scope: '/',
               start_url: '/',
               categories: ['lifestyle', 'productivity', 'social'],

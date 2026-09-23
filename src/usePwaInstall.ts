@@ -22,7 +22,7 @@ export function usePwaInstall(): PwaInstallController {
   const [installed, setInstalled] = useState(isStandalone)
   const [snoozed, setSnoozed] = useState(() => readDismissedUntil() > Date.now())
   const mobileInstallSurface = useMemo(() => isMobileInstallSurface(), [])
-  const iosInstallAvailable = useMemo(() => mobileInstallSurface && 'standalone' in navigator, [mobileInstallSurface])
+  const iosInstallAvailable = useMemo(() => isIosInstallSurface(), [])
 
   useEffect(() => {
     const displayMode = window.matchMedia('(display-mode: standalone)')
@@ -71,10 +71,13 @@ export function usePwaInstall(): PwaInstallController {
 }
 
 export function isMobileInstallSurface(currentNavigator: Pick<Navigator, 'userAgent' | 'maxTouchPoints'> = navigator) {
-  const userAgent = currentNavigator.userAgent
-  const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)
-  const iPadDesktopMode = /Macintosh/i.test(userAgent) && currentNavigator.maxTouchPoints > 1
-  return mobileUserAgent || iPadDesktopMode
+  return /Android|Mobile/i.test(currentNavigator.userAgent) || isIosInstallSurface(currentNavigator)
+}
+
+export function isIosInstallSurface(currentNavigator: Pick<Navigator, 'userAgent' | 'maxTouchPoints'> = navigator) {
+  const iosUserAgent = /iPhone|iPad|iPod/i.test(currentNavigator.userAgent)
+  const iPadDesktopMode = /Macintosh/i.test(currentNavigator.userAgent) && currentNavigator.maxTouchPoints > 1
+  return iosUserAgent || iPadDesktopMode
 }
 
 function isStandalone() {

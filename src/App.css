@@ -1725,4 +1725,21 @@ h1, h2, .welcome-copy h1, .mode-picker h2, .live-auth-card h1,
   .saathi-entry .entry-access { min-height: 100svh; padding: 28px 16px 38px; }
   .saathi-entry .experience-card-button { min-height: 132px; padding: 18px 22px 16px; }
   .live-auth-card, .onboarding-card { padding: 16px; border-radius: 22px; }
+
+  .email-otp-auth {
+    min-height: 100svh;
+    padding: max(64px, calc(env(safe-area-inset-top) + 52px)) 12px max(16px, env(safe-area-inset-bottom));
+  }
+  .email-otp-auth .live-auth-card { padding: 18px 16px; }
+  .email-otp-auth .auth-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .email-otp-auth .auth-brand.dark { margin-bottom: 0; }
+  .email-otp-auth .mode-badge { flex: 0 0 auto; padding: 6px 9px; }
+  .email-otp-auth .live-auth-card h1 { margin: 20px 0 8px; }
+  .email-otp-auth .live-auth-card > p { margin-bottom: 18px; font-size: 15px; line-height: 1.45; }
+  .email-otp-auth .live-auth-card form { min-width: 0; }
+  .email-otp-auth .field-with-icon { height: 52px; }
+  .email-otp-auth .primary.large { min-height: 50px; margin-top: 10px; }
+  .email-otp-auth .auth-secondary-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; }
+  .email-otp-auth .text-button { min-height: 44px; margin-top: 0; padding-inline: 8px; }
+  .email-otp-auth .security-note { margin-top: 16px; padding: 12px; }
 }

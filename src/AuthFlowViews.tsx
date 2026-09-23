@@ -35,11 +35,13 @@ export function EmailOtpSignInView({ step, email, code, busy, resending, error, 
   onBack: () => void
   previewNote?: ReactNode
 }) {
-  return <main className="live-auth-page">
+  return <main className="live-auth-page email-otp-auth">
     <Button variant="bare" size="content" className="back-link" onClick={onBack}><ArrowLeft size={19} /> Back</Button>
     <Card className="live-auth-card gap-0">
-      <div className="auth-brand dark"><span className="brand-mark">स</span> Saathi</div>
-      <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
+      <div className="auth-card-top">
+        <div className="auth-brand dark"><span className="brand-mark">स</span> Saathi</div>
+        <Badge className="mode-badge live"><LockKeyhole size={15} /> Live workspace</Badge>
+      </div>
       <h1>{step === 'email' ? 'Sign in with your email' : step === 'code' ? 'Enter your six-digit code' : 'Opening your family space'}</h1>
       <p>{step === 'email'
         ? 'We’ll email you a one-time code. There is no password to remember.'
@@ -57,8 +59,10 @@ export function EmailOtpSignInView({ step, email, code, busy, resending, error, 
         <Label htmlFor="live-code">One-time code</Label>
         <div className="field-with-icon"><KeyRound size={20} /><Input id="live-code" className="otp-input h-full border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => onCodeChange(event.target.value.replace(/\D/g, ''))} placeholder="000000" required autoFocus /></div>
         <Button className="primary large" type="submit" disabled={busy || resending || code.length !== 6}>{busy ? 'Checking code…' : 'Verify and continue'} <ArrowRight size={20} /></Button>
-        <Button variant="link" className="text-button" type="button" onClick={onResendCode} disabled={busy || resending}>{resending ? 'Sending a new code…' : 'Request a new code'}</Button>
-        <Button variant="link" className="text-button" type="button" onClick={onUseDifferentEmail} disabled={busy || resending}>Use a different email</Button>
+        <div className="auth-secondary-actions">
+          <Button variant="link" className="text-button" type="button" onClick={onResendCode} disabled={busy || resending}>{resending ? 'Sending a new code…' : 'Request a new code'}</Button>
+          <Button variant="link" className="text-button" type="button" onClick={onUseDifferentEmail} disabled={busy || resending}>Use a different email</Button>
+        </div>
       </form>}
 
       {step === 'verifying' && <Spinner className="mx-auto my-7 size-8 text-primary" aria-label="Signing in" />}

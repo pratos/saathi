@@ -12,7 +12,59 @@
 - **Auth:** Convex Auth
 - **AI models:** openai/gpt-5.6-luna (default med), deepseek/deepseek-v4.1-flash (low), x-ai/grok-4.6 (high), openai/gpt-5.6-sol (ultra), meta/muse-image, gpt-live-1, gpt-5-mini, saaras:v3
 - **Started:** 2026-09-10T11:35:28Z
-- **Last updated:** 2026-09-22T14:06:38Z
+- **Last updated:** 2026-09-23T04:21:57Z
+
+## Architecture
+
+Saathi is a React PWA hosted at https://giant-caiman-748.convex.site. Convex is
+the authorization boundary and system of record: authenticated clients receive
+realtime family-scoped data, while server actions call email, web, Gmail, voice,
+and AI providers without exposing provider credentials to the browser.
+
+### Components and responsibilities
+
+- **`@convex-dev/static-hosting`:** builds and serves the public React PWA from
+  the Convex deployment.
+- **Convex Auth:** owns email-OTP identity, sessions, and authenticated function
+  access; AgentMail delivers the OTP email.
+- **`@convex-dev/rate-limiter`:** limits OTP, invitation, messaging, voice, and
+  agent operations per identity or family.
+- **`@convex-dev/workflow`:** durably processes inbox extraction and
+  classification with retryable, observable steps.
+- **`@firecrawl/firecrawl-convex`:** supports current web research; app-owned
+  Firecrawl actions also parse public documents and run explicitly requested
+  browser tasks.
+- **`@agentmail/convex`:** is registered alongside app-owned AgentMail HTTP/API
+  routes for sign-in delivery and family inbox ingestion.
+- **Convex database, storage, and realtime:** persist isolated family spaces,
+  conversations, inbox items, files, permissions, agent jobs, and usage, then
+  stream authorized updates to clients.
+
+```mermaid
+flowchart LR
+  U["Family members"] --> WEB["React + TypeScript PWA<br/>Convex Static Hosting"]
+  WEB --> AUTH["Convex Auth<br/>email OTP"]
+  WEB <--> API["Convex queries, mutations,<br/>actions, and realtime"]
+
+  subgraph CONVEX["Convex trust boundary"]
+    AUTH --> POLICY["Identity + family and room authorization"]
+    API --> POLICY
+    POLICY --> DATA["Database + indexes"]
+    POLICY --> FILES["Authorized file storage"]
+    POLICY --> RATE["Rate Limiter"]
+    POLICY --> FLOW["Durable Workflow"]
+    POLICY --> AGENT["Bounded agent and voice actions"]
+    HTTP["Signed HTTP actions"] --> POLICY
+  end
+
+  MAIL["AgentMail<br/>OTP + family inbox"] <--> HTTP
+  GMAIL["Composio Gmail<br/>private imports"] --> HTTP
+  FLOW --> AI["OpenAI + OpenRouter<br/>extraction, chat, images"]
+  AGENT --> AI
+  AGENT --> FIRE["Firecrawl<br/>research, documents, browser"]
+  DATA --> API
+  FILES --> API
+```
 
 ## Log
 
@@ -306,3 +358,7 @@ persists progress for status and failed-job resume, and skips confirmed,
 dismissed, or newly reviewed records without duplicating chat heartbeats or
 suggested actions (`convex/recategorization.ts`, `convex/schema.ts`,
 `convex/recategorization.test.ts`).
+
+### 2026-09-23 - working tree
+Added a concise public architecture note, component responsibility guide, and
+system-flow diagram for reviewers (`hackathon.md`).
